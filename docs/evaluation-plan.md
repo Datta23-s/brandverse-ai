@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Phase | 0 — D1–D4 agreed 2026-10-14; D5 open (see §8) |
+| Phase | 0 — D1–D5 agreed 2026-10-14 (see §8) |
 | Track | Thesis-critical (5 agents: A1, A2, A3, A6, A7; regulated-sector safety via the sector constraint registry) |
 | Source of truth | `PRD.md` §7–§8, `Memory.md` §7–§8, `Rules.md` §9 |
 | Date | 14 October 2026 |
@@ -85,7 +85,7 @@ reported (`Rules.md` A5).
 | D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
 | D3 | **One approver for all runs**, across all arms, working from a written approval rubric. The rubric is committed to the repo before the first evaluation run and is not changed during evaluation. | 2026-10-14 — rubric not yet written |
 | D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, with real, publicly findable product specs under pseudonymised brand and product names** (option (a) below). RQ1 is in effect. | 2026-10-14 |
-| D5 | **Organisation layout for evaluation brands.** If all 10 brands share one organisation, org-wide memory (`brand_id is null`) from one brand can reach another brand in the same sector, so a brand's campaign 1 is no longer cold-start (B01/B02 share a sector). Options: one organisation per brand (every campaign 1 is a true cold start), or one shared organisation (the agency persona; cross-brand sector reuse becomes part of what is measured, and must be reported as such). | **Open** |
+| D5 | **One organisation per evaluation brand: ten organisations.** Every brand's campaign 1 is a true cold start. *Rationale:* a shared organisation creates an order effect — later brands inherit earlier brands' org-wide memory (`brand_id is null`), which systematically shrinks the D2→D0 delta for reasons unrelated to the contribution. Cross-brand transfer is measured separately, in the optional secondary experiment (§10), never in the primary. | 2026-10-14 |
 
 ### D4 and `Rules.md` T8
 
@@ -127,15 +127,37 @@ Resolved 2026-10-14 as option (a). Options considered:
 10 brands chosen, one per sector used in evaluation plus a second consumer-electronics brand,
 including one regulated (health supplements). **No real brand is shared with the evaluation set**,
 checked on 2026-10-14 by comparing normalised real brand names, not pseudonyms. Products, claims
-and requests for the tuning set are not yet researched. Parent-company overlap was not checked.
+and requests for the tuning set are not yet researched. Parent-company overlap is not yet checked
+(RQ2b, blocking).
 
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
 evaluation results from being reported.
 
-| # | Applies when | Requirement | Verified by |
-|---|---|---|---|
-| RQ1 | In effect (D4 = option (a)) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission |
-| RQ2 | Before any evaluation run | **Pseudonym collision check.** Each brand and product pseudonym in `evaluation/test_set.yaml` is searched for and confirmed not to be an existing brand or product. A pseudonym that collides with a real brand defeats the purpose of D4 and T8. Not yet done. | Search log committed alongside the test set |
-| RQ3 | Before any evaluation run | **Registry populated for every regulated evaluation sector** (currently `health-supplements`, B07). Rows entered by a human from the cited regulation or guidance, with `source_url`. Until then the registry fails closed and every B07 run is blocked; such runs would be reported as blocked, not dropped (`Rules.md` A2). No rows have been entered or drafted. | `sector_constraints` rows for each regulated sector, each with a source |
+| # | Applies when | Requirement | Verified by | Status |
+|---|---|---|---|---|
+| RQ1 | In effect (D4 = option (a)) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission | ☐ Not yet verified |
+| RQ2a | **Blocking** — before any evaluation run | **Pseudonym collision check.** Every invented brand and product name in `evaluation/test_set.yaml` is searched and confirmed not to be an existing real brand or product **in any sector**, not only the brand's own. A pseudonym that collides with a real brand defeats the purpose of D4 and T8. | Search log (query, date, result per name) committed alongside the test set | ☐ Not done |
+| RQ2b | **Blocking** — before any evaluation run | **Parent-company check across both sets.** Confirm that no evaluation brand (`evaluation/test_set.yaml`) and tuning brand (`evaluation/tuning_brands.yaml`) share a parent company. A shared parent would leak positioning and spec language between sets that D1 requires to be disjoint. Brand-name disjointness is already confirmed (§8); this check goes one level up. Ownership must be taken from a dated, citable source (e.g. company filings or announcements), not from memory. | Ownership table with a source per brand, committed alongside both sets | ☐ Not done |
+| RQ3 | Before any evaluation run | **Registry populated for every regulated evaluation sector** (currently `health-supplements`, B07). Rows entered by a human from the cited regulation or guidance, with `source_url`. Until then the registry fails closed and every B07 run is blocked; such runs would be reported as blocked, not dropped (`Rules.md` A2). No rows have been entered or drafted. | `sector_constraints` rows for each regulated sector, each with a source | ☐ Not done |
+
+## 10. Secondary experiment (optional): cross-brand transfer
+
+**Optional. Runs only after the primary evaluation (§1–§7) is complete and its results are
+reported.** It is a separate finding, reported separately, and is **never merged or pooled into
+the primary results**. It tests the agency persona in `PRD.md` §3 (Arjun: reuse intelligence
+across brands instead of re-researching).
+
+| Aspect | Design |
+|---|---|
+| Question | Does org-wide memory learned from one brand reduce calls, searches, cost and latency for *other* brands in the same organisation? |
+| Setup | One **new** organisation holding all 10 evaluation brands. It starts with empty memory — nothing carries over from the primary's ten organisations. |
+| Requests | The same 30 requests from `evaluation/test_set.yaml`. |
+| Arm | Proposed only. Baselines A and B have no memory, so organisation layout cannot change them; the comparison is with the primary's Proposed runs. |
+| Comparison | Paired per request: shared-organisation Proposed vs primary (per-brand organisation) Proposed. Same metrics and tests as §4–§5. The headline is each brand's **campaign 1**, which is cold-start in the primary and may not be here. |
+| What can transfer | Only org-wide memory (`brand_id is null`). Brand-scoped items stay with their brand by `match_memory`'s filter (`Memory.md` §4.2). Each cross-brand hit is attributed from its provenance (source run, hence source brand) and reported. |
+| Order | The result depends on brand order — that is the effect being measured. The order is fixed and committed before the run. Proposed default, to confirm then: test-set order B01→B10, each brand's three campaigns consecutive. |
+| Approval and rating | Same approver and rubric as the primary (D3), so write-back conditions match. |
+| Prerequisites | Everything the primary requires, including RQ2a, RQ2b and RQ3. |
+

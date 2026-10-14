@@ -5,7 +5,7 @@
 # because two different pseudonyms can hide the same brand.
 #
 # STATUS: brands chosen only. Products, specs, claims and requests are NOT yet researched.
-# Parent-company overlap with evaluation brands has NOT been checked.
+# Parent-company overlap with evaluation brands has NOT been checked (RQ2b, blocking).
 
 brands:
   - {id: T01, real_brand: Zebronics,   sector: consumer-electronics, regulated: false}
