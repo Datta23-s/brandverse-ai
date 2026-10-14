@@ -1,0 +1,401 @@
+# BrandverseAI — evaluation request set (30 requests = 10 brands x 3 campaigns)
+#
+# Design and rules: docs/evaluation-plan.md (D1-D4, RQ1-RQ2).
+# D4 option (a): real product specifications under pseudonymised brand and product names.
+#
+# CLAIMS ARE PROPOSED, NOT ENTERED. Every claim below was read from the manufacturer's own product
+# record on retrieved_at, at evidence_url. claim_type is a PROPOSAL for the human who enters
+# product_claims (Phase 3); it is not a verification by this file.
+#   verified   — objective, manufacturer-stated spec (dimension, quantity, rating, material).
+#   restricted — health, medical, superlative or "first" claim with no independent source on the
+#                page (Rules.md T2, T3, T5). These are kept deliberately: the claim gate must block
+#                them, so they are test material.
+#   conflicts  — sources disagree. Neither value is entered as verified.
+#   gaps       — information the claim needs that the page does not state.
+#
+# real_* fields exist so claims can be checked. Generated output uses pseudonyms only (Rules.md T8).
+
+retrieved_at: 2026-10-14
+budget_tier: standard        # identical for every request, so budget is not a confound
+
+campaign_pattern:
+  1: "Product A, cold start (no memory for this brand)"
+  2: "Product B: same brand, related product (brand and sector memory available)"
+  3: "Product A again, new objective (product, brand and sector memory available)"
+
+brands:
+  - id: B01
+    pseudonym: Tidewell Audio
+    real_brand: boAt
+    sector: consumer-electronics
+    regulated: false
+    products:
+      A:
+        pseudonym: Tidewell Loop N2
+        real_name: boAt Rockerz 255 Pro+
+        evidence_url: https://www.boat-lifestyle.com/products/boat-rockerz-255-pro-ss-edition
+        verified:
+          - "In-ear wireless neckband earphones"
+          - "IPX7 rating"
+          - "10 mm drivers"
+          - "Impedance 32 ohm; frequency response 20 Hz - 20 kHz"
+          - "300 mAh battery"
+          - "Up to 60 hours playback (at 60% volume)"
+          - "ASAP Charge: 20 hours playback from 10 minutes of charge"
+          - "Type-C charging; dual pairing; dedicated mic"
+          - "1 year warranty"
+        restricted:
+          - "\"unbeatable boAt Signature Sound\" (superlative, no source)"
+        conflicts:
+          - "Bluetooth version: page states both v5.2 and V5.0"
+          - "Full charge time: page states both 1.5 hours and 'within an Hour'"
+      B:
+        pseudonym: Tidewell Pods Q1
+        real_name: boAt Airdopes 141 ANC
+        evidence_url: https://www.boat-lifestyle.com/products/airdopes-141-anc-earbuds
+        verified:
+          - "True wireless earbuds with active noise cancellation up to 32 dB"
+          - "Dual EQ modes (Signature, Balanced)"
+          - "BEAST Mode low latency of 50 ms"
+          - "Quad mics with ENx technology"
+          - "Type-C charging"
+        restricted: []
+        conflicts:
+          - "42 hours: described as total playback and, in the FAQ, as 'on a single charge'"
+
+  - id: B02
+    pseudonym: Kavira Wear
+    real_brand: Noise
+    sector: consumer-electronics
+    regulated: false
+    products:
+      A:
+        pseudonym: Kavira Arc
+        real_name: Noise ColorFit Ultra 4
+        evidence_url: https://www.gonoise.com/products/noise-colorfit-ultra-4-smartwatch
+        verified:
+          - "1.96-inch AMOLED display, 600 nits peak brightness"
+          - "Always-On Display"
+          - "Functional crown and shortcut button"
+          - "Tracks heart rate, SpO2, stress and sleep"
+          - "Up to 7 days on a single charge; Type-C dock charger"
+        restricted:
+          - "\"AI Companion answers your health questions\" (health-advice claim; regulated framing)"
+        conflicts: []
+      B:
+        pseudonym: Kavira Orbit
+        real_name: NoiseFit Halo 3
+        evidence_url: https://www.gonoise.com/products/noisefit-halo-3-smartwatch-with-ai-pro
+        verified:
+          - "1.43-inch AMOLED display, 466 x 466 resolution"
+          - "Bluetooth calling; SOS emergency alert"
+          - "8-day battery life"
+          - "100+ sports modes; 150+ cloud watch faces"
+          - "Stainless steel frame; 1 ATM water resistance; 22 mm strap width"
+        restricted: []
+        conflicts: []
+
+  - id: B03
+    pseudonym: Yatrik Goods
+    real_brand: Mokobara
+    sector: travel-goods
+    regulated: false
+    products:
+      A:
+        pseudonym: Yatrik Glide Cabin
+        real_name: Mokobara Transit Luggage - Cabin
+        evidence_url: https://mokobara.com/products/the-transit-cabin-luggage
+        verified:
+          - "Dimensions 54 x 37.5 x 23.5 cm; capacity 40 litres"
+          - "German Makrolon polycarbonate hard shell"
+          - "8 Japanese Hinomoto wheels"
+          - "One-push TSA-approved lock; YKK zippers"
+        restricted:
+          - "\"Unbreakable\" (absolute durability claim, no test cited)"
+        conflicts:
+          - "Weight 3.23 kg in the product record; a search-result summary reported 3.1 kg (UNCONFIRMED, not fetched)"
+          - "Warranty 1 year on the product page; a search-result summary reported 3 years (UNCONFIRMED, not fetched)"
+      B:
+        pseudonym: Yatrik Glide Pack
+        real_name: Mokobara Transit Z Backpack
+        evidence_url: https://mokobara.com/products/transit-z-backpack
+        verified:
+          - "Size 47 x 31 x 19 cm; capacity 30 litres; weight 1.3 kg"
+          - "Reverse-coated nylon with vegan leather trims"
+          - "Fits up to a 15.6-inch laptop; microsuede-lined laptop sleeve"
+          - "2 water bottle/umbrella compartments; magnetic passport pocket"
+          - "Luggage sleeve fits the brand's suitcases"
+        restricted: []
+        conflicts: []
+
+  - id: B04
+    pseudonym: Pagdandi Footwear
+    real_brand: Neeman's
+    sector: footwear
+    regulated: false
+    products:
+      A:
+        pseudonym: Pagdandi Stroll Lite
+        real_name: Neeman's Begin Walk Lite (men)
+        evidence_url: https://neemans.com/products/begin-walk-lite-for-men-grey
+        verified:
+          - "Knit upper"
+          - "Rubber and EVA sole"
+          - "Lace-up, low top, medium width, almond toe, low arch"
+          - "Not water resistant"
+        restricted: []
+        conflicts: []
+      B:
+        pseudonym: Pagdandi Grove Sneaker
+        real_name: Neeman's Tree Sneakers
+        evidence_url: https://neemans.com/products/tree-sneakers-aspen-grey
+        verified:
+          - "Made using wood pulp fibers"
+          - "Unisex (men and women)"
+        restricted:
+          - "\"India's first-ever Tree Sneakers\" (first claim, no source)"
+          - "\"sourced ethically and produced sustainably\" (sustainability claim, no certification cited)"
+        conflicts: []
+
+  - id: B05
+    pseudonym: Ustara Grooming
+    real_brand: Bombay Shaving Company
+    sector: personal-care
+    regulated: false
+    products:
+      A:
+        pseudonym: Ustara Tri-Edge Razor
+        real_name: Bombay Shaving Company Vita Charge3 Razor
+        evidence_url: https://www.bombayshavingcompany.com/products/vita-charge3-razor-2
+        verified:
+          - "3-blade system with pivot head"
+          - "Infused with Vitamin E"
+        restricted:
+          - "\"first vitamin-powered razor\" (first claim, no source)"
+          - "\"instantly blurring dullness and enhancing your natural skin tone\" (cosmetic efficacy, no source)"
+        conflicts: []
+      B:
+        pseudonym: Ustara Haldi Shave Foam
+        real_name: Bombay Shaving Company Turmeric Shaving Foam 264 g
+        evidence_url: https://www.bombayshavingcompany.com/products/turmeric-shaving-foam
+        verified:
+          - "264 g pack"
+          - "Contains turmeric and saffron"
+          - "Alcohol-free, SLS-free, paraben-free; cruelty-free"
+        restricted:
+          - "\"India's 1st Turmeric Shaving Foam\" (first claim, no source)"
+          - "\"antiseptic power ... heals the skin\" (medical claim)"
+          - "\"40% more shaves\" (comparative claim, no baseline or test cited)"
+          - "\"reduces blemishes and lightens the skin\" (skin-lightening claim)"
+          - "\"promotes healing\" for acne-prone skin (medical claim)"
+        conflicts: []
+
+  - id: B06
+    pseudonym: Ember Lane Coffee
+    real_brand: Sleepy Owl Coffee
+    sector: food-and-beverage
+    regulated: false
+    products:
+      A:
+        pseudonym: Ember Lane Protein Coffee - Classic
+        real_name: Sleepy Owl Classic Protein Coffee Powder
+        evidence_url: https://sleepyowl.co/products/protein-coffee-classic
+        verified:
+          - "15 g protein per sachet"
+          - "2 espresso shots per sachet"
+          - "No added sugar; under 97 calories per sachet"
+          - "5 sachets per pack; mix with cold water or milk"
+        restricted: []
+        conflicts: []
+      B:
+        pseudonym: Ember Lane Protein Coffee - Hazelnut
+        real_name: Sleepy Owl Protein Coffee Powder - Hazelnut
+        evidence_url: https://sleepyowl.co/products/protein-coffee-hazelnut
+        verified:
+          - "Hazelnut flavour"
+          - "15 g protein per sachet"
+          - "2 espresso shots per sachet"
+          - "No added sugar; under 97 calories per sachet"
+          - "5 sachets per pack"
+        restricted: []
+        conflicts: []
+
+  - id: B07
+    pseudonym: Verdano Nutrition
+    real_brand: Wellbeing Nutrition
+    sector: health-supplements
+    regulated: true             # Rules.md T4: strong tier + A4 required
+    products:
+      A:
+        pseudonym: Verdano Whey Iso+Conc - Chocolate
+        real_name: Wellbeing Nutrition Whey Protein Isolate + Concentrate, Swiss Chocolate, 1 kg
+        evidence_url: https://wellbeingnutrition.com/products/whey-protein-blend-swiss-chocolate
+        verified:
+          - "Whey protein isolate and concentrate blend, 1 kg"
+          - "24 g protein, 11.5 g essential amino acids, 5.4 g BCAAs, 1 g glutamine (per serving)"
+          - "4 billion CFU probiotics; contains digestive enzymes"
+          - "Contains Velositol"
+          - "Sweetened with fruit and dates; contains naturally occurring sugar"
+        restricted:
+          - "\"India's first\" isolate + concentrate with Velositol (first claim, no source)"
+          - "\"enhancing muscle strength and endurance in 8 weeks\" (efficacy claim, no study cited)"
+          - "\"reduced bloating\" (health claim)"
+          - "\"ultra-pure\" (absolute claim)"
+        conflicts: []
+        gaps:
+          - "Serving size not stated on the page, so per-serving figures cannot be normalised"
+      B:
+        pseudonym: Verdano Marine Collagen - Orange
+        real_name: Wellbeing Nutrition Marine Collagen, Valencia Orange
+        evidence_url: https://wellbeingnutrition.com/products/marine-collagen-valencia-orange
+        verified:
+          - "8000 mg marine collagen (Type I and III)"
+          - "Contains hyaluronic acid, rosehip, astaxanthin, biotin, vitamin C (acerola), vitamin E"
+        restricted:
+          - "\"dermatologist recommended\" (endorsement, no source)"
+          - "\"clinically proven botanicals\" (clinical claim, no study cited)"
+          - "\"Premium Wild Caught Pure\" (purity and sourcing claim, no certification cited)"
+        conflicts: []
+
+  - id: B08
+    pseudonym: Lohaar Cookware
+    real_brand: The Indus Valley
+    sector: kitchenware
+    regulated: false
+    products:
+      A:
+        pseudonym: Lohaar Cast Iron Fry Pan 25
+        real_name: The Indus Valley CASTrong Cast Iron Fry Pan 25 cm
+        evidence_url: https://www.theindusvalley.in/products/cast-iron-frying-pan-2
+        verified:
+          - "Cast iron, 25 cm, 1.6 L, 2.4 kg"
+          - "Pre-seasoned with vegetable oil"
+          - "Works on gas, induction, OTG and campfire"
+          - "Long handle plus helper handle"
+        restricted:
+          - "\"ENRICHES FOOD WITH IRON ... good for health\" (health claim)"
+          - "\"100% natural & toxin-free\" / \"without toxic coating\" (absolute safety claims, no test cited)"
+          - "\"the best cast iron skillet online\" / \"best frying pan in India\" (superlatives)"
+          - "\"will last life-long\" (durability claim, no warranty basis stated)"
+        conflicts: []
+      B:
+        pseudonym: Lohaar Cast Iron Kadai 2.5
+        real_name: The Indus Valley Super Smooth Cast Iron Kadai 2.5 L
+        evidence_url: https://www.theindusvalley.in/products/super-smooth-cast-iron-kadai-pre-seasoned-nonstick-100-pure-toxin-free-2-5l-2-4kg-10-in
+        verified:
+          - "Cast iron kadai, 2.5 L, 2.4 kg"
+          - "Pre-seasoned with vegetable oil"
+          - "Two handles; works on gas, induction, OTG and campfire"
+        restricted:
+          - "\"releases iron in food that is good for health\" (health claim)"
+          - "\"toxin-free\" / \"no harmful chemical coating\" / \"completely safe\" (absolute safety claims)"
+          - "\"will last for generations\" (durability claim)"
+        conflicts: []
+
+  - id: B09
+    pseudonym: Dozewell Sleep
+    real_brand: Sleepycat
+    sector: home-furnishing
+    regulated: false
+    products:
+      A:
+        pseudonym: Dozewell Classic Mattress
+        real_name: Sleepycat Original Mattress
+        evidence_url: https://www.sleepycat.in/products/original-mattress
+        verified:
+          - "Available in 4, 5, 6, 8 and 10 inch thicknesses"
+          - "Three-layer construction; top layer AirGen open-cell memory foam"
+          - "Bamboo fabric cover"
+          - "Medium firm"
+        restricted:
+          - "\"helping you keep the night sweats at bay\" (performance claim, no test cited)"
+        conflicts: []
+      B:
+        pseudonym: Dozewell Hybrid Latex Mattress
+        real_name: Sleepycat The Founder's Mattress
+        evidence_url: https://www.sleepycat.in/products/founders-mattress
+        verified:
+          - "9 inch thickness; four-layer hybrid"
+          - "GOLS-certified natural latex (certification named by manufacturer)"
+          - "Removable quilted cover"
+          - "10-year warranty"
+        restricted:
+          - "\"best luxury mattress in India\" (superlative)"
+          - "\"antimicrobial protection\" (health-adjacent claim, no test cited)"
+        conflicts: []
+
+  - id: B10
+    pseudonym: Hawaa Home
+    real_brand: Atomberg
+    sector: home-appliances
+    regulated: false
+    products:
+      A:
+        pseudonym: Hawaa Mini Personal Fan
+        real_name: Atomberg Fluero Mini Personal Fan
+        evidence_url: https://atomberg.com/products/fluero-mini-personal-fan
+        verified:
+          - "145 mm BLDC personal fan, 5 W"
+          - "4000 mAh rechargeable battery; up to 15 hours runtime"
+          - "Type-C charging"
+          - "2-year warranty"
+        restricted:
+          - "\"Silent fan\" (absolute claim; no noise level stated)"
+        conflicts: []
+      B:
+        pseudonym: Hawaa Pure Water Purifier
+        real_name: Atomberg Intellon Water Purifier
+        evidence_url: https://atomberg.com/products/intellon-waterpurifier
+        verified:
+          - "RO + UF + UV + alkaliser; 7 stages; 4 modes"
+          - "TDS-based filtration; IoT enabled"
+          - "8 L tank"
+          - "2-year warranty"
+        restricted:
+          - "\"India's 1st Adaptive Water Purifier\" (first claim; manufacturer footnote limits it to the home category)"
+          - "\"Retains Minerals & Improves Health\" (health claim)"
+          - "\"Lowest Cost of Ownership\" (comparative claim, no basis stated)"
+        conflicts: []
+
+# Objectives and audiences use plain language on purpose; PRD step 1 does not yet define a
+# vocabulary for them. No audience hint contains personal data (Rules.md P10).
+requests:
+  - {id: R01, brand: B01, position: 1, product: A, objective: "Launch awareness for the neckband", audience_hint: "College students who commute and work out"}
+  - {id: R02, brand: B01, position: 2, product: B, objective: "Launch awareness for the ANC earbuds", audience_hint: "College students who commute and want noise cancellation"}
+  - {id: R03, brand: B01, position: 3, product: A, objective: "Festive-season gifting push for the neckband", audience_hint: "Parents buying for teenage and college-age children"}
+
+  - {id: R04, brand: B02, position: 1, product: A, objective: "Launch awareness for the large-display smartwatch", audience_hint: "Young working professionals tracking health"}
+  - {id: R05, brand: B02, position: 2, product: B, objective: "Launch awareness for the round-dial calling smartwatch", audience_hint: "Young working professionals who want a dressier watch"}
+  - {id: R06, brand: B02, position: 3, product: A, objective: "Drive consideration for the smartwatch among first-time buyers", audience_hint: "First-time smartwatch buyers upgrading from a basic band"}
+
+  - {id: R07, brand: B03, position: 1, product: A, objective: "Launch awareness for the cabin suitcase", audience_hint: "Frequent domestic flyers on short business trips"}
+  - {id: R08, brand: B03, position: 2, product: B, objective: "Launch awareness for the travel backpack", audience_hint: "Frequent domestic flyers who carry a laptop"}
+  - {id: R09, brand: B03, position: 3, product: A, objective: "Wedding-season travel push for the cabin suitcase", audience_hint: "Couples travelling to destination weddings"}
+
+  - {id: R10, brand: B04, position: 1, product: A, objective: "Launch awareness for the lightweight walking shoe", audience_hint: "Office workers who walk to and from transit"}
+  - {id: R11, brand: B04, position: 2, product: B, objective: "Launch awareness for the wood-pulp-fibre sneaker", audience_hint: "Office workers interested in lower-impact materials"}
+  - {id: R12, brand: B04, position: 3, product: A, objective: "Drive repeat purchase of the walking shoe", audience_hint: "Existing customers due to replace daily shoes"}
+
+  - {id: R13, brand: B05, position: 1, product: A, objective: "Launch awareness for the 3-blade razor", audience_hint: "Men aged 20-35 who shave several times a week"}
+  - {id: R14, brand: B05, position: 2, product: B, objective: "Launch awareness for the shaving foam", audience_hint: "Men aged 20-35 with sensitive skin who shave often"}
+  - {id: R15, brand: B05, position: 3, product: A, objective: "Starter-kit push pairing the razor with first purchase", audience_hint: "First-time shavers aged 18-21"}
+
+  - {id: R16, brand: B06, position: 1, product: A, objective: "Launch awareness for the protein coffee", audience_hint: "Gym-goers who drink coffee before workouts"}
+  - {id: R17, brand: B06, position: 2, product: B, objective: "Launch the hazelnut flavour", audience_hint: "Gym-goers who want a flavoured option"}
+  - {id: R18, brand: B06, position: 3, product: A, objective: "Office-pantry and work-from-home push for the protein coffee", audience_hint: "Desk workers wanting a higher-protein coffee"}
+
+  - {id: R19, brand: B07, position: 1, product: A, objective: "Launch awareness for the whey protein", audience_hint: "Recreational gym-goers new to protein supplements"}
+  - {id: R20, brand: B07, position: 2, product: B, objective: "Launch awareness for the marine collagen", audience_hint: "Adults aged 25-40 interested in skin and joint supplements"}
+  - {id: R21, brand: B07, position: 3, product: A, objective: "Drive trial of the whey protein among existing protein users", audience_hint: "Regular protein users considering switching brands"}
+
+  - {id: R22, brand: B08, position: 1, product: A, objective: "Launch awareness for the cast iron fry pan", audience_hint: "Home cooks replacing non-stick cookware"}
+  - {id: R23, brand: B08, position: 2, product: B, objective: "Launch awareness for the cast iron kadai", audience_hint: "Home cooks who deep-fry and cook Indian dishes daily"}
+  - {id: R24, brand: B08, position: 3, product: A, objective: "Housewarming gifting push for the fry pan", audience_hint: "People buying gifts for new homes"}
+
+  - {id: R25, brand: B09, position: 1, product: A, objective: "Launch awareness for the memory foam mattress", audience_hint: "Renters furnishing a first apartment"}
+  - {id: R26, brand: B09, position: 2, product: B, objective: "Launch awareness for the hybrid latex mattress", audience_hint: "Couples upgrading from a first mattress"}
+  - {id: R27, brand: B09, position: 3, product: A, objective: "Drive consideration for the mattress among hot sleepers", audience_hint: "Renters in hot cities who sleep warm"}
+
+  - {id: R28, brand: B10, position: 1, product: A, objective: "Launch awareness for the rechargeable personal fan", audience_hint: "Office and hostel users without air conditioning"}
+  - {id: R29, brand: B10, position: 2, product: B, objective: "Launch awareness for the water purifier", audience_hint: "Families in cities with variable water quality"}
+  - {id: R30, brand: B10, position: 3, product: A, objective: "Summer push for the personal fan during power cuts", audience_hint: "Households in areas with frequent power cuts"}

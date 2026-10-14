@@ -1,0 +1,20 @@
+# BrandverseAI — tuning-set brands (decision D1, docs/evaluation-plan.md)
+#
+# 10 brands for the 10 tuning requests used to tune R and M weights in Phase 10.
+# Must share no real brand with evaluation/test_set.yaml. Checked by real_brand, not pseudonym,
+# because two different pseudonyms can hide the same brand.
+#
+# STATUS: brands chosen only. Products, specs, claims and requests are NOT yet researched.
+# Parent-company overlap with evaluation brands has NOT been checked.
+
+brands:
+  - {id: T01, real_brand: Zebronics,   sector: consumer-electronics, regulated: false}
+  - {id: T02, real_brand: Fire-Boltt,  sector: consumer-electronics, regulated: false}
+  - {id: T03, real_brand: Wildcraft,   sector: travel-goods,         regulated: false}
+  - {id: T04, real_brand: Campus,      sector: footwear,             regulated: false}
+  - {id: T05, real_brand: Mamaearth,   sector: personal-care,        regulated: false}
+  - {id: T06, real_brand: The Whole Truth, sector: food-and-beverage, regulated: false}
+  - {id: T07, real_brand: MuscleBlaze, sector: health-supplements,   regulated: true}
+  - {id: T08, real_brand: Prestige,    sector: kitchenware,          regulated: false}
+  - {id: T09, real_brand: Wakefit,     sector: home-furnishing,      regulated: false}
+  - {id: T10, real_brand: Crompton,    sector: home-appliances,      regulated: false}

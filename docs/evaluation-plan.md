@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Phase | 0 — D1–D3 agreed 2026-10-14; D4 blocked on `Rules.md` T8 (see §8) |
+| Phase | 0 — D1–D4 agreed 2026-10-14; D5 open (see §8) |
 | Track | Thesis-critical (5 agents: A1, A3, A4, A6, A7) |
 | Source of truth | `PRD.md` §7–§8, `Memory.md` §7–§8, `Rules.md` §9 |
 | Date | 14 October 2026 |
@@ -27,6 +27,7 @@ All arms share the same cost caps (`PRD.md` §9: 20 LLM calls, 20 searches, 2 re
 ## 2. Test set
 
 - 10 brands × 3 campaigns = **30 requests**, across ≥ 5 sectors, including ≥ 1 regulated sector.
+  The set is in `evaluation/test_set.yaml` (9 sectors; health supplements is the regulated one).
 - Campaign 1 per brand is cold-start. Campaigns 2 and 3 are related to campaign 1 (same brand;
   same or adjacent product). This is the progression in `Memory.md` §7.
 - Requests are run **in order per brand** in the Proposed arm, so memory from campaign 1 is
@@ -83,16 +84,17 @@ reported (`Rules.md` A5).
 | D1 | **Tuning set is disjoint from the evaluation set.** 10 tuning requests on 10 brands that do not appear among the 30 evaluation requests. No tuning-set brand, product or request may be used in evaluation, and the harness asserts the two sets share no brand. | 2026-10-14 |
 | D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
 | D3 | **One approver for all runs**, across all arms, working from a written approval rubric. The rubric is committed to the repo before the first evaluation run and is not changed during evaluation. | 2026-10-14 — rubric not yet written |
-| D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, all with real, publicly findable product specs.** | **Blocked** — see below |
+| D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, with real, publicly findable product specs under pseudonymised brand and product names** (option (a) below). RQ1 is in effect. | 2026-10-14 |
+| D5 | **Organisation layout for evaluation brands.** If all 10 brands share one organisation, org-wide memory (`brand_id is null`) from one brand can reach another brand in the same sector, so a brand's campaign 1 is no longer cold-start (B01/B02 share a sector). Options: one organisation per brand (every campaign 1 is a true cold start), or one shared organisation (the agency persona; cross-brand sector reuse becomes part of what is measured, and must be reported as such). | **Open** |
 
-### D4 conflict with `Rules.md` T8
+### D4 and `Rules.md` T8
 
 T8: *"The system never generates content impersonating a real person or a real brand it does not
 own."* Generating campaigns for real brands' products conflicts with that rule, and `Rules.md` §0
 ranks Rules above every other document and requires the conflict to be resolved explicitly, not
 silently. The sector requirements in D4 do not conflict; only "real brands" does.
 
-Until resolved, the earlier constraint (fictional brands) stands. Options:
+Resolved 2026-10-14 as option (a). Options considered:
 
 | Option | Effect |
 |---|---|
@@ -100,7 +102,32 @@ Until resolved, the earlier constraint (fictional brands) stands. Options:
 | (b) Amend T8 with a scoped evaluation exception | E.g. real brands permitted for internal, unpublished evaluation outputs only, marked AI-assisted (T7), never deployed or shown publicly. Requires editing `Rules.md`. |
 | (c) Fictional brands and products | Fully T8-compliant, but verified claims have no independent public source, which weakens the evidence-quality dimension. |
 
-The 30-request set itself (which 10 brands, which sectors) is drawn up once D4 is resolved.
+### The 30-request set — `evaluation/test_set.yaml`
+
+| Position | Product | Expected (hypothesis, from `Memory.md` §7 — not a result) |
+|---|---|---|
+| 1 | Product A, cold start | D2 |
+| 2 | Product B: same brand, related product | D1 |
+| 3 | Product A again, new objective | D0 or shallow D1 |
+
+- Each product's claims were read from the manufacturer's own product record on 2026-10-14; every
+  evidence URL returned HTTP 200 on that date. 83 claims are proposed `verified`, 33 proposed
+  `restricted`, 5 recorded as conflicts. Types are **proposals** for the human who enters
+  `product_claims`; nothing is verified by the file itself.
+- Restricted claims (health, medical, superlative, "India's first") are kept on purpose: they are
+  real manufacturer copy the claim gate must block, so they test T2/T3/T5 against real input.
+- Conflicts (e.g. one page giving two Bluetooth versions) are test material for the
+  conflicting-evidence route to the strong tier (`Architecture.md` §4.2).
+- Some figures in the conflicts came from search-result summaries, not fetched pages; they are
+  marked UNCONFIRMED in the file and must not be entered as claims.
+- `budget_tier` is identical for all 30 requests, so budget is not a confound.
+
+### Tuning set — `evaluation/tuning_brands.yaml`
+
+10 brands chosen, one per sector used in evaluation plus a second consumer-electronics brand,
+including one regulated (health supplements). **No real brand is shared with the evaluation set**,
+checked on 2026-10-14 by comparing normalised real brand names, not pseudonyms. Products, claims
+and requests for the tuning set are not yet researched. Parent-company overlap was not checked.
 
 ## 9. Required items
 
@@ -109,4 +136,5 @@ evaluation results from being reported.
 
 | # | Applies when | Requirement | Verified by |
 |---|---|---|---|
-| RQ1 | D4 resolved as option (a) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission |
+| RQ1 | In effect (D4 = option (a)) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission |
+| RQ2 | Before any evaluation run | **Pseudonym collision check.** Each brand and product pseudonym in `evaluation/test_set.yaml` is searched for and confirmed not to be an existing brand or product. A pseudonym that collides with a real brand defeats the purpose of D4 and T8. Not yet done. | Search log committed alongside the test set |
