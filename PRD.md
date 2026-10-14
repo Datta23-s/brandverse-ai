@@ -167,7 +167,7 @@ Each step is a node in the orchestration graph. `Architecture.md` gives the impl
 | 9 | Campaign Strategy | All above | Positioning, channels, messaging pillars | — |
 | 10 | Creative Generation | Strategy | Ad copy, headlines, scripts, poster prompts | Honours `max_media_generations` |
 | 11 | Evidence / Trust Validation | Every generated claim | Pass / flag / block per claim | Blocks publish on any unsourced hard claim |
-| 12 | Human Approval | Validated package | Approved / rejected / revise | `max_revision_rounds = 2` |
+| 12 | Human Approval | Validated package | Approved / rejected / revise, decided against `docs/approval-rubric.md` | `max_revision_rounds = 2` |
 | 13 | Final Campaign Intelligence | Approved package | Report, assets, analytics | — |
 | 14 | Performance Feedback | Optional real metrics | Outcome record | Optional |
 | 15 | Validated Knowledge Memory | Approved facts | Embedded memory rows | Writes only verified or approved-deduced facts |

@@ -83,7 +83,7 @@ reported (`Rules.md` A5).
 |---|---|---|
 | D1 | **Tuning set is disjoint from the evaluation set.** 10 tuning requests on 10 brands that do not appear among the 30 evaluation requests. No tuning-set brand, product or request may be used in evaluation, and the harness asserts the two sets share no brand. | 2026-10-14 |
 | D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
-| D3 | **One approver for all runs**, across all arms, working from a written approval rubric. The rubric is committed to the repo before the first evaluation run and is not changed during evaluation. | 2026-10-14 — rubric not yet written |
+| D3 | **One approver for all runs**, across all arms, working from the written rubric **`docs/approval-rubric.md`** (v1.0). Its §6 requires a **calibration pass before run 1**: 10 practice campaigns on brands in **neither** the evaluation set nor the tuning set, scored by the approver and independently by a second team member, the rubric amended until they agree on ≥ 8/10; practice campaigns are discarded. Its §7 **forbids silent mid-evaluation amendment**: any change after run 1 is recorded with its reason and run number, and earlier runs are re-scored or the two periods reported separately. | 2026-10-14 — rubric v1.0 committed; approver not yet named; calibration not yet done |
 | D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, with real, publicly findable product specs under pseudonymised brand and product names** (option (a) below). RQ1 is in effect. | 2026-10-14 |
 | D5 | **One organisation per evaluation brand: ten organisations.** Every brand's campaign 1 is a true cold start. *Rationale:* a shared organisation creates an order effect — later brands inherit earlier brands' org-wide memory (`brand_id is null`), which systematically shrinks the D2→D0 delta for reasons unrelated to the contribution. Cross-brand transfer is measured separately, in the optional secondary experiment (§10), never in the primary. | 2026-10-14 |
 
@@ -156,8 +156,31 @@ across brands instead of re-researching).
 | Requests | The same 30 requests from `evaluation/test_set.yaml`. |
 | Arm | Proposed only. Baselines A and B have no memory, so organisation layout cannot change them; the comparison is with the primary's Proposed runs. |
 | Comparison | Paired per request: shared-organisation Proposed vs primary (per-brand organisation) Proposed. Same metrics and tests as §4–§5. The headline is each brand's **campaign 1**, which is cold-start in the primary and may not be here. |
-| What can transfer | Only org-wide memory (`brand_id is null`). Brand-scoped items stay with their brand by `match_memory`'s filter (`Memory.md` §4.2). Each cross-brand hit is attributed from its provenance (source run, hence source brand) and reported. |
-| Order | The result depends on brand order — that is the effect being measured. The order is fixed and committed before the run. Proposed default, to confirm then: test-set order B01→B10, each brand's three campaigns consecutive. |
+| What can transfer | Only org-wide memory (`brand_id is null`). Brand-scoped items stay with their brand by `match_memory`'s filter (`Memory.md` §4.2). Each cross-brand hit is attributed from its provenance (source run, hence source brand). |
+| **Required output: transfer by sector relation** | Cross-brand memory hits — and the per-request deltas they explain — are reported **broken down by same-sector vs cross-sector** (source brand's sector equal to, or different from, the receiving brand's sector), as well as by source brand. **A single blended transfer figure is not reported on its own**: B01 and B02 share a sector (consumer electronics), so blending would hide whether the effect comes from same-sector reuse or genuine cross-sector transfer. Note the sample: in B01 → B10 order, same-sector transfer is possible only into B02 (from B01); every other brand's sector is unique in the set, so same-sector results rest on one brand pair and are reported descriptively, not with significance tests. |
+| Order | **Fixed 2026-10-14: test-set order B01 → B10, each brand's three campaigns consecutive** (R01, R02, R03, R04, … R30). The result depends on order — that is the effect being measured — so it does not change once the experiment starts. |
 | Approval and rating | Same approver and rubric as the primary (D3), so write-back conditions match. |
 | Prerequisites | Everything the primary requires, including RQ2a, RQ2b and RQ3. |
+
+### Approver record (`docs/approval-rubric.md` §2, §6, §8)
+
+| Field | Value |
+|---|---|
+| Approver | not yet named |
+| Calibration date | not yet done |
+| Calibration agreement | — / 10 (≥ 8 required) |
+| Practice-campaign brands | not yet chosen; must be in neither `evaluation/test_set.yaml` nor `evaluation/tuning_brands.yaml` |
+| Rubric version applied | 1.0 |
+
+### Open points between the rubric and this plan (to resolve at calibration, via rubric §6)
+
+- **Presentation order.** Rubric §2 presents runs in randomised order. In the Proposed arm a
+  brand's campaign 2 cannot run until campaign 1 is approved (memory write-back requires
+  approval), so within a brand the Proposed approvals must happen in order 1 → 2 → 3.
+  Randomisation is possible across brands and arms, subject to that constraint; the sequencing
+  may itself let the approver infer the arm, which rubric §2 already asks to be recorded.
+- **Where the approval record lives.** Rubric §5 allows `campaigns.quality_scores` "or an adjacent
+  approvals table". `campaigns` records only an approval (`approved_by`), not revise / reject /
+  undecided decisions, time spent or arm inference, and `quality_scores` holds the two blind
+  raters' scores (§6). An approvals table is needed before Phase 6.
 
