@@ -101,3 +101,12 @@ Until resolved, the earlier constraint (fictional brands) stands. Options:
 | (c) Fictional brands and products | Fully T8-compliant, but verified claims have no independent public source, which weakens the evidence-quality dimension. |
 
 The 30-request set itself (which 10 brands, which sectors) is drawn up once D4 is resolved.
+
+## 9. Required items
+
+Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
+evaluation results from being reported.
+
+| # | Applies when | Requirement | Verified by |
+|---|---|---|---|
+| RQ1 | D4 resolved as option (a) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission |

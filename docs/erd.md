@@ -180,5 +180,12 @@ FK would also null `org_id`, which is `not null`, and the parent delete would fa
 Nullable reference columns use the default `MATCH SIMPLE`: when the reference column is null the
 FK is not checked, which is intended for org-wide memory items and product-less runs.
 
+### Required before the first migration
+
+- [ ] **Confirm the Supabase project runs PostgreSQL 15 or later** (`select version();`), and
+  record the version and date here. `on delete set null (product_id)` and
+  `on delete set null (claim_id)` on `memory_items` depend on it; on PostgreSQL 14 or earlier the
+  migration fails. No migration is applied until this box is ticked.
+
 The cross-tenant test in Phase 1 must include an attempt to insert a child row whose `org_id`
 differs from its parent's, and assert it is rejected.
