@@ -233,9 +233,9 @@ class Agent(Protocol):
 | ID | Agent | Produces | Default tier | Phase |
 |---|---|---|---|---|
 | **A1** | Product & Brand Intelligence | Positioning, differentiators, brand voice vector, claim inventory | Standard | 6 |
-| **A2** | Market & Advertisement Intelligence | Competitor ads, category conventions, whitespace | Standard | 9 |
+| **A2** | Market & Advertisement Intelligence | Competitor ads, category conventions, whitespace | Standard | 6 (live research); 9 (persistent ad repository) |
 | **A3** | Customer Behaviour Intelligence | Personas, jobs-to-be-done, objections, channel affinity | Standard | 6 |
-| **A4** | Sector & Evidence Intelligence | Regulatory constraints, required disclaimers, sourced proof | Strong | 9 |
+| **A4** | Sector & Evidence Intelligence | Sourced proof, evolving regulatory context. *Required disclaimers and prohibited phrasings are not A4's: they are rules in the sector constraint registry (§8.1).* | Strong | 9 |
 | **A5** | Growth, Pricing & Offer Intelligence | Offer architecture, price framing, incentive design | Standard | 9 |
 | **A6** | Creative Campaign Intelligence | Copy, headlines, hooks, scripts, storyboards, poster prompts | Standard + Media | 6 |
 | **A7** | Trust, Risk & Campaign Evaluation | Claim verification, risk flags, brand-safety score | Strong | 6 |
@@ -252,9 +252,24 @@ Three independent gates. Any `block` stops publication.
 
 | Gate | Checks | Outcome |
 |---|---|---|
-| **Claim** | Every factual assertion maps to a `verified` claim or a scored source | `pass` / `flag` / `block` |
-| **Brand voice** | Cosine distance between generated copy embedding and brand voice vector | `pass` if above threshold |
-| **Risk** | Restricted claims, regulated-sector language, superlatives without proof, 8 predatory marketing anti-patterns | `pass` / `block` |
+| **Claim** | Every factual assertion maps to a `verified` claim or a scored source. **Registry:** a claim matching a `prohibited_phrase` rule for the brand's sector is blocked even if `verified` — a manufacturer stating something does not make it permissible to advertise. A claim matching a `required_disclaimer` rule's trigger must carry that disclaimer. | `pass` / `flag` / `block` |
+| **Brand voice** | Cosine distance between generated copy embedding and brand voice vector. **Registry:** required disclaimer text is excluded from the similarity score and must appear verbatim; any rewording of it for voice is a block. | `pass` if above threshold; `block` on altered disclaimer |
+| **Risk** | Restricted claims, regulated-sector language, superlatives without proof, 8 predatory marketing anti-patterns. **Registry:** full copy scanned for every active `prohibited_phrase`; every applicable `required_disclaimer` must be present. | `pass` / `block` |
+
+### 8.1 Sector constraint registry
+
+The deterministic half of regulated-sector safety. It replaces A4 for required disclaimers and
+prohibited phrasings (`Phases.md` §6.1; `Rules.md` T4). Table: `sector_constraints` (§9).
+
+| Property | Rule |
+|---|---|
+| Content | Per sector and jurisdiction: `required_disclaimer` (text that must appear) and `prohibited_phrase` (wording that must not). Each row cites the regulation or guidance it comes from. |
+| Authorship | Humans only. Rows are written by platform admins through a reviewed path; no agent or LLM output ever writes a row. An LLM may *suggest* a candidate to a human; the suggestion is not a rule until a human enters it. |
+| Matching | Deterministic: case-insensitive phrase match or a stored regular expression. Never an LLM judgement. |
+| Scope | Platform-wide reference data, not tenant data — the same rules apply to every organisation in a sector. Readable by all authenticated users; writable only by admins. |
+| Fail closed | A brand whose sector is marked `regulated` but has no active registry rows **blocks the run**. Missing rules are never read as "no constraints". |
+| Sector keys | `brands.sector` references a `sectors` table, so a misspelled sector cannot silently bypass the registry. |
+| Change control | Rows are versioned by `effective_from` / `retired_at`, never edited in place; every change is written to `audit_log`. |
 
 The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming.
 
@@ -262,26 +277,126 @@ The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated soc
 
 ## 9. Data model
 
-Abbreviated DDL. **`docs/erd.md` is canonical** — it records why each column and constraint exists
-(issues E1–E7). This section must match it; change both in the same commit. Full migrations live in
-`supabase/migrations/`.
+Full DDL. **`docs/erd.md` is canonical** — it records why each column and constraint exists
+(issues E1–E11) and the role matrix. This section must match it; change both in the same commit.
+Migrations in `supabase/migrations/` are cut from this DDL in Phase 1.
 
-**Tenant consistency pattern.** Every tenant table carries its own `org_id` so RLS is a direct
-column check, never a join. A child's `org_id` is forced to equal its parent's by a composite
-foreign key `(parent_id, org_id) → parent (id, org_id)`, so a row can never point across tenants.
-Composite `on delete set null (col)` requires **PostgreSQL 15+** — confirm the Supabase project
-version before the first migration.
+**Tenant consistency.** Every tenant table carries its own `org_id`. A child's `org_id` is forced
+to equal its parent's by a composite foreign key `(parent_id, org_id) → parent (id, org_id)`, so a
+row can never point across tenants. Composite `on delete set null (col)` requires
+**PostgreSQL 15+** (`docs/erd.md`: confirm before the first migration).
+
+**Role-aware RLS.** Every tenant policy calls `app.has_role(org_id, roles)` on the row's *own*
+`org_id`: the org must be the caller's active org (JWT claim) **and** the caller must hold an
+unrevoked role there in `org_members`. Policies never walk parent tables; the membership lookup
+is the one lookup they make. Writes the backend performs (`llm_calls`, `memory_items` inserts,
+campaign status and approval, `audit_log`) use the service role and are constrained by keys,
+checks and triggers rather than by RLS.
+
+**Approval (Rules.md T6).** `campaigns.approved_by` must be a member of the *same* organisation
+holding the `approver` role — enforced by a foreign key on `(org_id, approved_by, 'approver')` —
+and that role must be unrevoked at the time of approval (trigger). An approved campaign must
+name its approver.
+
+**Audit log.** Append-only for every application role: `update`, `delete` and `truncate` are
+revoked from `anon`, `authenticated` and `service_role`, and a trigger rejects them even for the
+table owner. A database superuser can still disable triggers; that is the residual risk, and
+Supabase does not hand superuser to application code.
+
+**Organisation budget and rate limits.** Checked alongside the per-run cap (`PRD.md` §9), never
+instead of it:
+
+| Limit | Column | Enforced |
+|---|---|---|
+| Monthly spend | `organisations.monthly_budget_cap_usd` | Pre-flight, before every LLM call: the estimated cost must fit within **both** the run's remaining budget and the organisation's remaining month-to-date budget (`sum(llm_calls.cost_usd)` for the org in the current UTC calendar month). A breach yields `budget_exhausted`, as for the run cap. |
+| Run starts | `organisations.rate_limit_runs_per_hour` | At `POST /api/v1/runs`, Redis counter per org; over the limit → `429`. |
+| API requests | `organisations.rate_limit_requests_per_minute` | At the API gateway, Redis counter per org; over the limit → `429`. |
+
+The column defaults (50.00 USD, 10 runs/hour, 60 requests/minute) are **placeholders, not derived
+values**; set them per organisation and report any values used in evaluation.
 
 ```sql
 create extension if not exists vector;
 create extension if not exists pg_trgm;
+create schema if not exists app;
 
+-- ── Platform reference data (not tenant data) ────────────────────────────────────────
+create table sectors (
+  id text primary key,                              -- e.g. 'health-supplements'
+  label text not null,
+  regulated boolean not null default false,         -- Rules.md T4
+  created_at timestamptz not null default now()
+);
+
+-- Sector constraint registry (§8.1). Human-authored only; versioned, never edited in place.
+create table sector_constraints (
+  id uuid primary key default gen_random_uuid(),
+  sector_id text not null references sectors(id),
+  jurisdiction text not null default 'IN',
+  kind text not null check (kind in ('required_disclaimer','prohibited_phrase')),
+  match_type text not null check (match_type in ('phrase','regex')),
+  pattern text,               -- prohibited_phrase: wording that must not appear
+                              -- required_disclaimer: trigger; null = required on all output
+  disclaimer_text text,       -- required_disclaimer only: exact text that must appear
+  source_url text not null,   -- the regulation or guidance this rule comes from
+  source_note text,
+  effective_from date not null,
+  retired_at date,
+  created_by uuid not null references auth.users(id),   -- a human; agent ids are not uuids
+  created_at timestamptz not null default now(),
+  check ((kind = 'prohibited_phrase'   and pattern is not null and disclaimer_text is null)
+      or (kind = 'required_disclaimer' and disclaimer_text is not null)),
+  check (retired_at is null or retired_at >= effective_from)
+);
+
+create function app.sector_constraints_versioned() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'sector_constraints rows are retired, never deleted';
+  end if;
+  if (to_jsonb(new) - 'retired_at') is distinct from (to_jsonb(old) - 'retired_at') then
+    raise exception 'sector_constraints rows are versioned: only retired_at may change';
+  end if;
+  return new;
+end $$;
+create trigger sector_constraints_versioned before update or delete on sector_constraints
+  for each row execute function app.sector_constraints_versioned();
+
+-- ── Tenancy ──────────────────────────────────────────────────────────────────────────
 create table organisations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  budget_cap_usd numeric(10,2) default 50.00,
+  monthly_budget_cap_usd numeric(10,2) not null default 50.00
+    check (monthly_budget_cap_usd > 0),
+  rate_limit_runs_per_hour int not null default 10 check (rate_limit_runs_per_hour > 0),
+  rate_limit_requests_per_minute int not null default 60
+    check (rate_limit_requests_per_minute > 0),
   created_at timestamptz default now()
 );
+
+-- RBAC. One row per (org, user, role); a user may hold several roles. Revoked, never deleted.
+create table org_members (
+  org_id uuid not null references organisations(id) on delete cascade,
+  user_id uuid not null references auth.users(id),
+  role text not null check (role in ('owner','editor','approver','viewer')),
+  granted_by uuid references auth.users(id),
+  granted_at timestamptz not null default now(),
+  revoked_by uuid references auth.users(id),
+  revoked_at timestamptz,
+  primary key (org_id, user_id, role),
+  check ((revoked_at is null) = (revoked_by is null))
+);
+
+-- Role check used by every tenant RLS policy: the row's own org_id must be the caller's active
+-- org (JWT claim) AND the caller must hold one of the roles there. No parent-table walking.
+create function app.has_role(p_org uuid, p_roles text[]) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select p_org = (auth.jwt() ->> 'org_id')::uuid
+     and exists (select 1 from public.org_members m
+                 where m.org_id = p_org and m.user_id = auth.uid()
+                   and m.role = any (p_roles) and m.revoked_at is null);
+$$;
 
 create table brands (
   id uuid primary key default gen_random_uuid(),
@@ -291,7 +406,7 @@ create table brands (
   voice_embedding vector(768),
   voice_embedding_model text,                                     -- E3
   voice_embedding_version text,                                   -- E3
-  sector text,
+  sector text references sectors(id),                             -- registry key; no free text
   created_at timestamptz default now(),
   unique (id, org_id),
   check (voice_embedding is null
@@ -349,7 +464,7 @@ create table runs (
   foreign key (product_id, org_id) references products (id, org_id)     -- E7
 );
 
--- Every call. The evaluation harness reads this table.
+-- Every call. The evaluation harness reads this table; org month-to-date spend sums it.
 create table llm_calls (
   id bigserial primary key,
   org_id uuid not null references organisations(id) on delete cascade,   -- E1
@@ -364,6 +479,7 @@ create table llm_calls (
   created_at timestamptz default now(),
   foreign key (run_id, org_id) references runs (id, org_id) on delete cascade
 );
+create index on llm_calls (org_id, created_at);
 
 create table memory_items (
   id uuid primary key default gen_random_uuid(),
@@ -376,7 +492,7 @@ create table memory_items (
   embedding vector(768),
   embedding_model text,                                                   -- E2
   embedding_version text,                                                 -- E2
-  sector text,
+  sector text references sectors(id),
   source_url text,
   provenance text not null,                 -- run id, agent, or 'human'
   confidence numeric(3,2),
@@ -409,24 +525,149 @@ create table campaigns (
   strategy jsonb, creative jsonb, validation jsonb,
   status text default 'draft'
     check (status in ('draft','awaiting_approval','approved','rejected')),
-  approved_by uuid, approved_at timestamptz,
+  approved_by uuid,
+  approver_role text generated always as ('approver') stored,
+  approved_at timestamptz,
   quality_scores jsonb,
-  foreign key (run_id, org_id) references runs (id, org_id) on delete cascade
+  foreign key (run_id, org_id) references runs (id, org_id) on delete cascade,
+  -- approved_by must be a member of THIS org holding the approver role (Rules.md T6)
+  foreign key (org_id, approved_by, approver_role)
+    references org_members (org_id, user_id, role),
+  check (status <> 'approved' or (approved_by is not null and approved_at is not null))
 );
-```
 
-Nullable FK columns (`runs.product_id`, `memory_items.brand_id / product_id / claim_id`) use the
-default `MATCH SIMPLE`: when the reference column is null the constraint is not checked, which is
-the intended behaviour for org-wide items.
+-- The role FK cannot see revoked_at; a revoked approver is rejected here.
+create function app.campaigns_active_approver() returns trigger
+language plpgsql as $$
+begin
+  if new.approved_by is not null
+     and (tg_op = 'INSERT'
+          or new.approved_by is distinct from old.approved_by
+          or new.status is distinct from old.status)
+     and not exists (select 1 from org_members m
+                     where m.org_id = new.org_id and m.user_id = new.approved_by
+                       and m.role = 'approver' and m.revoked_at is null) then
+    raise exception 'approved_by must hold an active approver role in this organisation';
+  end if;
+  return new;
+end $$;
+create trigger campaigns_active_approver before insert or update on campaigns
+  for each row execute function app.campaigns_active_approver();
 
-**Row-level security is mandatory on every table carrying `org_id`** — every table above except
-`organisations`. Write the policy in the same migration that creates the table, never in a
-later one. Every policy is a direct column check; join-based policies are not permitted.
+-- ── Audit log: append-only for every application role ────────────────────────────────
+create table audit_log (
+  id bigint generated always as identity primary key,
+  occurred_at timestamptz not null default now(),
+  org_id uuid,              -- null for platform actions; no FK: the log outlives the org
+  actor_type text not null check (actor_type in ('user','service','agent')),
+  actor_id text not null,   -- auth user id, service name, or agent id
+  action text not null,
+  entity_type text not null,
+  entity_id text not null,
+  details jsonb not null default '{}'::jsonb
+);
 
-```sql
-alter table brands enable row level security;
-create policy brand_tenant_isolation on brands
-  using (org_id = (auth.jwt() ->> 'org_id')::uuid);
+create function app.audit_log_append_only() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'audit_log is append-only: % is not permitted', tg_op;
+end $$;
+create trigger audit_log_no_update_delete before update or delete on audit_log
+  for each row execute function app.audit_log_append_only();
+create trigger audit_log_no_truncate before truncate on audit_log
+  for each statement execute function app.audit_log_append_only();
+
+-- ── Privileges ───────────────────────────────────────────────────────────────────────
+revoke update, delete, truncate on audit_log from public, anon, authenticated, service_role;
+revoke insert on audit_log from public, anon, authenticated;              -- backend writes only
+revoke insert, update, delete, truncate on sectors, sector_constraints
+  from public, anon, authenticated;                                       -- admin path only
+revoke update on memory_items from authenticated;                         -- revocation columns only
+grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items to authenticated;
+
+-- ── Row-level security: role-aware, on the row's own org_id ──────────────────────────
+alter table sectors            enable row level security;
+alter table sector_constraints enable row level security;
+alter table organisations      enable row level security;
+alter table org_members        enable row level security;
+alter table brands             enable row level security;
+alter table products           enable row level security;
+alter table product_claims     enable row level security;
+alter table runs               enable row level security;
+alter table llm_calls          enable row level security;
+alter table memory_items       enable row level security;
+alter table campaigns          enable row level security;
+alter table audit_log          enable row level security;
+
+create policy sectors_read on sectors for select to authenticated using (true);
+create policy sector_constraints_read on sector_constraints for select to authenticated using (true);
+
+create policy org_read on organisations for select to authenticated
+  using (app.has_role(id, array['owner','editor','approver','viewer']));
+create policy org_owner_update on organisations for update to authenticated
+  using (app.has_role(id, array['owner'])) with check (app.has_role(id, array['owner']));
+
+create policy members_read on org_members for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy members_owner_insert on org_members for insert to authenticated
+  with check (app.has_role(org_id, array['owner']));
+create policy members_owner_update on org_members for update to authenticated
+  using (app.has_role(org_id, array['owner'])) with check (app.has_role(org_id, array['owner']));
+
+-- brands, products, product_claims: read any role; write owner/editor; delete owner
+create policy brands_read   on brands for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy brands_insert on brands for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy brands_update on brands for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy brands_delete on brands for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+create policy products_read   on products for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy products_insert on products for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy products_update on products for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy products_delete on products for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+create policy claims_read   on product_claims for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy claims_insert on product_claims for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy claims_update on product_claims for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy claims_delete on product_claims for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+-- runs: read any role; start a run owner/editor. Status updates come from the backend.
+create policy runs_read   on runs for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy runs_insert on runs for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+
+create policy llm_calls_read on llm_calls for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+
+-- memory: read any role; owner/editor may revoke (column grant above limits what they can set)
+create policy memory_read   on memory_items for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy memory_revoke on memory_items for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']) and revoked_by = auth.uid());
+
+-- campaigns: read any role. Approval is written by the backend; the FK + trigger enforce
+-- that approved_by is an active approver of this org regardless of who writes it.
+create policy campaigns_read on campaigns for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+
+create policy audit_owner_read on audit_log for select to authenticated
+  using (org_id is not null and app.has_role(org_id, array['owner']));
 ```
 
 ---

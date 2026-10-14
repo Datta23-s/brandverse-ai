@@ -6,13 +6,19 @@
 | Status | **Canonical.** `Architecture.md` §9 is reconciled to this document and must change in the same commit as it. |
 | Date | 14 October 2026 |
 
-This is the canonical data model. It is not a migration; the Phase 1 migrations implement it.
+This is the canonical data model. The full DDL is in `Architecture.md` §9; the Phase 1
+migrations are cut from it.
 Composite `on delete set null (col)` (§3) requires PostgreSQL 15+.
 
 ## 1. Diagram
 
 ```mermaid
 erDiagram
+  sectors ||--o{ sector_constraints : "has rules"
+  sectors ||--o{ brands : classifies
+  sectors ||--o{ memory_items : classifies
+  organisations ||--o{ org_members : "has members"
+  org_members ||--o{ campaigns : "approves (approver role)"
   organisations ||--o{ brands : owns
   organisations ||--o{ runs : owns
   organisations ||--o{ memory_items : owns
@@ -29,11 +35,54 @@ erDiagram
   runs ||--o{ llm_calls : logs
   runs ||--o{ campaigns : produces
 
+  sectors {
+    text id PK
+    text label
+    boolean regulated
+    timestamptz created_at
+  }
+  sector_constraints {
+    uuid id PK
+    text sector_id FK
+    text jurisdiction
+    text kind "required_disclaimer|prohibited_phrase"
+    text match_type "phrase|regex"
+    text pattern
+    text disclaimer_text
+    text source_url
+    text source_note
+    date effective_from
+    date retired_at
+    uuid created_by FK "auth.users - human only"
+    timestamptz created_at
+  }
   organisations {
     uuid id PK
     text name
-    numeric budget_cap_usd
+    numeric monthly_budget_cap_usd
+    int rate_limit_runs_per_hour
+    int rate_limit_requests_per_minute
     timestamptz created_at
+  }
+  org_members {
+    uuid org_id PK
+    uuid user_id PK "auth.users"
+    text role PK "owner|editor|approver|viewer"
+    uuid granted_by
+    timestamptz granted_at
+    uuid revoked_by
+    timestamptz revoked_at
+  }
+  audit_log {
+    bigint id PK
+    timestamptz occurred_at
+    uuid org_id "no FK - outlives org"
+    text actor_type "user|service|agent"
+    text actor_id
+    text action
+    text entity_type
+    text entity_id
+    jsonb details
   }
   brands {
     uuid id PK
@@ -43,7 +92,7 @@ erDiagram
     vector_768 voice_embedding
     text voice_embedding_model
     text voice_embedding_version
-    text sector
+    text sector FK
     timestamptz created_at
   }
   products {
@@ -111,7 +160,7 @@ erDiagram
     vector_768 embedding
     text embedding_model
     text embedding_version
-    text sector
+    text sector FK
     text source_url
     text provenance
     numeric confidence
@@ -133,7 +182,8 @@ erDiagram
     jsonb creative
     jsonb validation
     text status "draft|awaiting_approval|approved|rejected"
-    uuid approved_by
+    uuid approved_by FK
+    text approver_role "generated: approver"
     timestamptz approved_at
     jsonb quality_scores
   }
@@ -145,13 +195,22 @@ IDs are the ones assigned when this list was first drafted.
 
 | # | Issue | Why it matters | Resolution | Status |
 |---|---|---|---|---|
-| E1 | `products`, `product_claims`, `llm_calls`, `campaigns` have no `org_id` | Rules.md P3/P4 and §9's RLS rule are written against `org_id`; without it RLS needs join-based policies | Denormalised `org_id uuid not null` on all four, direct RLS policy `org_id = (auth.jwt() ->> 'org_id')::uuid`. No join-based policies. Consistency enforced by composite FKs — see §3. | **Accepted 2026-10-14** |
+| E1 | `products`, `product_claims`, `llm_calls`, `campaigns` have no `org_id` | Rules.md P3/P4 and §9's RLS rule are written against `org_id`; without it RLS needs join-based policies | Denormalised `org_id uuid not null` on all four, RLS on the row's own `org_id` — no parent-table walking. Since E8 the policy also checks the caller's role (`app.has_role`). Consistency enforced by composite FKs — see §3. | **Accepted 2026-10-14** |
 | E2 | `memory_items` has no `embedding_model` / `embedding_version` | `Memory.md` §5 requires them from day one | Add both, `text`. Nullable because `embedding` is nullable; check constraint: both non-null whenever `embedding` is non-null. | **Accepted 2026-10-14** |
 | E3 | `brands.voice_embedding` has no model/version columns | Same drift risk as E2, for the brand-voice gate | Add `voice_embedding_model`, `voice_embedding_version` (`text`); check constraint: both non-null whenever `voice_embedding` is non-null | **Accepted 2026-10-14** |
 | E4 | No revocation audit columns | `Memory.md` §6.4 requires who revoked what and when | Add `revoked_by uuid`, `revoked_at timestamptz`, `revoked_reason text` to `memory_items`; check constraint: when `revoked`, `revoked_by` and `revoked_at` are non-null | **Accepted 2026-10-14** |
 | E5 | No link from `memory_items` (`kind='claim'`) to `product_claims` | Decay exemption in `Memory.md` §3.3 keys on `claim_type`, which lives only on `product_claims` | Add nullable `memory_items.claim_id`, composite FK `(claim_id, org_id) → product_claims (id, org_id)`, `on delete set null (claim_id)` | **Accepted 2026-10-14** |
 | E6 | `provenance = 'seed'` is the only seed marker | `Rules.md` A3 requires seed exclusion enforced in code; free text is fragile | Add `is_seed boolean not null default false` | **Accepted 2026-10-14** |
 | E7 | `runs.product_id`, `memory_items.brand_id`, `memory_items.product_id` reference parents without an `org_id` check | A run or memory item in Org A can point at Org B's product or brand; RLS on the child does not catch it | Composite FKs to the parents' `unique (id, org_id)`, same pattern as E1 — see §3 | **Accepted 2026-10-14** |
+
+| E8 | No role-based access: any org member could do anything | An approver gate (T6) is meaningless if every member can approve; viewers must not edit product truth | `org_members (org_id, user_id, role)` with roles owner/editor/approver/viewer; roles revoked, never deleted; every tenant RLS policy checks role via `app.has_role` (§4) | **Accepted 2026-10-14** |
+| E9 | No general audit trail | Who changed what is needed for approvals, revocations and registry edits; retrofitting loses history | `audit_log`, append-only: update/delete/truncate revoked from all app roles **and** blocked by trigger for the table owner | **Accepted 2026-10-14** |
+| E10 | Only a per-run cost cap; `budget_cap_usd` had no stated period | One organisation could start unbounded runs, each under the per-run cap | `monthly_budget_cap_usd`, `rate_limit_runs_per_hour`, `rate_limit_requests_per_minute` on `organisations`; checked alongside the per-run cap (`Architecture.md` §9). `budget_cap_usd` renamed — no data existed. | **Accepted 2026-10-14** |
+| E11 | Regulated-sector safety depended on an agent (A4) not built in Phase 6 | Required disclaimers / prohibited phrasings must not depend on generation | `sector_constraints` registry (human-authored, versioned, never edited in place or deleted) and a `sectors` table that `brands.sector` and `memory_items.sector` reference, so a misspelled sector cannot bypass the registry | **Accepted 2026-10-14** |
+
+`campaigns.approved_by` is additionally constrained (E8 + T6): FK on
+`(org_id, approved_by, approver_role)` → `org_members (org_id, user_id, role)` with
+`approver_role` generated as `'approver'`, plus a trigger rejecting a revoked approver.
 
 ## 3. Keeping `org_id` consistent across references (E1, E5, E7)
 
@@ -189,3 +248,37 @@ FK is not checked, which is intended for org-wide memory items and product-less 
 
 The cross-tenant test in Phase 1 must include an attempt to insert a child row whose `org_id`
 differs from its parent's, and assert it is rejected.
+
+## 4. Role matrix (enforced by RLS)
+
+| Table | viewer | approver | editor | owner | Backend (service role) |
+|---|---|---|---|---|---|
+| `organisations` | read | read | read | read, update | all |
+| `org_members` | read | read | read | read, add, revoke | all |
+| `brands`, `products`, `product_claims` | read | read | read, insert, update | + delete | all |
+| `runs` | read | read | read, start | read, start | status updates |
+| `llm_calls` | read | read | read | read | insert |
+| `memory_items` | read | read | read, **revoke only** | read, **revoke only** | insert (after approval, `Rules.md` P8) |
+| `campaigns` | read | read | read | read | write; approval must name an active approver (FK + trigger) |
+| `audit_log` | — | — | — | read own org | **insert only** |
+| `sectors`, `sector_constraints` | read | read | read | read | admin path writes |
+
+"Revoke only": `authenticated` holds column-level `update` on the four revocation columns of
+`memory_items` and nothing else, and the policy requires `revoked_by = auth.uid()`.
+
+## 5. Schema test record
+
+**2026-10-14** — `Architecture.md` §9 DDL applied to a throwaway **PostgreSQL 16.2** (embedded,
+Windows) with stand-ins for Supabase's `auth.users`, `auth.uid()`, `auth.jwt()` and the
+`anon` / `authenticated` / `service_role` roles and default grants. Differences from production:
+pgvector and pg_trgm were unavailable, so `vector(768)` was replaced by `real[]`, the HNSW index
+was skipped, and the `pg_trgm` extension line was skipped (no trigram operator is used).
+**39 of 39 checks passed**, covering: cross-org composite FKs, sector FK, every row of the role
+matrix above, memory revoke-but-not-approve, approver FK and revoked-approver trigger, audit log
+append-only for service role and for the table owner (update, delete, truncate), registry
+versioning and authorship, org cap check, and `on delete set null (product_id)`.
+
+Not tested here: behaviour on Supabase itself (custom JWT `org_id` claim, real `auth` schema),
+pgvector, and anything in application code — including the registry's fail-closed rule, which is
+enforced by the Validation Engine (Phase 3), not by the schema. The test harness is not yet in the
+repository: it needs `pgserver` and `psycopg`, which are new dependencies (`Rules.md` §1.2).

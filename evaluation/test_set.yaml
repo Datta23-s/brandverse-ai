@@ -224,7 +224,7 @@ brands:
     pseudonym: Verdano Nutrition
     real_brand: Wellbeing Nutrition
     sector: health-supplements
-    regulated: true             # Rules.md T4: strong tier + A4 required
+    regulated: true             # Rules.md T4: strong tier + sector constraint registry (RQ3)
     products:
       A:
         pseudonym: Verdano Whey Iso+Conc - Chocolate

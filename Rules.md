@@ -134,7 +134,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 | T1 | Every factual claim in output carries `claim_type` and a source reference |
 | T2 | A `restricted` claim never reaches generated copy under any instruction |
 | T3 | Superlatives ("best", "number one", "fastest") require a cited source or are removed |
-| T4 | Regulated sectors (health, finance, children's products) route to the strong tier and require A4 |
+| T4 | Regulated sectors (health, finance, children's products) route to the strong tier and must pass the sector constraint registry. Where A4 is built, it is additionally required. |
 | T5 | The 8 predatory anti-patterns (`Architecture.md` §8) are blocked, not warned |
 | T6 | A campaign cannot reach `approved` without a recorded human action |
 | T7 | Generated creative is watermarked in metadata as AI-assisted |

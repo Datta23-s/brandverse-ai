@@ -138,6 +138,11 @@ Every design decision in this project defends that sentence. If a feature does n
 - Real consumer PII at any point
 - Training a foundation model
 - Mobile native applications
+- **Data export and deletion endpoints.** Required before any real deployment under India's
+  Digital Personal Data Protection (DPDP) Act, 2023; deferred to post-thesis. The thesis build
+  holds no real consumer PII (above). The deletion design must reconcile with the append-only
+  `audit_log` (`Architecture.md` §9) — for example by pseudonymising actor identifiers rather
+  than deleting rows — and that reconciliation is part of the deferred work.
 
 ---
 
@@ -266,7 +271,7 @@ Enforcement is **pre-flight, not post-hoc**: estimated cost is computed before e
 | R2 | Memory poisoning — a bad fact is stored and reused forever | Medium | High | Only approved, sourced facts are written; every memory row carries provenance and can be revoked |
 | R3 | Memory benefit does not appear in evaluation | Medium | Fatal to thesis | Design the test set with deliberate repeat requests (§8) |
 | R4 | SearXNG instance rate-limited or blocked | High | Medium | Self-host; cache aggressively; fall back to a paid SERP API behind the same interface |
-| R5 | Scope overrun — 7 agents is a lot for a student team | High | High | Phase 6 ships 5 agents. A2 and A5 are deferred. See `Phases.md`. |
+| R5 | Scope overrun — 7 agents is a lot for a student team | High | High | Phase 6 ships 5 agents (A1, A2, A3, A6, A7). A4 and A5 are deferred; regulated-sector safety is carried by the sector constraint registry, not A4. See `Phases.md` §6.1. |
 | R6 | Cost cap makes D2 runs useless | Medium | Medium | Tune caps empirically in Phase 10 and report the tuned values |
 | R7 | Examiner asks why the paper's RF engine is missing | Certain | Medium | §1.2 D1 — rehearse it |
 

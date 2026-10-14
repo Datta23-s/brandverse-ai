@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Phase | 0 — D1–D4 agreed 2026-10-14; D5 open (see §8) |
-| Track | Thesis-critical (5 agents: A1, A3, A4, A6, A7) |
+| Track | Thesis-critical (5 agents: A1, A2, A3, A6, A7; regulated-sector safety via the sector constraint registry) |
 | Source of truth | `PRD.md` §7–§8, `Memory.md` §7–§8, `Rules.md` §9 |
 | Date | 14 October 2026 |
 
@@ -14,7 +14,7 @@ No results appear in this document. It defines what will be measured and how.
 | Arm | Configuration on the thesis-critical track |
 |---|---|
 | **Baseline A** | Single LLM call. No memory, no research, no agents. |
-| **Baseline B** | All built agents (A1, A3, A4, A6, A7) always on, full research (D2) always, single model tier. No memory, no routing. |
+| **Baseline B** | All built agents (A1, A2, A3, A6, A7) always on, full research (D2) always, single model tier. No memory, no routing. The sector constraint registry applies to every arm — it is a safety gate, not an adaptive feature. |
 | **Proposed** | Adaptive memory + adaptive research depth (D0/D1/D2) + adaptive agent selection (3–5 of 5) + model routing. |
 
 The Baseline B definition above applies to the evaluation harness only. `Architecture.md` §7 continues
@@ -138,3 +138,4 @@ evaluation results from being reported.
 |---|---|---|---|
 | RQ1 | In effect (D4 = option (a)) | **Disclosure in the dissertation methodology section.** It must state that the evaluation used real product specifications under pseudonymised brand names, so that the claim gate was exercised against checkable facts without generating brand-impersonating output (`Rules.md` T8). | Methodology section reviewed against this wording before submission |
 | RQ2 | Before any evaluation run | **Pseudonym collision check.** Each brand and product pseudonym in `evaluation/test_set.yaml` is searched for and confirmed not to be an existing brand or product. A pseudonym that collides with a real brand defeats the purpose of D4 and T8. Not yet done. | Search log committed alongside the test set |
+| RQ3 | Before any evaluation run | **Registry populated for every regulated evaluation sector** (currently `health-supplements`, B07). Rows entered by a human from the cited regulation or guidance, with `source_url`. Until then the registry fails closed and every B07 run is blocked; such runs would be reported as blocked, not dropped (`Rules.md` A2). No rows have been entered or drafted. | `sector_constraints` rows for each regulated sector, each with a source |
