@@ -1,0 +1,10 @@
+{
+  "name": "brandverse",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}
