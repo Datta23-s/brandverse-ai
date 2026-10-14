@@ -134,6 +134,14 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 - [ ] Near-duplicate detection prevents a second insert at cosine > 0.95
 - [ ] Revocation removes an item from retrieval immediately
 
+**pgvector version gap (added 2026-10-14).** CI's database gate runs pgvector 0.8.7; the
+Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds real data:
+- [ ] Re-run the storage measurement against the real project (heap, TOAST, HNSW, GIN per row) and
+  record it beside the CI figures, with the pgvector version and date
+- [ ] Re-verify HNSW behaviour on the real project: the index is used by `match_memory`'s vector
+  branch (`explain`), and recall at `ef_search = 100` matches CI's on the same labelled queries
+- [ ] Either pin CI to production's pgvector version or record why not
+
 ---
 
 ## Phase 5 — Research Intelligence

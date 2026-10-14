@@ -146,7 +146,7 @@ Every design decision in this project defends that sentence. If a feature does n
   (`Architecture.md` §9). Intended resolution: **retain the audit event, and pseudonymise or
   tombstone the data subject** within it, with retention of audit records resting on an
   **independent legal basis**. This is a **deployment-phase decision requiring legal review**,
-  not a schema change now; the append-only guarantee stays as built until that review concludes.
+  not a schema change now; the append-only guarantee stays as built until that review concludes. That guarantee binds the application roles only; the table owner (`postgres`) can bypass it (`Architecture.md` §9, stated limitation).
 
 ---
 

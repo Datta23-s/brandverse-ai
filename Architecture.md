@@ -333,7 +333,7 @@ prohibited phrasings (`Phases.md` §6.1; `Rules.md` T4). Table: `sector_constrai
 | Scope | Platform-wide reference data, not tenant data — the same rules apply to every organisation in a sector. Readable by all authenticated users; writable only by admins. |
 | Fail closed | A brand whose sector is marked `regulated` but has no active registry rows **blocks the run**. Missing rules are never read as "no constraints". |
 | Sector keys | `brands.sector` references a `sectors` table, so a misspelled sector cannot silently bypass the registry. |
-| Change control | Rows are versioned by `effective_from` / `retired_at`, never edited in place; every change is written to `audit_log`. |
+| Change control | Rows are versioned by `effective_from` / `retired_at`, never edited in place (trigger); every change is written to `audit_log`. Binds the application roles, not the table owner (§9, stated limitation). |
 
 The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming.
 
@@ -377,12 +377,14 @@ name its approver.
 undecided — is a row in `approvals` (`docs/approval-rubric.md` §5): campaign, org, approver,
 outcome, failed gate, reason, seconds spent, arm inference and its note, decision time. The
 approver is constrained exactly as `campaigns.approved_by` is (role FK + active-approver trigger);
-a reason is required on anything but `approve`; rows are append-only for every application role,
-so a re-score after a rubric amendment is a new row. `campaigns.approved_by` stays the operational
+a reason is required on anything but `approve`; direct `update` and `delete` are revoked from
+every application role, so a re-score after a rubric amendment is a new row (limits: see the
+stated limitation under "Audit log" below — a cascade from `runs` or `organisations`, and the
+table owner). `campaigns.approved_by` stays the operational
 approval state; `campaigns.quality_scores` holds only the blind raters' scores and never the
 approver's decision. Calibration decisions (`docs/approval-rubric.md` §6) are rows here too, made
 in a practice organisation where the second scorer holds `approver`, and flagged
-`is_calibration`. They are never deleted; the evaluation harness excludes them by that flag
+`is_calibration`. They are never deleted (within the limits stated under "Audit log" below); the evaluation harness excludes them by that flag
 (`backend/app/evaluation/approvals.py`), as it excludes seed memory (`Memory.md` §7.1) — never by
 the practice org's id, which changes on a reseed. **The practice organisation is a row in
 `organisations`, not a second Supabase project**, so it does not use one of the free tier's two
@@ -392,10 +394,53 @@ approval in a practice org without `is_calibration = true`, so an unflagged prac
 exist. The harness additionally excludes practice orgs, so it could not leak even if the trigger
 were bypassed.
 
-**Audit log.** Append-only for every application role: `update`, `delete` and `truncate` are
-revoked from `anon`, `authenticated` and `service_role`, and a trigger rejects them even for the
-table owner. A database superuser can still disable triggers; that is the residual risk, and
-Supabase does not hand superuser to application code.
+**Audit log.** Append-only **for the application roles only**: `update`, `delete` and `truncate`
+are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejects them.
+
+> ### Stated limitation — what "append-only" and "never deleted" mean on managed Supabase
+> These protections bind the **application roles** (`anon`, `authenticated`, `service_role`),
+> which are all the API and backend use. They do **not** bind the table owner. On Supabase every
+> table is owned by `postgres` — the role the dashboard SQL editor uses, and the role migrations
+> run as — and `postgres` can `alter table audit_log disable trigger …` and then update or delete
+> rows (verified on the project 2026-10-14, in a rolled-back transaction). The trigger stops an
+> owner's *accident*, not deliberate tampering. Supabase gives this project no role above
+> `postgres`, so **no in-database protection against the owner is possible**: whatever `postgres`
+> installs, `postgres` can remove.
+>
+> As of 2026-10-14 there are also two gaps **for the application roles themselves**:
+> `service_role` (the backend) holds `DELETE` on `memory_items`, `runs` and `organisations`, so it
+> can hard-delete memory, and deleting a run or an organisation cascades into `campaigns` and
+> `approvals`. Until those grants are revoked (option 1 below), "never deleted" for memory items
+> and approval decisions is a code convention, not an enforced property.
+>
+> | Table | Claim | Holds against the application roles | Holds against `postgres` |
+> |---|---|---|---|
+> | `audit_log` | append-only | Yes | No |
+> | `approvals` | append-only | Direct `update`/`delete`: yes. Via `delete` on `runs` or `organisations` (cascade): **no** | No |
+> | `sector_constraints` | never edited in place or deleted | Yes (trigger) | No |
+> | `memory_items` | never hard-deleted (`Memory.md` §6.4) | `authenticated`: yes (no delete policy). `service_role`: **no** | No |
+> | `org_members` | roles revoked, never deleted | `authenticated`: yes (no delete policy). `service_role`: **no**, except a membership an approval references (foreign key) | No |
+>
+> **Hardening that is possible, and its cost** (checked on the project 2026-10-14; none built):
+> 1. **Close the application-role gaps** — a new migration revoking `delete` on `memory_items`,
+>    `runs`, `campaigns`, `organisations` and `org_members` from `anon`, `authenticated` and
+>    `service_role`, so
+>    deletion of those becomes a deliberate `postgres` operation. Real prevention for application
+>    code. Cost: one small migration and tests; organisation deletion then needs a documented
+>    manual procedure.
+> 2. **Tamper evidence for the owner case** — a hash chain on `audit_log` (and `approvals`): a
+>    before-insert trigger stores `sha256(previous hash ‖ row)` (`pgcrypto` `digest()` is available),
+>    inserts serialised by an advisory lock, and the head hash is anchored outside the database,
+>    committed to git with the weekly `pg_dump`. An altered or deleted past row breaks the chain
+>    detectably unless the anchors are rewritten too. Detection, not prevention. Cost: one
+>    migration, a verification script, the weekly anchoring step; zero rupees; negligible at this
+>    volume.
+> 3. **Dump comparison** — the weekly `pg_dump` (§11) already gives point-in-time copies; diffing
+>    successive dumps detects changes to rows older than the previous dump. Cost: a diff script.
+> 4. *Not available:* transferring ownership to a role `postgres` cannot use (PostgreSQL requires
+>    the current owner to be able to `SET ROLE` to the new owner — denied on the project), and an
+>    event trigger blocking DDL (allowed, but owned by `postgres`, which can drop it; it only adds
+>    a step).
 
 **Organisation budget and rate limits.** Checked alongside the per-run cap (`PRD.md` §9), never
 instead of it:
@@ -1026,9 +1071,33 @@ moment every schema change is a new migration — no in-place edits, no exceptio
 | Result | 13 tables, row-level security on every one, 27 policies, 7 `app.*` functions, 6 triggers |
 | Migration history | Applied with psycopg, not the Supabase CLI: there is **no** `supabase_migrations` history table. Each later migration is applied the same way and recorded here with its date and commit, until a CLI-based workflow is adopted. |
 
-`vector` sits in `public` because `create extension` uses the first existing schema on the search
-path, as in CI; Supabase's convention is the `extensions` schema, and its linter will flag this.
-Moving it is now a new migration (`alter extension vector set schema extensions`), not an edit.
+**Decision (2026-10-14): `vector` and `pg_trgm` stay in `public`.** `create extension` puts them
+in the first existing schema on the search path, which is `public` both on Supabase and in CI.
+Supabase's convention is the `extensions` schema, and **its database linter will flag both as
+"extension in public"** — an accepted warning, not drift. Reasons:
+
+- **Same resolution in the gate and in production.** Supabase's search path includes
+  `extensions`; CI's container does not. Moving the extensions would make every future migration
+  and function either schema-qualify vector types and operators (`extensions.vector`,
+  `operator(extensions.<=>)`) or behave differently in CI than on the project. Leaving them in
+  `public` keeps one resolution everywhere.
+- **The linter's risk is already contained.** Its concern is unqualified names resolving to
+  objects in a schema the API roles can use. Every `app.*` function pins `search_path = ''`, and
+  the API roles already have `USAGE` on `public`.
+- **Not lock-in.** `alter extension … set schema extensions` was tested on the project
+  (2026-10-14, rolled back) and is allowed; it changes catalog entries only, without rewriting
+  tables or indexes, so its cost does not grow with data. Revisit only with a concrete reason,
+  as a new migration.
+
+**Known gap — pgvector version (2026-10-14).** The merge-blocking database gate runs pgvector
+**0.8.7** (CI's `pgvector/pgvector:pg17` image); the Supabase project runs **0.8.2**. The gate
+therefore tests a different vector implementation than production, and the HNSW storage figures
+below were measured on 0.8.7. The memory subsystem is the thesis, so this is tracked, not
+assumed away: Phase 4 re-verifies HNSW behaviour and storage against the real project once
+`memory_items` holds data (`Phases.md` Phase 4). A `pgvector/pgvector:0.8.2-pg17` image exists
+(Docker Hub, checked 2026-10-14), so CI can be pinned to production's version; Supabase may move
+the project to a newer minor version on a restore (§11, restoring a paused project), so the two
+are re-compared after any restore or upgrade.
 
 **Platform compared with `backend/tests/db/supabase_platform_stub.sql`** (read-only, 2026-10-14):
 

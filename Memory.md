@@ -206,7 +206,7 @@ This gives memory a cheap, auditable correction mechanism without a retraining l
 
 ### 6.4 Revocation
 
-`revoked = true` removes an item from all retrieval permanently. Rows are never hard-deleted — the audit trail is part of the contribution. A brand manager must be able to revoke from the UI, and the system must record who revoked what and when.
+`revoked = true` removes an item from all retrieval permanently. Rows are never hard-deleted — the audit trail is part of the contribution. **Stated limitation (2026-10-14):** this is enforced against users (`authenticated` has no delete policy), but not yet against the backend — `service_role` holds `DELETE` on `memory_items` and bypasses row-level security, and deleting an organisation cascades — and never against the table owner `postgres` on managed Supabase. Until the hardening in `Architecture.md` §9 is applied, "never hard-deleted" is partly a code convention, and the audit trail is tamper-resistant for application code, not tamper-proof. See `Architecture.md` §9, "Stated limitation". A brand manager must be able to revoke from the UI, and the system must record who revoked what and when.
 
 ---
 
