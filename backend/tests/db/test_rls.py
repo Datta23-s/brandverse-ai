@@ -728,3 +728,36 @@ def test_table_owner_can_still_delete_an_organisation(tx: Tx) -> None:
     org = tx.execute("insert into organisations (name) values ('doomed') returning id")[0][0]
     tx.execute("delete from organisations where id = %s", (org,))
     assert tx.execute("select id from organisations where id = %s", (org,)) == []
+
+
+# ── A brand with memory cannot be deleted (0011) ─────────────────────────────────────────
+
+
+def test_owner_cannot_delete_a_brand_that_has_memory(tx: Tx) -> None:
+    brand = tx.execute(
+        "insert into brands (org_id, name) values (%s, 'remembered') returning id", (tx.seed.org_a,)
+    )[0][0]
+    tx.execute(
+        "insert into memory_items (org_id, brand_id, kind, content, provenance) "
+        "values (%s, %s, 'insight', 'kept', 'human')",
+        (tx.seed.org_a, brand),
+    )
+    tx.as_user("owner_a")
+    with pytest.raises(errors.ForeignKeyViolation):
+        tx.execute("delete from brands where id = %s", (brand,))
+
+
+def test_table_owner_deleting_an_organisation_still_removes_its_memory(tx: Tx) -> None:
+    # The manual procedure (Architecture.md §9): the org cascade removes memory items before the
+    # brand FK's NO ACTION check runs at the end of the statement.
+    org = tx.execute("insert into organisations (name) values ('gone') returning id")[0][0]
+    brand = tx.execute("insert into brands (org_id, name) values (%s, 'b') returning id", (org,))[
+        0
+    ][0]
+    tx.execute(
+        "insert into memory_items (org_id, brand_id, kind, content, provenance) "
+        "values (%s, %s, 'insight', 'x', 'human')",
+        (org, brand),
+    )
+    tx.execute("delete from organisations where id = %s", (org,))
+    assert tx.execute("select id from memory_items where org_id = %s", (org,)) == []

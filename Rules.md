@@ -160,7 +160,7 @@ providers' list prices; they are a safety limit and a comparison aid, not money 
 |---|---|
 | Unit | Every scoring function (`R`, `M`, freshness, routing) has tests at boundaries and just inside/outside each band |
 | Integration | Full pipeline against a mocked LLM and a mocked SearXNG — must run offline in CI |
-| Security | Cross-tenant access test per tenant table. **Must stay green; a failure blocks merge.** |
+| Security | Cross-tenant access test per tenant table. **Must stay green; a failure blocks merge.** The table-posture test (`backend/tests/db/test_table_posture.py`) is merge-blocking on the same terms: every table's delete and truncate posture for the API roles is stated there by hand, and a new table fails the suite until its posture is stated. |
 | Memory | Retrieval precision test against the 50-query labelled set |
 | Cost | Assert a run that would exceed the cap aborts cleanly with partial output |
 | Frontend | Vitest for logic; Playwright for the run-creation and approval flows |

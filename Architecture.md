@@ -406,28 +406,34 @@ are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejec
 > `postgres`, so **no in-database protection against the owner is possible**: whatever `postgres`
 > installs, `postgres` can remove.
 >
-> State on the project after migration 0010 (checked 2026-10-14):
+> State on the project after migration 0011 (checked 2026-10-14, 39 of 39 posture checks
+> matching `backend/tests/db/test_table_posture.py`):
 >
 > | Table | Claim | Holds against the application roles | Holds against `postgres` |
 > |---|---|---|---|
 > | `audit_log` | append-only | Yes (grants revoked; trigger also blocks `truncate`) | No |
-> | `approvals` | append-only | Yes: direct `update`/`delete`/`truncate` revoked, and since 0010 no application role can delete the `runs` or `organisations` rows that would cascade into it | No |
-> | `memory_items` | never hard-deleted (`Memory.md` §6.4) | Directly: yes (0010). **Via a brand: no** — `memory_items.brand_id` is `on delete cascade`, and org owners (policy) and `service_role` may delete brands | No |
+> | `approvals` | append-only | Yes: direct `update`/`delete`/`truncate` revoked, and no application role can delete the `runs` or `organisations` rows that would cascade into it (0010) | No |
+> | `memory_items` | never hard-deleted (`Memory.md` §6.4) | Yes: no direct delete or truncate (0010), and a brand that has memory items cannot be deleted (0011) | No |
 > | `org_members` | roles revoked, never deleted | Yes (0010) | No |
-> | `sector_constraints` | never edited in place or deleted | `update`/`delete`: yes (trigger). **`truncate` by `service_role`: no** — the trigger fires on `delete` only, and the grant is not revoked | No |
-> | `llm_calls` | raw logs, retained (`Rules.md` A1) | **No**: `service_role` holds `delete` and `truncate`; `anon` and `authenticated` hold `truncate` | No |
+> | `sector_constraints` | never edited in place or deleted | Yes: `update`/`delete` blocked by trigger, `delete`/`truncate` revoked (0011) | No |
+> | `llm_calls`, `runs` | raw logs, retained (`Rules.md` A1) | Yes (0010, 0011) | No |
 >
-> `TRUNCATE` ignores row-level security, and Supabase's default privileges grant it to all three
-> application roles on every new table; on `brands`, `products` and `product_claims` it is blocked
-> today only because their foreign keys would cascade into `memory_items`. Proposed next fix, not
-> yet approved: a migration revoking `delete` and `truncate` on `llm_calls`, `sector_constraints`
-> and `sectors`, and `truncate` on every remaining table, from the application roles; and
-> `memory_items.brand_id` changed to `on delete no action`, so a brand with memory cannot be
-> deleted (the same rule as a product with runs).
+> **No application role holds `TRUNCATE` on any table** (0011); `TRUNCATE` ignores row-level
+> security, and Supabase's default privileges grant it on every new table, so a new table must
+> revoke it. The class is closed by a test, not by vigilance: `test_table_posture.py` states the
+> expected effective `delete` and `truncate` of **every** table for `anon`, `authenticated` and
+> `service_role`, and fails on any table not listed (merge-blocking, `Rules.md` §6).
 >
+> **Deliberate consequence of 0011 — accepted 2026-10-14.** `memory_items.brand_id` is now
+> `on delete no action`, so **an organisation owner can no longer delete a brand once it has
+> memory items**, as they already cannot delete a product once it has runs. This is a deliberate
+> trade of convenience for evidence integrity, not an oversight: deleting a brand would otherwise
+> hard-delete the memory the evaluation measures. Deleting the whole organisation, by the manual
+> `postgres` procedure below, still removes everything.
+
 > **Decisions on hardening (2026-10-14):**
 > 1. **Revoking application-role deletes — done, as a correctness fix, not hardening:**
->    migration 0010. The application role deleting rows the design keeps was a violation of the
+>    migrations 0010 and 0011. The application role deleting rows the design keeps was a violation of the
 >    documented design (`Memory.md` §6.4, approvals' append-only property), not a platform limit.
 > 2. **Hash chain — approved in principle, deferred, scoped to `approvals` and `audit_log`.** A
 >    before-insert trigger stores `sha256(previous hash ‖ row)` (`pgcrypto` `digest()` is
@@ -983,6 +989,31 @@ create policy approvals_read on approvals for select to authenticated
 --   to anon, authenticated, service_role;
 revoke delete, truncate on memory_items, runs, campaigns, organisations, org_members
   from public, anon, authenticated, service_role;
+
+-- ═══ supabase/migrations/0011_close_remaining_delete_paths.sql ═══
+-- 0011: correctness fix, completing 0010 (Architecture.md §9, stated limitation).
+-- 1. llm_calls are the evaluation's raw logs (Rules.md A1); sector_constraints rows are retired,
+--    never deleted, and their trigger fires on DELETE only, not TRUNCATE; sectors are the keys the
+--    registry and brands depend on. No application role deletes or truncates any of them.
+-- 2. TRUNCATE ignores row-level security; Supabase's default privileges grant it to every API
+--    role on every new table. Revoked on the remaining tables, so no application role holds it
+--    anywhere (backend/tests/db/test_table_posture.py states the posture of every table).
+-- 3. memory_items.brand_id becomes ON DELETE NO ACTION: deleting a brand no longer hard-deletes
+--    its memory (Memory.md §6.4). A brand with memory items cannot be deleted — the same rule as a
+--    product with runs. Deleting the whole organisation (a postgres procedure) still works: the
+--    cascade removes its memory items before the check runs at the end of the statement.
+-- Down: grant delete, truncate on llm_calls, sector_constraints, sectors to anon, authenticated,
+--   service_role; grant truncate on brands, products, product_claims to anon, authenticated,
+--   service_role; re-create memory_items_brand_id_org_id_fkey with ON DELETE CASCADE.
+revoke delete, truncate on llm_calls, sector_constraints, sectors
+  from public, anon, authenticated, service_role;
+revoke truncate on brands, products, product_claims
+  from public, anon, authenticated, service_role;
+
+alter table memory_items
+  drop constraint memory_items_brand_id_org_id_fkey,
+  add constraint memory_items_brand_id_org_id_fkey
+    foreign key (brand_id, org_id) references brands (id, org_id);
 ```
 
 ---

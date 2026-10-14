@@ -206,7 +206,7 @@ This gives memory a cheap, auditable correction mechanism without a retraining l
 
 ### 6.4 Revocation
 
-`revoked = true` removes an item from all retrieval permanently. Rows are never hard-deleted — the audit trail is part of the contribution. **Stated limitation (2026-10-14):** since migration 0010 no application role can delete or truncate `memory_items`, or delete the organisation that would cascade into it. Two gaps remain: deleting a **brand** still cascades into that brand's memory items (`memory_items.brand_id` is `on delete cascade`; a fix is proposed in `Architecture.md` §9), and nothing in the database binds the table owner `postgres` on managed Supabase. The audit trail is tamper-resistant for application code, not tamper-proof. See `Architecture.md` §9, "Stated limitation". A brand manager must be able to revoke from the UI, and the system must record who revoked what and when.
+`revoked = true` removes an item from all retrieval permanently. Rows are never hard-deleted — the audit trail is part of the contribution. **Stated limitation (2026-10-14):** since migrations 0010 and 0011 no application role can delete or truncate `memory_items`, delete the organisation that would cascade into it, or delete a brand that has memory items (`memory_items.brand_id` is `on delete no action`). What remains is the table owner: nothing in the database binds `postgres` on managed Supabase. The audit trail is tamper-resistant for application code, not tamper-proof. See `Architecture.md` §9, "Stated limitation". A brand manager must be able to revoke from the UI, and the system must record who revoked what and when.
 
 ---
 
