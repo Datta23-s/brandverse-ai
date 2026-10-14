@@ -118,7 +118,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 |---|---|
 | C1 | Estimate cost **before** a call; refuse if it breaches the cap |
 | C2 | Record every call in `llm_calls` with model, tier, route reason, tokens, cost, latency |
-| C3 | Hard caps: 7 LLM calls, 20 searches, 2 revision rounds, 4 media generations, $2.50 |
+| C3 | Hard caps: 20 LLM calls, 20 searches, 2 revision rounds, 4 media generations, $2.50 |
 | C4 | On breach, return a partial result flagged `budget_exhausted` — never truncate silently |
 | C5 | Default to the cheapest tier that can do the job; escalate on failure, do not start high |
 | C6 | Cache embeddings by content hash. Re-embedding identical text is pure waste. |

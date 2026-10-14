@@ -248,7 +248,7 @@ LR = ((T_baseline − T_proposed) / T_baseline) × 100
 
 | Parameter | Value |
 |---|---:|
-| `max_llm_calls` | 7 |
+| `max_llm_calls` | 20 |
 | `max_search_queries` | 20 |
 | `max_revision_rounds` | 2 |
 | `max_media_generations` | 4 |
