@@ -6,8 +6,8 @@
 | Source of truth | `Architecture.md` §9, `Memory.md` §5 |
 | Date | 14 October 2026 |
 
-This diagram reproduces `Architecture.md` §9 as written. It is not a migration. Open issues found
-while drawing it are listed in §2 and must be resolved before the Phase 1 migrations are written.
+This diagram is `Architecture.md` §9 plus the changes accepted in §2. It is not a migration.
+The Phase 1 migrations implement it.
 
 ## 1. Diagram
 
@@ -16,6 +16,10 @@ erDiagram
   organisations ||--o{ brands : owns
   organisations ||--o{ runs : owns
   organisations ||--o{ memory_items : owns
+  organisations ||--o{ products : "owns (denormalised)"
+  organisations ||--o{ product_claims : "owns (denormalised)"
+  organisations ||--o{ llm_calls : "owns (denormalised)"
+  organisations ||--o{ campaigns : "owns (denormalised)"
   brands ||--o{ products : has
   brands ||--o{ memory_items : scopes
   products ||--o{ product_claims : has
@@ -42,6 +46,7 @@ erDiagram
   products {
     uuid id PK
     uuid brand_id FK
+    uuid org_id FK
     text name
     text category
     jsonb attributes
@@ -50,6 +55,7 @@ erDiagram
   product_claims {
     uuid id PK
     uuid product_id FK
+    uuid org_id FK
     text claim
     text claim_type "verified|deduced|restricted"
     text evidence_url
@@ -80,6 +86,7 @@ erDiagram
   llm_calls {
     bigint id PK
     uuid run_id FK
+    uuid org_id FK
     text agent_id
     text model
     text tier
@@ -98,6 +105,8 @@ erDiagram
     text kind
     text content
     vector_768 embedding
+    text embedding_model
+    text embedding_version
     text sector
     text source_url
     text provenance
@@ -105,12 +114,17 @@ erDiagram
     int freshness_days
     boolean approved
     boolean revoked
+    uuid revoked_by
+    timestamptz revoked_at
+    text revoked_reason
+    boolean is_seed
     timestamptz created_at
     timestamptz last_used_at
   }
   campaigns {
     uuid id PK
     uuid run_id FK
+    uuid org_id FK
     jsonb strategy
     jsonb creative
     jsonb validation
@@ -121,15 +135,35 @@ erDiagram
   }
 ```
 
-## 2. Open issues — need a decision before Phase 1
+## 2. Issues found against `Architecture.md` §9
 
-| # | Issue | Why it matters | Proposed resolution |
-|---|---|---|---|
-| E1 | `products`, `product_claims`, `llm_calls`, `campaigns` have no `org_id` | Rules.md P3/P4 and §9's RLS rule are written against `org_id`. Without it, RLS on these tables needs a join-based policy, which is slower and easier to get wrong. | Add a denormalised `org_id` to all four, enforced by FK, with a direct RLS policy |
-| E2 | `memory_items` has no `embedding_model` / `embedding_version` columns | `Memory.md` §5 says store them from day one; §9 DDL omits them | Add both columns, `not null` |
-| E3 | `brands.voice_embedding` has no model/version columns either | Same drift risk as E2 for the brand-voice gate | Add `voice_embedding_model`, `voice_embedding_version` |
-| E4 | No audit columns for revocation (`revoked_by`, `revoked_at`) | `Memory.md` §6.4 requires recording who revoked what and when | Add both to `memory_items` |
-| E5 | `product_claims` (verified) are retrieved via `memory_items.kind='claim'`, but no link between the two tables | Decay exemption in `Memory.md` §3.3 keys on `claim_type`, which lives only on `product_claims` | Add nullable `memory_items.claim_id` FK to `product_claims` |
-| E6 | `memory_items.provenance = 'seed'` is the only seed marker | `Rules.md` A3 requires seed exclusion enforced in code; a free-text field is fragile | Add `is_seed boolean not null default false` |
+IDs are the ones assigned when this list was first drafted.
 
-E1 touches tenant isolation, so per `Rules.md` §1.2 it is not applied without sign-off.
+| # | Issue | Why it matters | Resolution | Status |
+|---|---|---|---|---|
+| E1 | `products`, `product_claims`, `llm_calls`, `campaigns` have no `org_id` | Rules.md P3/P4 and §9's RLS rule are written against `org_id`; without it RLS needs join-based policies | Denormalised `org_id uuid not null` on all four, direct RLS policy `org_id = (auth.jwt() ->> 'org_id')::uuid`. No join-based policies. Consistency enforced by composite FKs — see §3. | **Accepted 2026-10-14** |
+| E2 | `memory_items` has no `embedding_model` / `embedding_version` | `Memory.md` §5 requires them from day one | Add both, `text`. Nullable because `embedding` is nullable; check constraint: both non-null whenever `embedding` is non-null. | **Accepted 2026-10-14** |
+| E3 | `brands.voice_embedding` has no model/version columns | Same drift risk as E2, for the brand-voice gate | Add `voice_embedding_model`, `voice_embedding_version` | **Open** |
+| E4 | No revocation audit columns | `Memory.md` §6.4 requires who revoked what and when | Add `revoked_by uuid`, `revoked_at timestamptz`, `revoked_reason text` to `memory_items`; check constraint: when `revoked`, `revoked_by` and `revoked_at` are non-null | **Accepted 2026-10-14** |
+| E5 | No link from `memory_items` (`kind='claim'`) to `product_claims` | Decay exemption in `Memory.md` §3.3 keys on `claim_type`, which lives only on `product_claims` | Add nullable `memory_items.claim_id` FK to `product_claims` | **Open** |
+| E6 | `provenance = 'seed'` is the only seed marker | `Rules.md` A3 requires seed exclusion enforced in code; free text is fragile | Add `is_seed boolean not null default false` | **Accepted 2026-10-14** |
+| E7 | `runs.product_id`, `memory_items.brand_id`, `memory_items.product_id` reference parents without an `org_id` check | A run or memory item in Org A can point at Org B's product or brand; RLS on the child does not catch it | Composite FKs `(product_id, org_id)` / `(brand_id, org_id)` to the parents' `unique (id, org_id)`, same as §3 | **Open** |
+
+## 3. Keeping denormalised `org_id` consistent (E1)
+
+A copied `org_id` can disagree with its parent — e.g. a product whose `org_id` is Org B under a
+brand owned by Org A. That would be a tenant-isolation hole that RLS cannot see. It is prevented in
+the schema, not in application code:
+
+| Child | Constraint |
+|---|---|
+| `brands` | `unique (id, org_id)` (target for the FK below) |
+| `products` | `foreign key (brand_id, org_id) references brands (id, org_id)` |
+| `products` | `unique (id, org_id)` |
+| `product_claims` | `foreign key (product_id, org_id) references products (id, org_id)` |
+| `runs` | `unique (id, org_id)` |
+| `llm_calls` | `foreign key (run_id, org_id) references runs (id, org_id)` |
+| `campaigns` | `foreign key (run_id, org_id) references runs (id, org_id)` |
+
+The cross-tenant test in Phase 1 must include an attempt to insert a child row whose `org_id`
+differs from its parent's, and assert it is rejected.
