@@ -1,50 +1,86 @@
 # BrandverseAI — model registry.
 # The ONLY place a model ID may appear in this repository (Rules.md P5).
 #
-# Verified against live provider docs on 2026-10-14:
-#   https://ai.google.dev/gemini-api/docs/models
-#   https://ai.google.dev/gemini-api/docs/deprecations
+# Zero-rupee constraint (Rules.md C0): every model below is used on the Gemini API FREE tier.
+# Nothing is paid. Prices are paid-tier LIST prices (USD per 1M tokens, text), kept only for the
+# list-price-equivalent USD figures and the per-run safety cap (Rules.md C3); they are not spend.
+#
+# Free-tier rate limits (rpm / tpm / rpd) were read from the project's own AI Studio account on
+# 2026-10-14. They are hard constraints (Rules.md C9, C10). Google applies them per Google Cloud
+# PROJECT, not per API key, and RPD resets at midnight Pacific time
+# (ai.google.dev/gemini-api/docs/rate-limits, 2026-10-14). Every call made with this project's
+# key counts — development, tests against the live API, and evaluation alike.
+#
+# NOT available on the free tier (0 / 0 / 0 on 2026-10-14) and therefore not used: every Pro
+# model, including gemini-3.1-pro and gemini-2.5-pro. Image-generation models are listed only for
+# paid tiers (rate-limits page, 2026-10-14), so there is no free media tier.
+#
+# Free-tier content may be used by Google to improve its products (pricing page, 2026-10-14);
+# paid-tier content is not. Send no PII and nothing confidential (Rules.md §5).
+#
+# Sources checked 2026-10-14:
 #   https://ai.google.dev/gemini-api/docs/pricing
+#   https://ai.google.dev/gemini-api/docs/rate-limits
 #   https://ai.google.dev/gemini-api/docs/embeddings
-# Re-verify before first deploy and whenever a shutdown date below is within 60 days.
-# Prices are USD, paid tier, prompts <= 200k tokens.
+#   https://ai.google.dev/gemini-api/docs/deprecations
+# Re-verify before first deploy, whenever a shutdown date below is within 60 days, and whenever
+# a rate limit in the AI Studio account changes.
 
 verified_at: 2026-10-14
+rate_limits_source: AI Studio account (free tier), read 2026-10-14
+rpd_resets_at: "00:00 America/Los_Angeles"
 
+# Three tiers, not four. A fourth "strong-with-retry" tier was considered and rejected: it would be
+# the same model as `strong`, so it adds no capability, and its retries would spend the scarcest
+# quota there is (strong: 20 requests/day). Retries are governed by Rules.md C8, not by a tier.
+# PRD.md M6 requires at least three cost tiers; these are three.
 tiers:
-  low:
+  cheap:
     provider: gemini
     id: gemini-3.1-flash-lite
     status: stable
     shutdown: 2027-05-07          # replacement named by Google: gemini-3.5-flash-lite
+    rate_limits: {rpm: 15, tpm: 250000, rpd: 500}
     price_per_1m_input_usd: 0.25
     price_per_1m_output_usd: 1.50
 
   standard:
     provider: gemini
-    id: gemini-3-flash-preview
-    status: preview
-    shutdown: null                # none announced; Google names gemini-3.6-flash as replacement
-    price_per_1m_input_usd: 0.50
-    price_per_1m_output_usd: 3.00
-
-  strong:
-    provider: gemini
-    id: gemini-3.1-pro-preview
-    status: preview
-    shutdown: null                # none announced
-    price_per_1m_input_usd: 2.00
-    price_per_1m_output_usd: 12.00
-
-  media:
-    # Architecture.md §4.1 names gemini-3.1-flash-image-preview, which shut down 2026-06-25.
-    # This is its stable successor in the same family.
-    provider: gemini
-    id: gemini-3.1-flash-image
+    id: gemini-3.5-flash-lite
     status: stable
     shutdown: null                # none announced
-    price_per_1m_input_usd: 0.50
-    price_per_image_1k_usd: 0.067
+    rate_limits: {rpm: 15, tpm: 250000, rpd: 500}
+    price_per_1m_input_usd: 0.30
+    price_per_1m_output_usd: 2.50
+
+  strong:
+    # A Flash model, not Pro: no Pro model is available on the free tier. The capability gap to
+    # `standard` is much smaller than the design assumed — a stated limitation
+    # (Architecture.md §4.1, docs/evaluation-plan.md §9).
+    provider: gemini
+    id: gemini-3.8-flash
+    status: stable
+    shutdown: null                # none announced
+    rate_limits: {rpm: 5, tpm: 250000, rpd: 20}
+    # DECIDED 2026-10-14 — NO MODEL ROTATION. Do not spread this tier across gemini-3.6-flash,
+    # gemini-3.7-flash or gemini-3-flash (each 5 / 250K / 20 free) to multiply the daily quota.
+    # Four models in one tier would confound every per-tier number (tokens, latency, quality,
+    # routing effect) and would have to be disclosed under Rules.md A5. One tier, one model. If
+    # 20/day is not enough, reduce strong-tier demand (Architecture.md §4.2) or wait for the
+    # reset (Rules.md C9) — do not revisit this under deadline pressure.
+    price_per_1m_input_usd: 0.75  # through 2026-12-31; 1.50 from 2027-01-01
+    price_per_1m_output_usd: 3.75 # through 2026-12-31; 7.50 from 2027-01-01
+    price_change:
+      effective: 2027-01-01
+      price_per_1m_input_usd: 1.50
+      price_per_1m_output_usd: 7.50
+
+  media:
+    # No image-generation model is available on the free tier (2026-10-14). A6 produces poster
+    # prompts as text; no image is generated. max_media_generations is effectively 0.
+    provider: null
+    id: null
+    available_free: false
 
   fallback:
     # OSS fallback via LiteLLM (Architecture.md §4.1). Not yet selected — chosen in Phase 2.
@@ -54,8 +90,11 @@ tiers:
 embedding:
   # Memory.md §5 names text-embedding-004, which shut down 2026-01-14.
   # gemini-embedding-2 defaults to 3072 dims; output_dimensionality=768 MUST be passed on every
-  # call to match memory_items.embedding vector(768). The provider normalises truncated outputs
-  # for this model (gemini-embedding-001 would require manual normalisation).
+  # call to match memory_items.embedding vector(768). Verified 2026-10-14 (embeddings page):
+  # "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)", so no manual
+  # normalisation; gemini-embedding-001, by contrast, requires it.
+  # Several inputs in ONE request are aggregated into a SINGLE embedding unless each input is
+  # wrapped in its own Content object — wrap them, or one vector silently stands for many texts.
   provider: gemini
   id: gemini-embedding-2
   status: stable
@@ -63,4 +102,5 @@ embedding:
   dimensions: 768
   dimension_param: output_dimensionality
   provider_normalises: true
+  rate_limits: {rpm: 100, tpm: 30000, rpd: 1000}
   price_per_1m_input_usd: 0.20

@@ -80,13 +80,40 @@ A single prompt with web search would produce *a* campaign. It would not produce
 
 ### 4.1 Routing tiers
 
-| Tier | Model (Oct 2026) | Used for | Approx input / output per 1M |
-|---|---|---|---|
-| **Low-cost** | `gemini-3.1-flash-lite` | Classification, summarisation, query rewriting, metadata extraction, relevance pre-filter | $0.25 / $1.50 |
-| **Standard** | `gemini-3-flash-preview` | Product intelligence, persona analysis, campaign planning, most agent work | $0.50 / $3.00 |
-| **Strong reasoning** | `gemini-3.1-pro-preview` | Conflicting evidence, high-risk claims, final strategy arbitration | $2.00 / $12.00 |
-| **Dedicated media** | `gemini-3.1-flash-image` (stable; the `-preview` tag shut down 25 Jun 2026) | Posters, social visuals | $0.067 / 1K images |
-| **Fallback** | OSS model via LiteLLM (Hugging Face / local) | Provider outage, budget exhaustion | — |
+All tiers run on the Gemini API **free tier** (`Rules.md` C0). Rate limits were read from the
+project's AI Studio account on 2026-10-14 and are hard constraints; IDs, limits and prices live
+only in `config/models.yaml`.
+
+| Tier | Model (Oct 2026) | Used for | Free tier RPM / TPM / RPD | List price in / out per 1M (not paid) |
+|---|---|---|---|---|
+| **Cheap** | `gemini-3.1-flash-lite` | Classification, summarisation, query rewriting, metadata extraction, relevance pre-filter | 15 / 250K / 500 | $0.25 / $1.50 |
+| **Standard** | `gemini-3.5-flash-lite` | Product intelligence, persona analysis, campaign planning, most agent work | 15 / 250K / 500 | $0.30 / $2.50 |
+| **Strong** | `gemini-3.8-flash` | Conflicting evidence, high-risk claims, final strategy arbitration | **5 / 250K / 20** | $0.75 / $3.75 (from 2027-01-01: $1.50 / $7.50) |
+| **Embedding** | `gemini-embedding-2` | Memory and retrieval embeddings, 768 dims | 100 / 30K / 1000 | $0.20 / — |
+| **Fallback** | OSS model via LiteLLM (Hugging Face / local) | Provider outage, quota exhaustion | — | — |
+
+**Three tiers, not four.** No Pro model is available on the free tier (every Pro model, including
+`gemini-3.1-pro` and `gemini-2.5-pro`, is 0 / 0 / 0), so there is no fourth, stronger tier. A
+fourth "strong-with-retry" tier was rejected: it is the same model as Strong, adds no capability,
+and its retries would spend the scarcest quota (20 requests/day); retries are governed by
+`Rules.md` C8, not by a tier. `PRD.md` M6 asks for at least three cost tiers.
+
+**No media tier.** Image-generation models are listed only for paid tiers, so no image is
+generated: A6 produces poster prompts as text and `max_media_generations` is effectively 0. This
+conflicts with Phase 8's "generated images render in the campaign report"; that criterion cannot
+be met at zero cost.
+
+> ### Stated limitation — the strong tier is a Flash model
+> The routing design assumed a large capability gap between Standard (Flash) and Strong (Pro).
+> On the free tier Strong is `gemini-3.8-flash`, a newer Flash model, against a Flash-Lite
+> Standard: the gap is much smaller than designed. `Rules.md` T4 still routes regulated-sector
+> work to Strong, but that buys less extra correctness than the design assumed. This **weakens the
+> model-routing part of the Phase 7 contribution**: any quality or safety difference attributed to
+> routing is bounded by a narrow tier gap, and a null routing effect may reflect the free-tier
+> model line-up rather than the routing policy. It is reported as a limitation
+> (`docs/evaluation-plan.md` §4), not hidden. The registry makes the tier a one-line change, so a
+> paid Pro tier could be evaluated later without code changes — outside this project's
+> zero-cost constraint.
 
 ### 4.2 Routing policy
 
@@ -94,20 +121,55 @@ Route on five signals, in this order of precedence:
 
 ```python
 def route(task) -> Tier:
-    if task.risk == "high" or task.has_conflicting_evidence:
-        return Tier.STRONG            # correctness outranks cost
-    if task.kind in MEDIA_KINDS:
-        return Tier.MEDIA
-    if task.complexity == "trivial" or task.is_structural:
-        return Tier.LOW
-    if budget.remaining_usd < budget.reserve_floor:
-        return Tier.LOW               # degrade rather than abort
-    if task.prior_failures >= 1:
-        return escalate(task.last_tier)
-    return Tier.STANDARD
+    if task.risk == "high" or task.has_conflicting_evidence or task.t4_required:
+        tier = Tier.STRONG            # correctness outranks cost
+    elif task.complexity == "trivial" or task.is_structural:
+        tier = Tier.CHEAP
+    elif budget.remaining_usd < budget.reserve_floor:
+        tier = Tier.CHEAP             # degrade rather than abort
+    elif task.prior_failures >= 1:
+        tier = escalate(task.last_tier)
+    else:
+        tier = Tier.STANDARD
+    return daily_quota.admit(task, tier)   # Rules.md C9: may downgrade or defer, with a reason
 ```
 
+**No agent defaults to Strong** (`Rules.md` C5: start at the cheapest tier that can do the job;
+escalate, do not start high). Strong is reached only through the first branch:
+
+- `task.t4_required` — `Rules.md` T4: A7's claim-verification and risk-evaluation calls on output
+  for a regulated sector (health, finance, children's products);
+- `task.risk == "high"` — a high-risk claim, in any sector;
+- `task.has_conflicting_evidence` — sources disagree on a fact the output relies on.
+
+A7 therefore runs on Standard in an ordinary run and escalates call by call. Other agents in a
+regulated-sector run keep their default tiers; the sector constraint registry applies to all of
+them regardless of tier.
+
+`daily_quota.admit` applies the per-day budget (`Rules.md` C9). It counts every call per model
+since the last RPD reset (midnight Pacific; limits are per Google Cloud project, so development and
+test calls count too). A call that would breach its model's RPD is **downgraded** to the next lower
+tier with available quota, and the downgrade and its reason are written to `llm_calls.route_reason`
+— the run degrades, it does not fail. **Exception:** a call that `Rules.md` T4 or the high-risk rule
+requires on Strong is **deferred** until the quota resets, not downgraded, because a downgraded
+mandatory safety check would break T4; the run waits with a recorded note. If every tier is
+exhausted, the run ends as a partial result flagged `budget_exhausted` (`Rules.md` C4).
+
 Every routing decision is persisted to `llm_calls` with its reason. The evaluation harness reads that table directly.
+
+### 4.3 Rate-limit-aware scheduling
+
+Free-tier RPM limits are low (Strong 5, Standard and Cheap 15, Embedding 100 per minute), and the
+Phase 6 parallel agent fan-out would exceed them. All LLM and embedding calls go through one
+scheduler per model that holds a token bucket sized to that model's RPM and TPM, so concurrent
+agents queue rather than collide. A `429` that still occurs is waited out — honouring the
+`retryDelay` Google returns, otherwise exponential backoff with jitter — and retried.
+
+**A rate-limit wait is not a failure.** Waiting on a `429` does not count toward `Rules.md` C8's
+cap of two retries for failed calls, and the retried request is the same request, not a new prompt.
+Each call records its rate-limit wait time separately from its latency, so the evaluation can
+report latency with and without free-tier waits (`docs/evaluation-plan.md` §4). A wait that would
+push the run past its latency budget ends the step as a partial result, never a crash.
 
 ---
 
@@ -238,7 +300,7 @@ class Agent(Protocol):
 | **A4** | Sector & Evidence Intelligence | Sourced proof, evolving regulatory context. *Required disclaimers and prohibited phrasings are not A4's: they are rules in the sector constraint registry (§8.1).* | Strong | 9 |
 | **A5** | Growth, Pricing & Offer Intelligence | Offer architecture, price framing, incentive design | Standard | 9 |
 | **A6** | Creative Campaign Intelligence | Copy, headlines, hooks, scripts, storyboards, poster prompts | Standard + Media | 6 |
-| **A7** | Trust, Risk & Campaign Evaluation | Claim verification, risk flags, brand-safety score | Strong | 6 |
+| **A7** | Trust, Risk & Campaign Evaluation | Claim verification, risk flags, brand-safety score | Standard; escalates to Strong only where `Rules.md` T4 or the high-risk rule requires it (§4.2) | 6 |
 
 **Adaptive selection.** A1, A6 and A7 always run — they are the floor (know the product, make the thing, check the thing). A2–A5 are selected by request type, sector risk and memory coverage. A run therefore uses **3 to 7 agents**, and the selection rationale is persisted for the evaluation.
 

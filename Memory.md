@@ -155,7 +155,7 @@ Set `hnsw.ef_search = 100` per session for recall. Below roughly 10,000 rows HNS
 
 | Decision | Value |
 |---|---|
-| Model | `gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072; Google normalises the shortened vector). Model ID lives only in `config/models.yaml`, never here or in an env var. |
+| Model | `gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072). **Normalisation verified 2026-10-14** against ai.google.dev/gemini-api/docs/embeddings: "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)" — no manual normalisation (unlike `gemini-embedding-001`, which requires it). Several texts in one request are aggregated into a single embedding unless each is wrapped in its own `Content` object. Free tier: 100 RPM / 30K TPM / 1000 RPD. Model ID lives only in `config/models.yaml`, never here or in an env var. |
 | Chunking | Semantic, 200–400 tokens, 15% overlap |
 | Normalisation | Lowercase, strip boilerplate, collapse whitespace. Never strip numbers or units. |
 | Storage | `vector(768)`, cosine distance |

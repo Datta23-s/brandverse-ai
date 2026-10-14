@@ -79,7 +79,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | Deliverable | Done when |
 |---|---|
 | LiteLLM gateway | All model calls route through it |
-| `config/models.yaml` | Four tiers defined with pinned Gemini 3.x IDs |
+| `config/models.yaml` | Three free-tier tiers (cheap, standard, strong) plus embedding, pinned with their RPM/TPM/RPD limits (`Architecture.md` §4.1) |
 | Structured output | Pydantic schema enforced on every completion |
 | `llm_calls` logging | Model, tier, tokens, cost, latency recorded per call |
 | Prompt management | Versioned prompt templates, not inline f-strings |
@@ -209,13 +209,17 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 | Research Necessity Engine | `R` computed, D0/D1/D2 selected and logged |
 | Dynamic agent selection | 3–7 agents chosen with persisted rationale |
 | Model routing policy | Tier chosen per call with recorded reason |
-| Budget manager | Caps enforced across the whole run |
+| Budget manager | Per-run caps enforced across the whole run (`Rules.md` C3), plus the per-day per-model RPD budget with downgrade or deferral and a logged reason (C9) |
+| Rate-limit scheduler | Per-model RPM/TPM buckets; `429` waits logged and kept out of the C8 retry count (C10) |
 
 **Exit criteria**
 - [ ] Identical request twice: second run picks a lower depth, logs prove it
 - [ ] Agent count varies across request types
 - [ ] Routing distribution is visible in the admin view
 - [ ] A high-risk claim demonstrably escalates to the strong tier
+- [ ] In a non-regulated run with no high-risk claim or evidence conflict, A7 runs entirely on the standard tier
+- [ ] With the strong tier's RPD exhausted, an ordinary call is downgraded with a logged reason and a T4 call is deferred, never downgraded
+- [ ] A burst of parallel agent calls queues within RPM limits; `429` waits are logged and do not count as retries
 
 ---
 
@@ -225,7 +229,7 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 Poster prompts, social ad formats, cartoon concepts, scripts, storyboards. Honours `max_media_generations = 4`.
 
 **Exit criteria**
-- [ ] Generated images render in the campaign report
+- [ ] Generated images render in the campaign report — **not achievable at zero cost**: no image model is on the free tier (`Architecture.md` §4.1). Poster prompts are delivered as text
 - [ ] Media cap enforced
 
 ---
@@ -265,6 +269,34 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 - [ ] Inter-rater agreement reported, not just a mean score
 
 > Budget two full weeks. Teams that compress evaluation into the final weekend produce numbers they cannot defend.
+
+**Execution time at free-tier limits (re-planned 2026-10-14, after A7 moved to Standard).**
+Executing the 90 evaluation runs (30 requests × 3 arms) takes **about 1 week of calendar time**,
+so the two weeks above are **not** analysis time: about one week executes, about one analyses.
+The estimate, from the limits in `config/models.yaml`:
+
+| Quota | Demand | Days of quota |
+|---|---|---|
+| Strong, 20/day | Only T4 and high-risk calls (`Architecture.md` §4.2). Proposed arm: the regulated brand's 3 requests (R19–R21) and the 3 with entered evidence conflicts (R01–R03), at most about 3 Strong calls each, so ≤ 18. Baselines A and B: 0. Tuning set: 1 regulated request. | About 1 — no longer binding |
+| Standard + Cheap, 500/day each | Baseline A 30 calls; Baseline B ≤ 600 (20 × 30, all Standard); Proposed ≤ 600 across Cheap and Standard. Worst case about 1,230 on Standard alone. | About 3 |
+| RPM (5 / 15 per minute) | About 1,250 calls | Under 2 hours of pure rate — not binding |
+| Embedding, 1000/day | Memory retrieval and write-back: tens per run. Research chunks: **depends on how batch requests are counted** (below). | Under 1 if batched; see below |
+
+The schedule is then set by **approval rounds**, not quota: in the Proposed arm a brand's campaign
+N+1 is generated only after campaign N is decided, so there are at least three generate → approve
+rounds, each needing an approval sitting (≤ 15 campaigns per sitting, rubric §2; 90 campaigns is at
+least 6 sittings).
+
+**Open risk — research-chunk embeddings.** Whether a request embedding several texts (one
+`Content` object each) counts as one request or as one per text against the 1000/day limit is not
+stated in Google's docs (checked 2026-10-14). If per text, a deep-research run embedding about 800
+chunks uses most of a day's quota, and Baseline B's 30 always-deep runs alone would take about a
+month. Verify in Phase 5 by sending one multi-text request and reading the AI Studio usage
+counter. If it counts per text, embed only the top-k chunks after a lexical pre-filter (about 50 per
+run: about 2,000 requests in total, about 2 days).
+
+Start executing at the beginning of Phase 10, or as soon as Phase 7 is frozen. Measure Strong
+calls per run on the tuning set first, and re-plan from the measured figure.
 
 ---
 

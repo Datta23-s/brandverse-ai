@@ -217,7 +217,7 @@ def test_users_cannot_write_llm_calls(tx: Tx) -> None:
     _raises_rls(
         tx,
         "insert into llm_calls (org_id, run_id, model, tier, route_reason) "
-        "values (%s, %s, 'm', 'low', 'r')",
+        "values (%s, %s, 'm', 'cheap', 'r')",
         (tx.seed.org_a, tx.seed.run_a),
     )
 

@@ -63,7 +63,8 @@ Computed per run from `runs` / `llm_calls`, then aggregated. Baseline is Baselin
 
 Reported additionally, broken down by campaign position (1st / 2nd / 3rd per brand), since
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
-coverage, reuse depth (`Memory.md` §8).
+coverage, reuse depth (`Memory.md` §8). Strong-tier calls per arm are reported as a result
+(threat V1, below).
 
 **Cost is measured in tokens; actual spend is zero.** Every service runs on a free tier
 (`Rules.md` §4, C0), so no money is paid for any run. Tokens (input + output, per call, from
@@ -75,6 +76,53 @@ USD"). The list prices and their date are recorded with the results.
 Tokens are reported **per model tier** as well as in total: model routing (`PRD.md` M6) moves
 tokens to cheaper tiers without necessarily reducing them, so its effect is visible in the
 per-tier breakdown and in list-price USD, not in the token total alone.
+
+### Free-tier model limitations (stated, 2026-10-14)
+
+Every model runs on the Gemini API free tier (`config/models.yaml`, `Architecture.md` §4.1). Four
+consequences are reported as limitations in the dissertation, not hidden:
+
+1. **The strong tier is a Flash model.** No Pro model is available free, so Strong is
+   `gemini-3.8-flash` against a Flash-Lite Standard. The capability gap between tiers is much
+   smaller than the design assumed, which **weakens the model-routing part of the Phase 7
+   contribution**: routing's effect on quality and safety is bounded by a narrow gap, and a null
+   routing effect may reflect the free-tier line-up rather than the policy. `Rules.md` T4 still
+   routes regulated-sector work to Strong.
+2. **Downgrades and deferrals under daily quotas.** Strong allows 20 requests/day. A call that
+   would breach a model's daily limit is downgraded with a logged reason, or, if T4 or the
+   high-risk rule requires Strong, deferred (`Rules.md` C9). Every downgrade is in
+   `llm_calls.route_reason`; the number of downgraded calls per arm is reported, and a run with a
+   downgraded call is identifiable in the raw logs. Runs are scheduled so that downgrades are rare
+   (`Phases.md` Phase 10), not relied on.
+3. **Latency includes free-tier waits.** Low RPM limits make calls wait on `429`s
+   (`Rules.md` C10). Rate-limit wait time is recorded separately from model latency, and LR is
+   reported both with and without it; only the without-wait figure speaks to the design.
+
+4. **Provider data use.** On the Gemini API free tier, Google may use submitted content to improve
+   its products (ai.google.dev pricing page, 2026-10-14). All evaluation data is synthetic or
+   pseudonymised (D4), and no PII is sent (`Rules.md` §5), but this is disclosed in the
+   dissertation's methodology.
+
+### Threats to validity
+
+**V1 — Model-tier confound between Baseline B and Proposed.** Baseline B uses a single model tier,
+and it must be Standard: Strong cannot carry it (about 20 calls per run against 20 requests/day).
+Proposed can escalate individual calls to Strong. A quality difference between the two arms could
+therefore come from the stronger model rather than from the routing policy, or from adaptivity
+generally. This is a **confound**, not only a free-tier limitation.
+
+*Mitigation.*
+1. Strong-tier calls are rare in both arms by design. No agent defaults to Strong
+   (`Architecture.md` §4.2, `Rules.md` C5); A7 runs on Standard and escalates only where T4 or the
+   high-risk rule requires it. In the test set that is the regulated brand's 3 requests (B07,
+   R19–R21) and the 3 requests on products with entered evidence conflicts (B01, R01–R03), so at
+   most 6 of the 30 Proposed runs should touch Strong at all.
+2. Every Strong call is logged per arm in `llm_calls` (`tier`, `route_reason`), so the asymmetry
+   is **quantified and reported**, not assumed away.
+3. **Strong-tier call counts per arm are reported as a result in their own right**: total, per
+   request, and by reason (T4, high-risk, conflicting evidence). Quality comparisons between B and
+   Proposed are also reported with the Strong-touching requests separated out, so a difference that
+   exists only there is visible as such.
 
 ## 5. Statistics
 

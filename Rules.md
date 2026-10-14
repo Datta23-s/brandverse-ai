@@ -128,7 +128,9 @@ providers' list prices; they are a safety limit and a comparison aid, not money 
 | C5 | Default to the cheapest tier that can do the job; escalate on failure, do not start high |
 | C6 | Cache embeddings by content hash. Re-embedding identical text is pure waste. |
 | C7 | Cache search results by normalised query for the TTL window |
-| C8 | Never retry a failed LLM call more than twice, and never with the same prompt |
+| C8 | Never retry a failed LLM call more than twice, and never with the same prompt. A rate-limit wait (`429`) is **not** a failed call: it does not count toward this cap (C10). |
+| C9 | **Per-day budget.** Track daily usage per model against its free-tier RPD (`config/models.yaml`; resets midnight Pacific; per Google Cloud project, so every call with the key counts). Before a call, refuse or downgrade it if it would breach its model's RPD, and log the reason in `llm_calls.route_reason`. A run degrades to a lower tier with a recorded note rather than failing. Exception: a call T4 or the high-risk routing rule requires on the strong tier is deferred until the quota resets, never downgraded. Applies alongside the per-run caps (C3), not instead of them. |
+| C10 | **Rate-limit-aware scheduling.** Every model call goes through a per-model scheduler sized to its RPM/TPM. A `429` is waited out (Google's `retryDelay`, else exponential backoff with jitter) and the same request re-sent. Waits are logged separately from latency and never count toward C8. |
 
 ---
 
@@ -139,7 +141,7 @@ providers' list prices; they are a safety limit and a comparison aid, not money 
 | T1 | Every factual claim in output carries `claim_type` and a source reference |
 | T2 | A `restricted` claim never reaches generated copy under any instruction |
 | T3 | Superlatives ("best", "number one", "fastest") require a cited source or are removed |
-| T4 | Regulated sectors (health, finance, children's products) route to the strong tier and must pass the sector constraint registry. Where A4 is built, it is additionally required. |
+| T4 | Regulated sectors (health, finance, children's products) route to the strong tier — specifically A7's claim-verification and risk-evaluation calls on regulated-sector output; other agents keep their default tiers — and must pass the sector constraint registry. Where A4 is built, it is additionally required. On the free tier the strong tier is a Flash model (`Architecture.md` §4.1); if its daily quota is exhausted, a T4 call is deferred, never downgraded (C9). |
 | T5 | The 8 predatory anti-patterns (`Architecture.md` §8) are blocked, not warned |
 | T6 | A campaign cannot reach `approved` without a recorded human action |
 | T7 | Generated creative is watermarked in metadata as AI-assisted |
