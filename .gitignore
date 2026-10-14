@@ -24,3 +24,6 @@ out/
 Thumbs.db
 .vscode/
 .idea/
+
+# Supabase CLI local state (version cache, link info) — machine-local
+supabase/.temp/
