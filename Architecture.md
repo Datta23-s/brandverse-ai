@@ -137,14 +137,16 @@ def route(task) -> Tier:
 **No agent defaults to Strong** (`Rules.md` C5: start at the cheapest tier that can do the job;
 escalate, do not start high). Strong is reached only through the first branch:
 
-- `task.t4_required` — `Rules.md` T4: A7's claim-verification and risk-evaluation calls on output
-  for a regulated sector (health, finance, children's products);
+- `task.t4_required` — `Rules.md` T4, by function: the call performs **claim verification or risk
+  assessment on regulated-sector output** (health, finance, children's products), whichever agent
+  performs it;
 - `task.risk == "high"` — a high-risk claim, in any sector;
 - `task.has_conflicting_evidence` — sources disagree on a fact the output relies on.
 
-A7 therefore runs on Standard in an ordinary run and escalates call by call. Other agents in a
-regulated-sector run keep their default tiers; the sector constraint registry applies to all of
-them regardless of tier.
+All other calls in a regulated-sector run keep their default tier, and the sector constraint
+registry applies to everything regardless of tier. The rule names a function, not an agent, so it
+holds unchanged when A4 ships or agents are renumbered. In practice A7 (and A4, where built) runs
+on Standard in an ordinary run and escalates call by call.
 
 `daily_quota.admit` applies the per-day budget (`Rules.md` C9). It counts every call per model
 since the last RPD reset (midnight Pacific; limits are per Google Cloud project, so development and
@@ -297,7 +299,7 @@ class Agent(Protocol):
 | **A1** | Product & Brand Intelligence | Positioning, differentiators, brand voice vector, claim inventory | Standard | 6 |
 | **A2** | Market & Advertisement Intelligence | Competitor ads, category conventions, whitespace | Standard | 6 (live research); 9 (persistent ad repository) |
 | **A3** | Customer Behaviour Intelligence | Personas, jobs-to-be-done, objections, channel affinity | Standard | 6 |
-| **A4** | Sector & Evidence Intelligence | Sourced proof, evolving regulatory context. *Required disclaimers and prohibited phrasings are not A4's: they are rules in the sector constraint registry (§8.1).* | Strong | 9 |
+| **A4** | Sector & Evidence Intelligence | Sourced proof, evolving regulatory context. *Required disclaimers and prohibited phrasings are not A4's: they are rules in the sector constraint registry (§8.1).* | Standard; escalates to Strong only where `Rules.md` T4 or the high-risk rule requires it (§4.2) | 9 |
 | **A5** | Growth, Pricing & Offer Intelligence | Offer architecture, price framing, incentive design | Standard | 9 |
 | **A6** | Creative Campaign Intelligence | Copy, headlines, hooks, scripts, storyboards, poster prompts | Standard + Media | 6 |
 | **A7** | Trust, Risk & Campaign Evaluation | Claim verification, risk flags, brand-safety score | Standard; escalates to Strong only where `Rules.md` T4 or the high-risk rule requires it (§4.2) | 6 |

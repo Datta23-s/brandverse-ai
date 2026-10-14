@@ -109,6 +109,11 @@ When summarising work, state what was built, what was stubbed, and what was not 
 - One logical change per migration, named `NNNN_description.sql`
 - Every migration is reversible or documents why it is not
 - Indexes created `concurrently` on anything that will hold production data
+- **Editing an existing migration in place is permitted only until the Supabase project is created
+  and the migrations are first applied to it.** That event is the trigger, not a date. From then
+  on, every schema change is a new migration — no exceptions, including fixes to a migration that
+  has not yet reached production data. Before the trigger, in-place edits are recorded in the
+  commit message (which migrations, and why)
 
 ---
 
@@ -141,7 +146,7 @@ providers' list prices; they are a safety limit and a comparison aid, not money 
 | T1 | Every factual claim in output carries `claim_type` and a source reference |
 | T2 | A `restricted` claim never reaches generated copy under any instruction |
 | T3 | Superlatives ("best", "number one", "fastest") require a cited source or are removed |
-| T4 | Regulated sectors (health, finance, children's products) route to the strong tier — specifically A7's claim-verification and risk-evaluation calls on regulated-sector output; other agents keep their default tiers — and must pass the sector constraint registry. Where A4 is built, it is additionally required. On the free tier the strong tier is a Flash model (`Architecture.md` §4.1); if its daily quota is exhausted, a T4 call is deferred, never downgraded (C9). |
+| T4 | In regulated sectors (health, finance, children's products), claim verification and risk assessment performed on regulated-sector output run on the strong tier, whichever agent performs them; all other calls in a regulated-sector run keep their default tier; the sector constraint registry applies to everything regardless of tier. Where A4 is built, it is additionally required. On the free tier the strong tier is a Flash model (`Architecture.md` §4.1); if its daily quota is exhausted, a T4 call is deferred, never downgraded (C9). |
 | T5 | The 8 predatory anti-patterns (`Architecture.md` §8) are blocked, not warned |
 | T6 | A campaign cannot reach `approved` without a recorded human action |
 | T7 | Generated creative is watermarked in metadata as AI-assisted |

@@ -113,8 +113,8 @@ generally. This is a **confound**, not only a free-tier limitation.
 
 *Mitigation.*
 1. Strong-tier calls are rare in both arms by design. No agent defaults to Strong
-   (`Architecture.md` §4.2, `Rules.md` C5); A7 runs on Standard and escalates only where T4 or the
-   high-risk rule requires it. In the test set that is the regulated brand's 3 requests (B07,
+   (`Architecture.md` §4.2, `Rules.md` C5); verification and risk assessment run on Standard and
+   escalate only where T4 or the high-risk rule requires it. In the test set that is the regulated brand's 3 requests (B07,
    R19–R21) and the 3 requests on products with entered evidence conflicts (B01, R01–R03), so at
    most 6 of the 30 Proposed runs should touch Strong at all.
 2. Every Strong call is logged per arm in `llm_calls` (`tier`, `route_reason`), so the asymmetry

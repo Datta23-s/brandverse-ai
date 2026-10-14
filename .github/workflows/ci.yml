@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # Every branch, not only main: a branch without an open pull request must still run the
+  # merge-blocking database gate (Rules.md §6) and the storage measurement step.
   push:
-    branches: [main]
   pull_request:
 
 permissions:

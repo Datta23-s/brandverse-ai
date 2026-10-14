@@ -217,7 +217,8 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 - [ ] Agent count varies across request types
 - [ ] Routing distribution is visible in the admin view
 - [ ] A high-risk claim demonstrably escalates to the strong tier
-- [ ] In a non-regulated run with no high-risk claim or evidence conflict, A7 runs entirely on the standard tier
+- [ ] In a regulated-sector run, every claim-verification and risk-assessment call on that run's output runs on the strong tier, whichever agent performs it, and every other call keeps its default tier
+- [ ] In a non-regulated run with no high-risk claim or evidence conflict, no call runs on the strong tier
 - [ ] With the strong tier's RPD exhausted, an ordinary call is downgraded with a logged reason and a T4 call is deferred, never downgraded
 - [ ] A burst of parallel agent calls queues within RPM limits; `429` waits are logged and do not count as retries
 
@@ -277,7 +278,7 @@ The estimate, from the limits in `config/models.yaml`:
 
 | Quota | Demand | Days of quota |
 |---|---|---|
-| Strong, 20/day | Only T4 and high-risk calls (`Architecture.md` §4.2). Proposed arm: the regulated brand's 3 requests (R19–R21) and the 3 with entered evidence conflicts (R01–R03), at most about 3 Strong calls each, so ≤ 18. Baselines A and B: 0. Tuning set: 1 regulated request. | About 1 — no longer binding |
+| Strong, 20/day | Only T4 calls (claim verification and risk assessment on regulated-sector output, by function) and high-risk calls (`Architecture.md` §4.2). A4 is deferred to Phase 9 on this track; if it is pulled forward, its regulated-sector verification calls add to this row. Proposed arm: the regulated brand's 3 requests (R19–R21) and the 3 with entered evidence conflicts (R01–R03), at most about 3 Strong calls each, so ≤ 18. Baselines A and B: 0. Tuning set: 1 regulated request. | About 1 — no longer binding |
 | Standard + Cheap, 500/day each | Baseline A 30 calls; Baseline B ≤ 600 (20 × 30, all Standard); Proposed ≤ 600 across Cheap and Standard. Worst case about 1,230 on Standard alone. | About 3 |
 | RPM (5 / 15 per minute) | About 1,250 calls | Under 2 hours of pure rate — not binding |
 | Embedding, 1000/day | Memory retrieval and write-back: tens per run. Research chunks: **depends on how batch requests are counted** (below). | Under 1 if batched; see below |
