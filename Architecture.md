@@ -986,6 +986,13 @@ execute on the laptop.**
   seeded, read-only demo path; the live pipeline is demonstrated from the laptop. See `Phases.md`
   Phase 11 for the amended exit criterion.
 
+**Verified, not assumed (2026-10-14).** On the laptop (Windows 11, 12 CPUs, 8 GB RAM visible to
+Docker): Docker Desktop started and `docker info` answered (server 29.7.2). `redis:7.4-alpine`
+(Redis 7.4.11) ran with `--appendonly yes`, answered `PING` with `PONG`, and reported
+`appendonly yes`. Docker was used; the WSL2 Ubuntu + `redis-server` fallback was not needed. Docker
+Desktop must be running whenever the worker runs. **SearXNG in Docker is not yet verified** — its
+JSON API is checked in Phase 5.
+
 ### Redis free tier — checked, and why Redis runs locally
 
 Upstash's free plan (upstash.com/pricing/redis, checked 2026-10-14): **250 MB data, 500K commands
