@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document | `docs/approval-rubric.md` |
-| Version | 1.0 |
+| Version | 1.1 — §2 presentation order amended 2026-10-14, before calibration and run 1 |
 | Date | 14 October 2026 |
 | Governs | Step 12, human approval, for **every** run in **every** arm |
 | Required by | `docs/evaluation-plan.md` D3 — must be committed before the first evaluation run |
@@ -30,7 +30,7 @@ A campaign can be mediocre and still approved. A campaign can be brilliant and s
 | **One person** | The same individual approves all runs in the evaluation. Name recorded in `evaluation-plan.md`. |
 | **Blind to arm** | The harness strips arm labels before presenting a campaign. If the approver can infer the arm (for example from an obviously empty evidence pack), record that inference in the notes field. |
 | **No editing** | The approver approves, requests revision, or rejects. They never fix the output themselves. Editing contaminates what is being measured. |
-| **Fixed order** | Runs are presented in randomised order, not grouped by arm or brand. |
+| **Presentation order** | **Constrained randomisation**, not plain randomisation. Generation and approval are decoupled: completed campaigns from every arm and brand enter one approval queue, which is shuffled into batches of **at most 15** (the session cap below). One constraint applies: a brand's campaign N and N+1 are **never adjacent** in the queue, in any arm and across batch boundaries (the last campaign of one batch and the first of the next count as adjacent); a shuffle that breaks it is redrawn. *Reason:* in the Proposed arm a brand's campaign N+1 is generated only after campaign N is decided (memory write-back needs approval), so an unconstrained queue in run order would show a brand's campaigns back to back and let the approver infer the arm from the sequence. The **shuffle seed and resulting order are logged per batch**, so the order is reproducible. Any residual arm inference is still recorded (`arm_inferred`, §5). Full procedure: `evaluation-plan.md`, "Points between the rubric and this plan". |
 | **Time-boxed** | Maximum 10 minutes per campaign. Past that, record `undecided` and move on; undecided counts as a rejection in the results and is reported separately. |
 | **Session cap** | Maximum 15 campaigns per sitting. Fatigue is a measurable source of drift. |
 | **No consultation** | The approver does not discuss a campaign with the team before deciding. |
@@ -160,4 +160,4 @@ If the rubric must change after real runs have started:
 | Approver name | |
 | Calibration date | |
 | Calibration agreement | ___ / 10 |
-| Rubric version applied | 1.0 |
+| Rubric version applied | 1.1 |

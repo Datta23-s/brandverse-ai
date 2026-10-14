@@ -49,7 +49,7 @@ alter table product_claims enable row level security;
 
 -- read any role; write owner/editor; delete owner
 create policy brands_read   on brands for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));
 create policy brands_insert on brands for insert to authenticated
   with check (app.has_role(org_id, array['owner','editor']));
 create policy brands_update on brands for update to authenticated
@@ -59,7 +59,7 @@ create policy brands_delete on brands for delete to authenticated
   using (app.has_role(org_id, array['owner']));
 
 create policy products_read   on products for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));
 create policy products_insert on products for insert to authenticated
   with check (app.has_role(org_id, array['owner','editor']));
 create policy products_update on products for update to authenticated
@@ -69,7 +69,7 @@ create policy products_delete on products for delete to authenticated
   using (app.has_role(org_id, array['owner']));
 
 create policy claims_read   on product_claims for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));
 create policy claims_insert on product_claims for insert to authenticated
   with check (app.has_role(org_id, array['owner','editor']));
 create policy claims_update on product_claims for update to authenticated

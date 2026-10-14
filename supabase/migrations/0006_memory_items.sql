@@ -44,9 +44,10 @@ grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items t
 
 alter table memory_items enable row level security;
 
--- read any role; owner/editor may revoke (column grant above limits what they can set)
+-- read any role; owner/editor may revoke (column grant above limits what they can set), and only
+-- in their own name. (select auth.uid()) is evaluated once per statement, not once per row.
 create policy memory_read   on memory_items for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));
 create policy memory_revoke on memory_items for update to authenticated
   using (app.has_role(org_id, array['owner','editor']))
-  with check (app.has_role(org_id, array['owner','editor']) and revoked_by = auth.uid());
+  with check (app.has_role(org_id, array['owner','editor']) and revoked_by = (select auth.uid()));

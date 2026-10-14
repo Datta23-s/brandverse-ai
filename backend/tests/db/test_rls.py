@@ -85,33 +85,33 @@ def test_misspelled_sector_rejected(tx: Tx) -> None:
 
 @pytest.mark.parametrize("user", ["owner_a", "editor_a", "viewer_a", "approver_a"])
 def test_every_role_reads_only_its_own_org(tx: Tx, user: str) -> None:
-    tx.as_user(user, tx.seed.org_a)
+    tx.as_user(user)
     rows = tx.execute("select id from brands")
     assert [r[0] for r in rows] == [tx.seed.brand_a]
 
 
 def test_viewer_cannot_insert(tx: Tx) -> None:
-    tx.as_user("viewer_a", tx.seed.org_a)
+    tx.as_user("viewer_a")
     _raises_rls(tx, "insert into brands (org_id, name) values (%s, 'v')", (tx.seed.org_a,))
 
 
 def test_approver_cannot_insert(tx: Tx) -> None:
-    tx.as_user("approver_a", tx.seed.org_a)
+    tx.as_user("approver_a")
     _raises_rls(tx, "insert into brands (org_id, name) values (%s, 'v')", (tx.seed.org_a,))
 
 
 def test_editor_can_insert(tx: Tx) -> None:
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     tx.execute("insert into brands (org_id, name) values (%s, 'e')", (tx.seed.org_a,))
 
 
 def test_editor_cannot_insert_into_another_org(tx: Tx) -> None:
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     _raises_rls(tx, "insert into brands (org_id, name) values (%s, 'e')", (tx.seed.org_b,))
 
 
 def test_editor_cannot_delete(tx: Tx) -> None:
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     assert tx.execute("delete from brands where id = %s returning id", (tx.seed.brand_a,)) == []
 
 
@@ -119,7 +119,7 @@ def test_owner_can_delete_brand_without_runs(tx: Tx) -> None:
     brand = tx.execute(
         "insert into brands (org_id, name) values (%s, 'unused') returning id", (tx.seed.org_a,)
     )[0][0]
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     deleted = tx.execute("delete from brands where id = %s returning id", (brand,))
     assert len(deleted) == 1
 
@@ -131,19 +131,41 @@ def test_product_with_runs_cannot_be_deleted(tx: Tx) -> None:
 
 
 def test_non_member_with_forged_org_claim_sees_nothing(tx: Tx) -> None:
-    tx.as_user("outsider", tx.seed.org_a)
+    # Policies never read an org claim; a forged one grants nothing.
+    tx.as_user("outsider", org_id=str(tx.seed.org_a))
     assert tx.execute("select id from brands") == []
     assert tx.execute("select id from organisations") == []
 
 
-def test_member_whose_active_org_is_other_sees_nothing(tx: Tx) -> None:
-    tx.as_user("viewer_a", tx.seed.org_b)
-    assert tx.execute("select id from brands") == []
+def test_org_claim_cannot_narrow_or_redirect_a_member(tx: Tx) -> None:
+    tx.as_user("viewer_a", org_id=str(tx.seed.org_b))
+    assert [r[0] for r in tx.execute("select id from brands")] == [tx.seed.brand_a]
 
 
-def test_no_org_claim_sees_nothing(tx: Tx) -> None:
-    tx.as_user("owner_a", None)
+def test_member_of_two_orgs_reads_both(tx: Tx) -> None:
+    tx.as_user("agency")
+    rows = {r[0] for r in tx.execute("select id from brands")}
+    assert rows == {tx.seed.brand_a, tx.seed.brand_b}
+
+
+def test_member_of_two_orgs_has_each_orgs_role_only(tx: Tx) -> None:
+    # agency is editor in A, viewer in B: a role in one org confers nothing in the other.
+    tx.as_user("agency")
+    tx.execute("insert into brands (org_id, name) values (%s, 'ok')", (tx.seed.org_a,))
+    _raises_rls(tx, "insert into brands (org_id, name) values (%s, 'no')", (tx.seed.org_b,))
+
+
+def test_no_sub_claim_sees_nothing(tx: Tx) -> None:
+    tx.set_claims({"role": "authenticated"})
     assert tx.execute("select id from brands") == []
+    assert tx.execute("select id from organisations") == []
+
+
+def test_non_uuid_sub_fails_closed(tx: Tx) -> None:
+    # auth.uid() casts sub to uuid and raises rather than matching anything.
+    tx.set_claims({"sub": "not-a-uuid", "role": "authenticated"})
+    with pytest.raises(errors.InvalidTextRepresentation):
+        tx.execute("select id from brands")
 
 
 def test_revoked_member_loses_access(tx: Tx) -> None:
@@ -152,7 +174,7 @@ def test_revoked_member_loses_access(tx: Tx) -> None:
         "where user_id = %s and org_id = %s",
         (tx.seed.users["owner_a"], tx.seed.users["viewer_a"], tx.seed.org_a),
     )
-    tx.as_user("viewer_a", tx.seed.org_a)
+    tx.as_user("viewer_a")
     assert tx.execute("select id from brands") == []
 
 
@@ -162,7 +184,7 @@ def test_anon_sees_nothing(tx: Tx) -> None:
 
 
 def test_editor_cannot_add_members(tx: Tx) -> None:
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     _raises_rls(
         tx,
         "insert into org_members (org_id, user_id, role) values (%s, %s, 'owner')",
@@ -171,7 +193,7 @@ def test_editor_cannot_add_members(tx: Tx) -> None:
 
 
 def test_owner_can_add_member(tx: Tx) -> None:
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     tx.execute(
         "insert into org_members (org_id, user_id, role) values (%s, %s, 'viewer')",
         (tx.seed.org_a, tx.seed.users["outsider"]),
@@ -179,7 +201,7 @@ def test_owner_can_add_member(tx: Tx) -> None:
 
 
 def test_only_owner_updates_org_budget(tx: Tx) -> None:
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     updated = tx.execute(
         "update organisations set monthly_budget_cap_usd = 999 where id = %s returning id",
         (tx.seed.org_a,),
@@ -188,7 +210,7 @@ def test_only_owner_updates_org_budget(tx: Tx) -> None:
 
 
 def test_users_cannot_write_llm_calls(tx: Tx) -> None:
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     _raises_rls(
         tx,
         "insert into llm_calls (org_id, run_id, model, tier, route_reason) "
@@ -211,13 +233,13 @@ def _memory_item(tx: Tx) -> object:
 
 def test_editor_cannot_approve_memory(tx: Tx) -> None:
     item = _memory_item(tx)
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     _raises_permission(tx, "update memory_items set approved = true where id = %s", (item,))
 
 
 def test_editor_can_revoke_memory_as_themself(tx: Tx) -> None:
     item = _memory_item(tx)
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     tx.execute(
         "update memory_items set revoked = true, revoked_by = %s, revoked_at = now(), "
         "revoked_reason = 'wrong' where id = %s",
@@ -227,7 +249,7 @@ def test_editor_can_revoke_memory_as_themself(tx: Tx) -> None:
 
 def test_editor_cannot_revoke_in_someone_elses_name(tx: Tx) -> None:
     item = _memory_item(tx)
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     _raises_rls(
         tx,
         "update memory_items set revoked_by = %s where id = %s",
@@ -237,7 +259,7 @@ def test_editor_cannot_revoke_in_someone_elses_name(tx: Tx) -> None:
 
 def test_viewer_cannot_revoke_memory(tx: Tx) -> None:
     item = _memory_item(tx)
-    tx.as_user("viewer_a", tx.seed.org_a)
+    tx.as_user("viewer_a")
     updated = tx.execute(
         "update memory_items set revoked_reason = 'x' where id = %s returning id", (item,)
     )
@@ -342,7 +364,7 @@ def test_service_role_cannot_alter_audit(tx: Tx, stmt: str) -> None:
 
 
 def test_authenticated_cannot_insert_audit(tx: Tx) -> None:
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     _raises_permission(
         tx,
         "insert into audit_log (actor_type, actor_id, action, entity_type, entity_id) "
@@ -363,10 +385,10 @@ def test_table_owner_blocked_by_trigger(tx: Tx, stmt: str) -> None:
 def test_org_owner_reads_own_audit_editor_does_not(tx: Tx) -> None:
     _audit_row(tx)
     tx.execute("savepoint s")
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     assert len(tx.execute("select id from audit_log")) == 1
     tx.execute("rollback to savepoint s")
-    tx.as_user("editor_a", tx.seed.org_a)
+    tx.as_user("editor_a")
     assert tx.execute("select id from audit_log") == []
 
 
@@ -384,7 +406,7 @@ def _rule(tx: Tx) -> object:
 
 
 def test_users_cannot_write_registry(tx: Tx) -> None:
-    tx.as_user("owner_a", tx.seed.org_a)
+    tx.as_user("owner_a")
     _raises_permission(
         tx,
         "insert into sector_constraints (sector_id, kind, match_type, pattern, source_url, "
@@ -396,7 +418,7 @@ def test_users_cannot_write_registry(tx: Tx) -> None:
 
 def test_registry_readable_by_members(tx: Tx) -> None:
     _rule(tx)
-    tx.as_user("viewer_a", tx.seed.org_a)
+    tx.as_user("viewer_a")
     assert len(tx.execute("select id from sector_constraints")) == 1
 
 
@@ -442,3 +464,149 @@ def test_registry_author_must_be_a_user(tx: Tx) -> None:
 def test_org_caps_must_be_positive(tx: Tx, column: str) -> None:
     with pytest.raises(errors.CheckViolation):
         tx.execute(f"update organisations set {column} = 0 where id = %s", (tx.seed.org_a,))  # noqa: S608 - column from fixed list
+
+
+# ── Approval decisions (docs/approval-rubric.md §5) ──────────────────────────────────────
+
+_DECISION = (
+    "insert into approvals (campaign_id, org_id, approver_id, outcome, failed_gate, reason, "
+    "seconds_spent, arm_inferred, arm_inference_note) values (%s, %s, %s, %s, %s, %s, 120, %s, %s)"
+)
+
+
+def _decide(
+    tx: Tx,
+    approver: str = "approver_a",
+    outcome: str = "reject",
+    failed_gate: str | None = "T1.3",
+    reason: str | None = "unsourced claim",
+    arm_inferred: bool = False,
+    note: str | None = None,
+) -> None:
+    tx.execute(
+        _DECISION,
+        (
+            tx.seed.campaign_a,
+            tx.seed.org_a,
+            tx.seed.users[approver],
+            outcome,
+            failed_gate,
+            reason,
+            arm_inferred,
+            note,
+        ),
+    )
+
+
+@pytest.mark.parametrize("outcome", ["approve", "revise", "reject", "undecided"])
+def test_approver_records_every_outcome(tx: Tx, outcome: str) -> None:
+    if outcome == "approve":
+        _decide(tx, outcome=outcome, failed_gate=None, reason=None)
+    else:
+        _decide(tx, outcome=outcome)
+
+
+def test_revised_campaign_gets_a_further_decision(tx: Tx) -> None:
+    _decide(tx, outcome="revise")
+    _decide(tx, outcome="approve", failed_gate=None, reason=None)
+    rows = tx.execute(
+        "select outcome from approvals where campaign_id = %s order by decided_at",
+        (tx.seed.campaign_a,),
+    )
+    assert len(rows) == 2
+
+
+@pytest.mark.parametrize("user", ["owner_a", "editor_a", "viewer_a", "approver_b", "agency"])
+def test_non_approver_or_other_org_cannot_decide(tx: Tx, user: str) -> None:
+    with pytest.raises(errors.RaiseException, match="active approver"):
+        _decide(tx, approver=user)
+
+
+def test_decision_approver_fk_holds_even_without_trigger(tx: Tx) -> None:
+    tx.execute("alter table approvals disable trigger approvals_active_approver")
+    with pytest.raises(errors.ForeignKeyViolation):
+        _decide(tx, approver="viewer_a")
+
+
+def test_revoked_approver_cannot_decide(tx: Tx) -> None:
+    tx.execute(
+        "update org_members set revoked_at = now(), revoked_by = %s "
+        "where user_id = %s and role = 'approver'",
+        (tx.seed.users["owner_a"], tx.seed.users["approver_a"]),
+    )
+    with pytest.raises(errors.RaiseException, match="active approver"):
+        _decide(tx)
+
+
+def test_decision_cannot_point_at_another_orgs_campaign(tx: Tx) -> None:
+    with pytest.raises(errors.ForeignKeyViolation):
+        tx.execute(
+            _DECISION,
+            (
+                tx.seed.campaign_a,
+                tx.seed.org_b,
+                tx.seed.users["approver_b"],
+                "reject",
+                "T1.3",
+                "x",
+                False,
+                None,
+            ),
+        )
+
+
+@pytest.mark.parametrize("reason", [None, "  "])
+def test_non_approval_needs_a_reason(tx: Tx, reason: str | None) -> None:
+    with pytest.raises(errors.CheckViolation):
+        _decide(tx, outcome="reject", reason=reason)
+
+
+def test_approval_has_no_failed_gate(tx: Tx) -> None:
+    with pytest.raises(errors.CheckViolation):
+        _decide(tx, outcome="approve", failed_gate="T1.3", reason=None)
+
+
+def test_inferred_arm_needs_a_note(tx: Tx) -> None:
+    with pytest.raises(errors.CheckViolation):
+        _decide(tx, arm_inferred=True, note=None)
+
+
+def test_inferred_arm_with_note_is_recorded(tx: Tx) -> None:
+    _decide(tx, arm_inferred=True, note="evidence pack empty")
+
+
+def test_users_cannot_write_decisions(tx: Tx) -> None:
+    tx.as_user("approver_a")
+    _raises_rls(
+        tx,
+        _DECISION,
+        (
+            tx.seed.campaign_a,
+            tx.seed.org_a,
+            tx.seed.users["approver_a"],
+            "reject",
+            "T1.3",
+            "x",
+            False,
+            None,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "stmt", ["update approvals set outcome = 'approve'", "delete from approvals"]
+)
+def test_service_role_cannot_alter_decisions(tx: Tx, stmt: str) -> None:
+    _decide(tx)
+    tx.as_service_role()
+    _raises_permission(tx, stmt)
+
+
+def test_decisions_readable_only_by_own_org(tx: Tx) -> None:
+    _decide(tx)
+    tx.execute("savepoint s")
+    tx.as_user("viewer_a")
+    assert len(tx.execute("select id from approvals")) == 1
+    tx.execute("rollback to savepoint s")
+    tx.as_user("approver_b")
+    assert tx.execute("select id from approvals") == []

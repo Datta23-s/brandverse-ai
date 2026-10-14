@@ -45,9 +45,9 @@ alter table llm_calls enable row level security;
 
 -- runs: read any role; start a run owner/editor. Status updates come from the backend.
 create policy runs_read   on runs for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));
 create policy runs_insert on runs for insert to authenticated
   with check (app.has_role(org_id, array['owner','editor']));
 
 create policy llm_calls_read on llm_calls for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));

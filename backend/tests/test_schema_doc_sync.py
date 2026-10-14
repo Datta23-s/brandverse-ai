@@ -75,3 +75,19 @@ def test_splitter_handles_quotes_and_dollar_bodies() -> None:
         "select 'a;b'",
         "create function f() returns int as $$ select 1; $$ language sql",
     ]
+
+
+def test_migrations_read_no_org_claim() -> None:
+    # The JWT carries no organisation: membership is resolved through org_members (multi-org users).
+    code = " ".join(split_statements(_migrations_sql()))
+    assert not re.search(r"auth\.jwt\(\)\s*->>?\s*'org_id'", code)
+
+
+def test_auth_uid_calls_are_statement_scoped() -> None:
+    # Written as a scalar subquery, (select auth.uid()) and (select app.member_org_ids()) are
+    # evaluated once per statement; a bare call is evaluated once per row (Architecture.md §9).
+    code = " ".join(split_statements(_migrations_sql()))
+    for call in ("auth.uid()", "app.member_org_ids()"):
+        n = code.count(call) - code.count(f"function {call}")  # calls, not the definition
+        assert n > 0, f"{call} not used; update this test"
+        assert code.count(f"(select {call})") == n, f"bare {call} in a migration"

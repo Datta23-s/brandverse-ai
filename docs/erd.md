@@ -19,6 +19,7 @@ erDiagram
   sectors ||--o{ memory_items : classifies
   organisations ||--o{ org_members : "has members"
   org_members ||--o{ campaigns : "approves (approver role)"
+  org_members ||--o{ approvals : "decides (approver role)"
   organisations ||--o{ brands : owns
   organisations ||--o{ runs : owns
   organisations ||--o{ memory_items : owns
@@ -26,6 +27,7 @@ erDiagram
   organisations ||--o{ product_claims : "owns (denormalised)"
   organisations ||--o{ llm_calls : "owns (denormalised)"
   organisations ||--o{ campaigns : "owns (denormalised)"
+  organisations ||--o{ approvals : "owns (denormalised)"
   brands ||--o{ products : has
   brands ||--o{ memory_items : scopes
   products ||--o{ product_claims : has
@@ -34,6 +36,7 @@ erDiagram
   product_claims ||--o{ memory_items : "optionally backs"
   runs ||--o{ llm_calls : logs
   runs ||--o{ campaigns : produces
+  campaigns ||--o{ approvals : "decided by"
 
   sectors {
     text id PK
@@ -185,7 +188,21 @@ erDiagram
     uuid approved_by FK
     text approver_role "generated: approver"
     timestamptz approved_at
-    jsonb quality_scores
+    jsonb quality_scores "blind raters only"
+  }
+  approvals {
+    uuid id PK
+    uuid campaign_id FK
+    uuid org_id FK
+    uuid approver_id FK
+    text approver_role "generated: approver"
+    text outcome "approve|revise|reject|undecided"
+    text failed_gate
+    text reason
+    int seconds_spent
+    boolean arm_inferred
+    text arm_inference_note
+    timestamptz decided_at
   }
 ```
 
@@ -207,6 +224,8 @@ IDs are the ones assigned when this list was first drafted.
 | E9 | No general audit trail | Who changed what is needed for approvals, revocations and registry edits; retrofitting loses history | `audit_log`, append-only: update/delete/truncate revoked from all app roles **and** blocked by trigger for the table owner | **Accepted 2026-10-14** |
 | E10 | Only a per-run cost cap; `budget_cap_usd` had no stated period | One organisation could start unbounded runs, each under the per-run cap | `monthly_budget_cap_usd`, `rate_limit_runs_per_hour`, `rate_limit_requests_per_minute` on `organisations`; checked alongside the per-run cap (`Architecture.md` §9). `budget_cap_usd` renamed — no data existed. | **Accepted 2026-10-14** |
 | E11 | Regulated-sector safety depended on an agent (A4) not built in Phase 6 | Required disclaimers / prohibited phrasings must not depend on generation | `sector_constraints` registry (human-authored, versioned, never edited in place or deleted) and a `sectors` table that `brands.sector` and `memory_items.sector` reference, so a misspelled sector cannot bypass the registry | **Accepted 2026-10-14** |
+| E12 | RLS required an `org_id` claim in the JWT (one active org per token, set by a custom access token hook) | A single org claim forces one organisation per user, contradicting the agency persona (`PRD.md` §3) and any consultant working across client orgs; it also needed a hook to maintain | No org claim. Membership is resolved from `org_members` keyed on `auth.uid()`, always written `(select auth.uid())` so it is evaluated once per statement. Reads: `org_id in (select app.member_org_ids())`, likewise evaluated once per statement; role-specific writes: `app.has_role(org_id, roles)`; both stable `security definer`. **The custom access token hook is no longer required and is not built.** The org a request is for is an explicit API parameter, filtered on per `Rules.md` P3 | **Accepted 2026-10-14** |
+| E13 | Approval decisions had nowhere to live | `campaigns` records only an approval (`approved_by`), not revise / reject / undecided, time spent or arm inference (`docs/approval-rubric.md` §5); `quality_scores` holds the blind raters' scores and must not mix in the approver's decision | `approvals` (migration 0009), one append-only row per decision; composite FK to `campaigns (id, org_id)`; approver constrained as for `campaigns.approved_by` (role FK + active-approver trigger); reason required unless `approve`; no failed gate on `approve`; a note required when `arm_inferred`. Added now rather than before Phase 6, so it is never retrofitted onto populated tables | **Accepted 2026-10-14** |
 
 `campaigns.approved_by` is additionally constrained (E8 + T6): FK on
 `(org_id, approved_by, approver_role)` → `org_members (org_id, user_id, role)` with
@@ -232,6 +251,8 @@ the schema, not in application code:
 | `memory_items` | `foreign key (brand_id, org_id) references brands (id, org_id) on delete cascade` (E7) |
 | `memory_items` | `foreign key (product_id, org_id) references products (id, org_id) on delete set null (product_id)` (E7) |
 | `memory_items` | `foreign key (claim_id, org_id) references product_claims (id, org_id) on delete set null (claim_id)` (E5) |
+| `campaigns` | `unique (id, org_id)` (target for E13; added in 0009) |
+| `approvals` | `foreign key (campaign_id, org_id) references campaigns (id, org_id) on delete cascade` (E13) |
 
 `on delete set null (col)` nulls only the named column. A plain `on delete set null` on a composite
 FK would also null `org_id`, which is `not null`, and the parent delete would fail.
@@ -251,6 +272,9 @@ differs from its parent's, and assert it is rejected.
 
 ## 4. Role matrix (enforced by RLS)
 
+Roles are held per organisation; a user who belongs to several organisations has, in each, only
+the roles granted there (E12).
+
 | Table | viewer | approver | editor | owner | Backend (service role) |
 |---|---|---|---|---|---|
 | `organisations` | read | read | read | read, update | all |
@@ -260,6 +284,7 @@ differs from its parent's, and assert it is rejected.
 | `llm_calls` | read | read | read | read | insert |
 | `memory_items` | read | read | read, **revoke only** | read, **revoke only** | insert (after approval, `Rules.md` P8) |
 | `campaigns` | read | read | read | read | write; approval must name an active approver (FK + trigger) |
+| `approvals` | read | read | read | read | **insert only**; approver must be an active approver (FK + trigger) |
 | `audit_log` | — | — | — | read own org | **insert only** |
 | `sectors`, `sector_constraints` | read | read | read | read | admin path writes |
 
@@ -267,7 +292,8 @@ differs from its parent's, and assert it is rejected.
 evaluation's raw logs (`Rules.md` A1) and the `runs → products` FK has no delete action.
 
 "Revoke only": `authenticated` holds column-level `update` on the four revocation columns of
-`memory_items` and nothing else, and the policy requires `revoked_by = auth.uid()`.
+`memory_items` and nothing else, and the policy requires
+`revoked_by = (select auth.uid())`.
 
 ## 5. Schema test record
 
@@ -275,13 +301,15 @@ The schema is tested by `backend/tests/db/` (merge-blocking, `Rules.md` §6), wh
 `supabase/migrations/` **unmodified** to `pgvector/pgvector:pg17` (pinned by digest in CI) after a
 test-only platform stub (`backend/tests/db/supabase_platform_stub.sql`): Supabase's API roles and
 default grants, a minimal `auth.users`, and `auth.uid()` / `auth.jwt()` copied verbatim from
-Supabase's own auth migrations. Requests are simulated the way PostgREST does it: `set local role
+Supabase's own auth migrations.
+Requests are simulated the way PostgREST does it: `set local role
 authenticated` plus the `request.jwt.claims` GUC. Policy text under test is the deployed text.
 
 | Date | Environment | Result |
 |---|---|---|
 | 2026-10-14 | Scratch harness, PostgreSQL 16.2 (embedded), pgvector/pg_trgm stripped | 39/39 — superseded: the harness pre-created schema `app` with grants, masking finding F1 |
 | 2026-10-14 | `backend/tests/db/` on PostgreSQL 16.2 (embedded) with migrations copied to a scratch dir and pgvector/pg_trgm/HNSW stripped (logic check only, not the gate) | 55 passed; 2 failed as expected (extension and HNSW tests need real pgvector) |
+| 2026-10-14 | After E12/E13: same embedded PostgreSQL 16.2 logic check (pgvector, pg_trgm and HNSW stripped from a scratch copy) | 80 passed; 2 failed as expected (extension and HNSW tests need real pgvector) |
 | — | `backend/tests/db/` on `pgvector/pgvector:pg17` (CI / Docker) | **not yet run** — no GitHub remote, and Docker's engine was not running locally |
 
 Findings from moving the schema into migrations:
@@ -293,7 +321,7 @@ Findings from moving the schema into migrations:
   the original test assumed it could.
 - All `app.*` functions now pin `search_path = ''` and schema-qualify table references.
 
-Not covered by these tests: Supabase's real `auth` service and its custom-claim hook that must put
-`org_id` in the JWT; whether pgvector is installed in Supabase's `extensions` schema (the
+Not covered by these tests: Supabase's real `auth` service (no custom access token hook is
+needed: E12 removed the org claim); whether pgvector is installed in Supabase's `extensions` schema (the
 migrations create it in the default schema); and application code beyond the two Phase 1
 application-layer checks.

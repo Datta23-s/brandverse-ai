@@ -41,4 +41,4 @@ alter table campaigns enable row level security;
 -- read any role. Approval is written by the backend; the FK + trigger enforce that
 -- approved_by is an active approver of this org regardless of who writes it.
 create policy campaigns_read on campaigns for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+  using (org_id in (select app.member_org_ids()));

@@ -83,7 +83,7 @@ reported (`Rules.md` A5).
 |---|---|---|
 | D1 | **Tuning set is disjoint from the evaluation set.** 10 tuning requests on 10 brands that do not appear among the 30 evaluation requests. No tuning-set brand, product or request may be used in evaluation, and the harness asserts the two sets share no brand. | 2026-10-14 |
 | D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
-| D3 | **One approver for all runs**, across all arms, working from the written rubric **`docs/approval-rubric.md`** (v1.0). Its §6 requires a **calibration pass before run 1**: 10 practice campaigns on brands in **neither** the evaluation set nor the tuning set, scored by the approver and independently by a second team member, the rubric amended until they agree on ≥ 8/10; practice campaigns are discarded. Its §7 **forbids silent mid-evaluation amendment**: any change after run 1 is recorded with its reason and run number, and earlier runs are re-scored or the two periods reported separately. | 2026-10-14 — rubric v1.0 committed; approver not yet named; calibration not yet done |
+| D3 | **One approver for all runs**, across all arms, working from the written rubric **`docs/approval-rubric.md`** (v1.1). Its §6 requires a **calibration pass before run 1**: 10 practice campaigns on brands in **neither** the evaluation set nor the tuning set, scored by the approver and independently by a second team member, the rubric amended until they agree on ≥ 8/10; practice campaigns are discarded. Its §7 **forbids silent mid-evaluation amendment**: any change after run 1 is recorded with its reason and run number, and earlier runs are re-scored or the two periods reported separately. | 2026-10-14 — rubric v1.0 committed; v1.1 (§2 presentation order: constrained randomisation) committed before calibration; approver not yet named; calibration not yet done |
 | D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, with real, publicly findable product specs under pseudonymised brand and product names** (option (a) below). RQ1 is in effect. | 2026-10-14 |
 | D5 | **One organisation per evaluation brand: ten organisations.** Every brand's campaign 1 is a true cold start. *Rationale:* a shared organisation creates an order effect — later brands inherit earlier brands' org-wide memory (`brand_id is null`), which systematically shrinks the D2→D0 delta for reasons unrelated to the contribution. Cross-brand transfer is measured separately, in the optional secondary experiment (§10), never in the primary. | 2026-10-14 |
 
@@ -170,17 +170,32 @@ across brands instead of re-researching).
 | Calibration date | not yet done |
 | Calibration agreement | — / 10 (≥ 8 required) |
 | Practice-campaign brands | not yet chosen; must be in neither `evaluation/test_set.yaml` nor `evaluation/tuning_brands.yaml` |
-| Rubric version applied | 1.0 |
+| Rubric version applied | 1.1 |
 
-### Open points between the rubric and this plan (to resolve at calibration, via rubric §6)
+### Points between the rubric and this plan (resolved 2026-10-14)
 
-- **Presentation order.** Rubric §2 presents runs in randomised order. In the Proposed arm a
-  brand's campaign 2 cannot run until campaign 1 is approved (memory write-back requires
-  approval), so within a brand the Proposed approvals must happen in order 1 → 2 → 3.
-  Randomisation is possible across brands and arms, subject to that constraint; the sequencing
-  may itself let the approver infer the arm, which rubric §2 already asks to be recorded.
-- **Where the approval record lives.** Rubric §5 allows `campaigns.quality_scores` "or an adjacent
-  approvals table". `campaigns` records only an approval (`approved_by`), not revise / reject /
-  undecided decisions, time spent or arm inference, and `quality_scores` holds the two blind
-  raters' scores (§6). An approvals table is needed before Phase 6.
+- **Presentation order — resolved by decoupling generation from approval.**
+  *Clash:* rubric §2 presents runs in randomised order, but in the Proposed arm a brand's
+  campaign N+1 cannot be generated until campaign N is decided (memory write-back requires
+  approval, `Rules.md` T6), so approvals in run order would be grouped by brand and sequenced.
+  *Resolution:*
+  1. **Generation** runs 1 → 2 → 3 within a brand, as the memory dependency requires. Campaign
+     N+1 of a brand is generated only after campaign N has a decision.
+  2. **Approvals** are queued separately from generation. Completed campaigns from every arm and
+     brand enter one approval queue, presented in **shuffled batches** (at most 15 per batch —
+     the rubric §2 session cap), arm labels stripped.
+  3. **Adjacency constraint:** a brand's campaign N and N+1 are **never adjacent in the approval
+     queue**, in any arm and across batch boundaries (the last item of one batch and the first of
+     the next count as adjacent). A shuffle that violates this is redrawn.
+  4. The shuffle seed and the resulting queue order are logged per batch, so the presentation
+     order is reproducible and reportable.
+  *Fallback measurement:* sequencing may still let the approver infer the arm. Every decision
+  records `arm_inferred` and `arm_inference_note` (rubric §5), and the arm-inference rate is
+  reported per arm. This is the measurement if the decoupling does not fully blind the approver.
+- **Where the approval record lives — resolved.** Decisions go in the `approvals` table
+  (migration `0009_approvals.sql`, `docs/erd.md` E13): one row per decision — approve, revise,
+  reject or undecided — with `failed_gate`, `reason`, `seconds_spent`, `arm_inferred`,
+  `arm_inference_note` and `decided_at`. It is separate from `campaigns.quality_scores`, which
+  holds only the two blind raters' scores (§6). It was added in Phase 1, not retrofitted before
+  Phase 6.
 

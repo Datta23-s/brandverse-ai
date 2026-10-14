@@ -30,7 +30,11 @@ grant usage on schema auth to anon, authenticated, service_role;
 create table if not exists auth.users (id uuid primary key);
 
 -- Verbatim from supabase/auth migrations/20220224000811_update_auth_functions.up.sql
--- (template namespace = auth). Supabase marks uid() deprecated in favour of auth.jwt() -> 'sub'.
+-- (template namespace = auth), the latest supabase/auth migration that defines uid(); checked
+-- against master on 2026-10-14. No Supabase project exists yet to read it from.
+-- TODO(project creation): confirm against the instance with
+--   select pg_get_functiondef('auth.uid'::regprocedure);
+-- and update this copy if it differs.
 create or replace function auth.uid()
 returns uuid
 language sql stable

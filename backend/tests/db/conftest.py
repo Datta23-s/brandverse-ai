@@ -32,6 +32,7 @@ class Seed:
     brand_b: UUID
     product_a: UUID
     run_a: UUID
+    campaign_a: UUID
 
 
 @pytest.fixture(scope="session")
@@ -60,7 +61,16 @@ def db_url() -> str:
 
 @pytest.fixture(scope="session")
 def seed(db_url: str) -> Seed:
-    names = ["owner_a", "editor_a", "viewer_a", "approver_a", "approver_b", "outsider", "admin"]
+    names = [
+        "owner_a",
+        "editor_a",
+        "viewer_a",
+        "approver_a",
+        "approver_b",
+        "agency",
+        "outsider",
+        "admin",
+    ]
     users = {n: uuid4() for n in names}
     org_a, org_b = uuid4(), uuid4()
     with psycopg.connect(db_url, autocommit=True) as c:
@@ -79,6 +89,9 @@ def seed(db_url: str) -> Seed:
             ("viewer_a", org_a, "viewer"),
             ("approver_a", org_a, "approver"),
             ("approver_b", org_b, "approver"),
+            # One user, two organisations (agency persona, PRD.md §3).
+            ("agency", org_a, "editor"),
+            ("agency", org_b, "viewer"),
         ]:
             c.execute(
                 "insert into org_members (org_id, user_id, role) values (%s, %s, %s)",
@@ -107,7 +120,10 @@ def seed(db_url: str) -> Seed:
             "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
             (org_a, product_a),
         )
-    return Seed(users, org_a, org_b, brand_a, brand_b, product_a, run_a)
+        campaign_a = one(
+            "insert into campaigns (org_id, run_id) values (%s, %s) returning id", (org_a, run_a)
+        )
+    return Seed(users, org_a, org_b, brand_a, brand_b, product_a, run_a, campaign_a)
 
 
 class Tx:
@@ -121,11 +137,17 @@ class Tx:
         cur = self.conn.execute(query, params)
         return cur.fetchall() if cur.description else []
 
-    def as_user(self, user: str, org: UUID | None) -> None:
-        """Act as an authenticated user, the way PostgREST does: role + request.jwt.claims GUC."""
-        claims = {"sub": str(self.seed.users[user]), "role": "authenticated"}
-        if org is not None:
-            claims["org_id"] = str(org)
+    def as_user(self, user: str, **extra_claims: str) -> None:
+        """Act as an authenticated user, the way PostgREST does: role + request.jwt.claims GUC.
+
+        The JWT carries no organisation; membership comes from org_members keyed on `sub`
+        (auth.uid()).
+        `extra_claims` lets a test forge claims the policies must ignore."""
+        claims = {"sub": str(self.seed.users[user]), "role": "authenticated", **extra_claims}
+        self.set_claims(claims)
+
+    def set_claims(self, claims: dict[str, str]) -> None:
+        """Act as `authenticated` with exactly these JWT claims."""
         self.conn.execute("set local role authenticated")
         self.conn.execute(
             "select set_config('request.jwt.claims', %s, true)", (json.dumps(claims),)
