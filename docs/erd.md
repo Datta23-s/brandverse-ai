@@ -264,8 +264,9 @@ FK is not checked, which is intended for org-wide memory items and product-less 
 
 ### Required before the first migration
 
-- [ ] **Confirm the Supabase project runs PostgreSQL 15 or later** (`select version();`), and
-  record the version and date here. `on delete set null (product_id)` and
+- [x] **Confirm the Supabase project runs PostgreSQL 15 or later** (`select version();`), and
+  record the version and date here. **Confirmed 2026-10-14: PostgreSQL 17.11.** Migrations
+  0001–0009 were applied the same day (`Architecture.md` §11). `on delete set null (product_id)` and
   `on delete set null (claim_id)` on `memory_items` depend on it; on PostgreSQL 14 or earlier the
   migration fails. No migration is applied until this box is ticked.
 

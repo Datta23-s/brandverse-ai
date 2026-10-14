@@ -1010,6 +1010,58 @@ only findings that reach a campaign are persisted, per `Rules.md` P11 and `Memor
 API is ever hosted separately, the queue must move with it and the polling figure above decides
 the Redis plan.
 
+### Supabase project — migrations applied; the `Rules.md` §3.3 trigger has fired
+
+**2026-10-14 14:58:26 UTC: migrations 0001–0009 applied to the Supabase project**, as they stand
+at commit `de4799e`, in **one transaction** (committed only after all nine succeeded), as the
+`postgres` role through the session pooler. **This is the `Rules.md` §3.3 trigger event: from this
+moment every schema change is a new migration — no in-place edits, no exceptions.**
+
+| Item | Value (read 2026-10-14) |
+|---|---|
+| PostgreSQL | 17.11 (`docs/erd.md` §3 prerequisite: PG 15+ — met) |
+| `vector` | 0.8.2, installed in `public` (CI's container has 0.8.7; the HNSW storage figures above were measured on 0.8.7) |
+| `pg_trgm` | 1.6, in `public` |
+| Database size | 10.8 MB empty (Supabase's own schemas), 11.7 MB after the migrations |
+| Result | 13 tables, row-level security on every one, 27 policies, 7 `app.*` functions, 6 triggers |
+| Migration history | Applied with psycopg, not the Supabase CLI: there is **no** `supabase_migrations` history table. Each later migration is applied the same way and recorded here with its date and commit, until a CLI-based workflow is adopted. |
+
+`vector` sits in `public` because `create extension` uses the first existing schema on the search
+path, as in CI; Supabase's convention is the `extensions` schema, and its linter will flag this.
+Moving it is now a new migration (`alter extension vector set schema extensions`), not an edit.
+
+**Platform compared with `backend/tests/db/supabase_platform_stub.sql`** (read-only, 2026-10-14):
+
+| Aspect | Real platform | Stub | Effect on the RLS tests |
+|---|---|---|---|
+| `auth.uid()`, `auth.jwt()` | Bodies identical (whitespace aside); `stable`, not security definer; owner `supabase_auth_admin` | Same bodies and volatility; owner is the test superuser | None |
+| `anon`, `authenticated` | nologin, no BYPASSRLS, INHERIT | nologin, no BYPASSRLS, NOINHERIT | None: neither is a member of any role, so INHERIT has nothing to inherit |
+| `service_role` | BYPASSRLS, INHERIT, member of no role | BYPASSRLS, NOINHERIT | None |
+| Schema owner / migration role | `postgres`: **not** superuser, BYPASSRLS, can `SET ROLE` to all three API roles | Superuser | None for the policy tests, which switch to the API roles; the migrations needed no superuser right (`vector` and `pg_trgm` are on Supabase's privileged-extension list; `postgres` has REFERENCES on `auth.users`) |
+| Default privileges in `public` | Tables `arwdDxtm`, sequences `rwU`, functions `X` to `anon`, `authenticated`, `service_role` | `grant all` on tables, sequences, functions to the same roles | Same effective grants |
+| `USAGE` on `public` and `auth` | All three API roles | All three API roles | None |
+| `auth.users` | 35 columns | `id` only | Seeding only; no policy reads `auth.users` |
+| Login role for the API | `authenticator` (member of the three API roles) | none; tests use `set local role` | None: PostgREST also switches roles with `SET ROLE` |
+
+Conclusion: in everything the RLS policies depend on — the two auth functions, the API roles'
+RLS-relevant attributes and the default grants — the stub matches the platform, so the CI
+database suite's policy results transfer. A separate suite against the live project was not built.
+
+### Database connections from the laptop — session pooler only
+
+The direct host (`db.<ref>.supabase.co`) is IPv6-only on the free tier, and the laptop has no
+routable IPv6 (link-local only; checked 2026-10-14), so it cannot reach it. **The laptop worker,
+API and every script connect through the Supavisor session pooler** (IPv4, port 5432, user
+`postgres.<ref>`) — `DATABASE_URL` holds that string. Not the transaction pooler (port 6543):
+LangGraph's checkpointer and psycopg's prepared statements need session semantics.
+
+**Connection limit.** The instance reports `max_connections = 60` (2026-10-14), shared with
+Supabase's own services (Auth, Storage, the dashboard, Realtime), and in session mode each client
+connection holds one server connection for its whole life. Keep the laptop's total small and
+fixed: one pool per process, sized explicitly — about 5 connections across API, ARQ worker and
+LangGraph checkpointer together — never a library default, and never one connection per
+concurrent agent (agents share the worker's pool). Raise it only with a measured reason.
+
 ### Storage per `memory_items` row
 
 **Measured 2026-10-14** by `backend/scripts/measure_memory_storage.py` in CI's database job: GitHub
