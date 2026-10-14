@@ -114,11 +114,16 @@ When summarising work, state what was built, what was stubbed, and what was not 
 
 ## 4. Cost governance rules
 
+**Zero-rupee constraint (2026-10-14).** The project spends nothing: every service runs on a free
+tier (`Architecture.md` §11). **Tokens are the primary cost unit.** USD figures are computed from
+providers' list prices; they are a safety limit and a comparison aid, not money paid.
+
 | # | Rule |
 |---|---|
+| C0 | No paid service, paid tier, or pay-as-you-go overage is used. A design that needs one is changed, not paid for. |
 | C1 | Estimate cost **before** a call; refuse if it breaches the cap |
-| C2 | Record every call in `llm_calls` with model, tier, route reason, tokens, cost, latency |
-| C3 | Hard caps: 20 LLM calls, 20 searches, 2 revision rounds, 4 media generations, $2.50 |
+| C2 | Record every call in `llm_calls` with model, tier, route reason, tokens, cost, latency. Tokens are the primary measure; `cost_usd` is list-price-derived. |
+| C3 | Hard caps: 20 LLM calls, 20 searches, 2 revision rounds, 4 media generations, $2.50 list-price-equivalent. The USD cap stays as a safety limit even though actual spend is zero. |
 | C4 | On breach, return a partial result flagged `budget_exhausted` — never truncate silently |
 | C5 | Default to the cheapest tier that can do the job; escalate on failure, do not start high |
 | C6 | Cache embeddings by content hash. Re-embedding identical text is pure waste. |

@@ -36,8 +36,13 @@ create table memory_items (
   check (not revoked or (revoked_by is not null and revoked_at is not null))
 );
 
-create index on memory_items using hnsw (embedding vector_cosine_ops);
+-- As specified in Memory.md §4.3. m and ef_construction equal pgvector's defaults; stated so the
+-- migration and the spec cannot drift. The btree serves match_memory's scope (org_id, brand_id,
+-- not revoked), which every retrieval applies first (Rules.md P3).
+create index on memory_items using hnsw (embedding vector_cosine_ops)
+  with (m = 16, ef_construction = 64);
 create index on memory_items using gin (to_tsvector('english', content));
+create index on memory_items (org_id, brand_id, kind) where not revoked;
 
 revoke update on memory_items from authenticated;                         -- revocation columns only
 grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items to authenticated;

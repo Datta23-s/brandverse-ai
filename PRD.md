@@ -182,7 +182,7 @@ Step 15 feeds step 4 on the next run. **That loop is the product.**
 |---|---|---|
 | N1 | End-to-end run latency, D0 path | < 30 s |
 | N2 | End-to-end run latency, D2 path | < 5 min |
-| N3 | Cost per run | ≤ $2.50 hard cap |
+| N3 | Cost per run | Tokens are the primary unit; ≤ $2.50 list-price-equivalent hard cap as a safety limit. Actual spend is zero (free tiers only, `Rules.md` C0) |
 | N4 | Landing page LCP, mid-range mobile | < 2.5 s |
 | N5 | 3D hero frame rate, mid-range laptop | ≥ 50 fps |
 | N6 | WebGL absent | Static fallback hero, full site usable |
@@ -215,6 +215,10 @@ SRR = ((Searches_baseline − Searches_proposed) / Searches_baseline) × 100
 CR = ((Cost_baseline − Cost_proposed) / Cost_baseline) × 100
 ```
 
+`Cost` is measured in **tokens** (primary). CR is also reported on list-price USD, labelled as
+list-price-derived: actual spend is zero because every service runs on a free tier
+(`Rules.md` §4, `docs/evaluation-plan.md` §4).
+
 **Latency Reduction**
 
 ```
@@ -232,7 +236,7 @@ LR = ((T_baseline − T_proposed) / T_baseline) × 100
 | Trustworthiness | 10% | Hallucination audit, manual |
 | Originality | 10% | Human rater |
 | Feasibility | 10% | Human rater |
-| Cost efficiency | 5% | Measured USD per approved campaign |
+| Cost efficiency | 5% | Tokens per approved campaign (primary), with list-price USD per approved campaign alongside — labelled list-price-derived, not money paid |
 | **Total** | **100%** | |
 
 > **Methodological warning.** An LLM judge scoring output produced by the same model family is a weak instrument. For the dissertation, use at least two human raters on a sample of ≥ 30 campaigns and report inter-rater agreement (Cohen's κ). Report the LLM-judge score separately and label it as such. Do not present a single blended number as if it were an objective measurement.
@@ -263,6 +267,10 @@ LR = ((T_baseline − T_proposed) / T_baseline) × 100
 | `max_media_generations` | 4 |
 | `max_estimated_cost_usd` | 2.50 |
 
+**Zero-rupee constraint.** Every service runs on a free tier; nothing is paid. Tokens are the
+primary cost unit. `max_estimated_cost_usd` is computed from list prices and stays as a safety
+limit — it bounds what a run *would* cost, not what it costs.
+
 Enforcement is **pre-flight, not post-hoc**: estimated cost is computed before each call and the call is refused if it would breach the cap. A breached cap produces a partial result with an explicit `budget_exhausted` marker, never a silent truncation.
 
 ---
@@ -274,7 +282,7 @@ Enforcement is **pre-flight, not post-hoc**: estimated cost is computed before e
 | R1 | **Model IDs and pricing drift** | High | Build breaks or cost estimates go stale | Pin Gemini 3.x model IDs from day one — better price/capability than 2.5, not because 2.5 has an announced shutdown (it does not, as of 14 Oct 2026). Re-verify IDs, prices and shutdown dates at `ai.google.dev` before every deploy. See `Architecture.md` §4. |
 | R2 | Memory poisoning — a bad fact is stored and reused forever | Medium | High | Only approved, sourced facts are written; every memory row carries provenance and can be revoked |
 | R3 | Memory benefit does not appear in evaluation | Medium | Fatal to thesis | Design the test set with deliberate repeat requests (§8) |
-| R4 | SearXNG instance rate-limited or blocked | High | Medium | Self-host; cache aggressively; fall back to a paid SERP API behind the same interface |
+| R4 | SearXNG instance rate-limited or blocked | High | Medium | Self-host on the developer's laptop (`Architecture.md` §11); cache aggressively; on failure, degrade to a partial result. No paid SERP fallback: the project spends nothing (`Rules.md` C0) |
 | R5 | Scope overrun — 7 agents is a lot for a student team | High | High | Phase 6 ships 5 agents (A1, A2, A3, A6, A7). A4 and A5 are deferred; regulated-sector safety is carried by the sector constraint registry, not A4. See `Phases.md` §6.1. |
 | R6 | Cost cap makes D2 runs useless | Medium | Medium | Tune caps empirically in Phase 10 and report the tuned values |
 | R7 | Examiner asks why the paper's RF engine is missing | Certain | Medium | §1.2 D1 — rehearse it |

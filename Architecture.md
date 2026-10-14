@@ -27,7 +27,7 @@ Three commitments decide every structural choice:
 ├──────────────────────────────────────────────────────────────────┤
 │ 2. WEB APPLICATION — Next.js 15 + TypeScript + React 19 (Vercel) │
 ├──────────────────────────────────────────────────────────────────┤
-│ 3. API GATEWAY — FastAPI (Render)                                │
+│ 3. API GATEWAY — FastAPI (laptop)                                │
 ├────────────────────────────┬─────────────────────────────────────┤
 │ 4a. AUTHORIZATION          │ 4b. JOB MANAGEMENT                  │
 │     Supabase Auth + RLS    │     Redis + ARQ worker queue        │
@@ -320,7 +320,9 @@ approver's decision. Calibration decisions (`docs/approval-rubric.md` §6) are r
 in a practice organisation where the second scorer holds `approver`, and flagged
 `is_calibration`. They are never deleted; the evaluation harness excludes them by that flag
 (`backend/app/evaluation/approvals.py`), as it excludes seed memory (`Memory.md` §7.1) — never by
-the practice org's id, which changes on a reseed. The practice org is itself marked by a flag,
+the practice org's id, which changes on a reseed. **The practice organisation is a row in
+`organisations`, not a second Supabase project**, so it does not use one of the free tier's two
+active projects (§11). The practice org is itself marked by a flag,
 `organisations.is_practice` (backend-set; owners cannot update it), and a trigger rejects any
 approval in a practice org without `is_calibration = true`, so an unflagged practice row cannot
 exist. The harness additionally excludes practice orgs, so it could not leak even if the trigger
@@ -651,8 +653,13 @@ create table memory_items (
   check (not revoked or (revoked_by is not null and revoked_at is not null))
 );
 
-create index on memory_items using hnsw (embedding vector_cosine_ops);
+-- As specified in Memory.md §4.3. m and ef_construction equal pgvector's defaults; stated so the
+-- migration and the spec cannot drift. The btree serves match_memory's scope (org_id, brand_id,
+-- not revoked), which every retrieval applies first (Rules.md P3).
+create index on memory_items using hnsw (embedding vector_cosine_ops)
+  with (m = 16, ef_construction = 64);
 create index on memory_items using gin (to_tsvector('english', content));
+create index on memory_items (org_id, brand_id, kind) where not revoked;
 
 revoke update on memory_items from authenticated;                         -- revocation columns only
 grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items to authenticated;
@@ -859,12 +866,93 @@ The SSE stream is what makes the 15-step pipeline visible in the demo. **Build i
 
 | Component | Host | Notes |
 |---|---|---|
-| Frontend | Vercel | Preview deploy per PR |
-| API + worker | Render | Two services, one image |
-| Postgres + pgvector | Supabase | Free tier sufficient for the thesis |
-| Redis | Render Redis / Upstash | Queue + zero-retention research cache |
-| SearXNG | Render Docker or a small VPS | Must be self-hosted; public instances rate-limit |
-| Secrets | Platform env vars | Never in the repo. See `Rules.md`. |
+| Frontend | Vercel (free) | Preview deploy per PR; the public URL serves a seeded, read-only demo path |
+| API + worker | **Developer's laptop** | Decided 2026-10-14; see "The laptop is the worker host" below |
+| Postgres + pgvector | Supabase | Free tier (limits below) |
+| Redis | **Developer's laptop** (Docker, AOF on) | Queue + zero-retention research cache; a hosted free tier cannot carry ARQ polling (below) |
+| SearXNG | **Developer's laptop** (Docker) | Self-hosted and free; public instances rate-limit |
+| Secrets | Platform env vars; a local `.env` on the laptop, git-ignored | Never in the repo. See `Rules.md`. |
+
+**Zero-rupee constraint (2026-10-14).** Everything runs on a free tier; nothing is paid
+(`Rules.md` §4, C0). Every host above is free for its role (checked 2026-10-14).
+
+### Supabase free tier — limits designed within
+
+Checked on supabase.com/pricing and the platform docs, 2026-10-14:
+
+| Limit | Free tier | Effect on this design |
+|---|---|---|
+| Database size | 500 MB per project | Storage budget below. Supabase's own schemas count against it: measure `pg_database_size(current_database())` on the empty project at creation. |
+| Active projects | 2 | One project holds every organisation, evaluation and practice alike: organisations are **rows**, never projects. Tests and CI use a local container, not a project. |
+| Inactivity | Paused after 1 week | See `Phases.md` Phase 11 and the risk checkpoints: touch the database at least weekly. |
+| Egress | 5 GB / month | Retrieval returns ≤ 12 items per query; the harness reads logs, not embeddings. Well within it. |
+| Compute | Shared CPU, 500 MB RAM | One small instance: connect through the Supavisor pooler, keep worker concurrency low, and expect HNSW builds and evaluation batches to be slow, not failing. |
+| Backups | Not included | Take our own: `pg_dump` to local disk weekly, and after every evaluation batch (the runs are `Rules.md` A1 raw logs). |
+
+Nothing in `supabase/migrations/` assumes more: the extensions (`vector`, `pg_trgm`) are available
+on the free tier, there are no partitions, replicas, cron jobs or background workers in the
+database, and the per-row sizes measured on 2026-10-14 put `memory_items` far below 500 MB for
+the full evaluation. The large unknowns are outside the current schema: LangGraph checkpoint rows
+(Phase 6) and any persisted research-finding embeddings (Phase 5); both must be measured before
+the evaluation.
+
+**Restoring a paused project.** Open the project in the Supabase dashboard and press *Restore
+project*; it restores in place with the same URL and keys, moved to the latest minor Postgres
+version. The one-click restore window is stated as 1 year in the docs text but shown as 90 days in
+their screenshot — plan on 90 days. After the window, download the backup from the dashboard and
+restore it into a new project (or locally), then update `SUPABASE_URL` and keys everywhere.
+
+### The laptop is the worker host — deployment decision (2026-10-14)
+
+Render's free tier has no background workers (render.com/docs/free, checked 2026-10-14), and
+SearXNG is self-hosted on the developer's laptop. These are one decision: **the laptop is the
+worker host.** The API, the ARQ worker, Redis and SearXNG run on the laptop (Docker); Supabase and
+the Gemini API are reached from it over the internet. **Development and all evaluation runs
+execute on the laptop.**
+
+- **Phase 5's design works unchanged.** The worker reaches SearXNG only through its JSON API at
+  `SEARXNG_URL` behind the search interface, so the host is configuration (`localhost` here).
+- **The laptop must be on** for any live run. When SearXNG is unreachable, research degrades to a
+  partial result, never a crash (Phase 5 exit criteria). Search results are cached by normalised
+  query (`Rules.md` C7).
+- **Redis is local too.** A hosted free Redis cannot carry the queue (below), and a laptop worker
+  needs a reachable Redis anyway. Enable AOF persistence so queued jobs survive a laptop restart.
+- **The public URL cannot run the live pipeline.** Nothing on a zero-cost cloud host can reach the
+  laptop's services without exposing them. The public deployment is the frontend on Vercel with a
+  seeded, read-only demo path; the live pipeline is demonstrated from the laptop. See `Phases.md`
+  Phase 11 for the amended exit criterion.
+
+### Redis free tier — checked, and why Redis runs locally
+
+Upstash's free plan (upstash.com/pricing/redis, checked 2026-10-14): **250 MB data, 500K commands
+per month**, 10 GB bandwidth, 10 MB max request. Against this design:
+
+| Load | Estimate | Against the free plan |
+|---|---|---|
+| Chunk embeddings for one deep-research run, held with a TTL | about 8 MB (20 queries × 5 pages × 8 chunks × about 10 KB) | Fits 250 MB: TTL keys expire, so only runs inside the TTL window occupy space at once. |
+| Chunk-cache commands | about 2 per chunk, about 1,600 per deep-research run | Fits on its own. |
+| **ARQ queue polling** | ARQ 0.28's default `poll_delay` is 0.5 s: about 2 commands/s per idle worker, about **172,800/day** | **Breaches the plan: 500K commands would be gone in about 3 days.** |
+
+So a hosted free Redis is not viable for the queue, and Redis runs on the laptop with the worker
+(no command or storage cap beyond the laptop's RAM). Chunk embeddings stay in Redis with a TTL and
+only findings that reach a campaign are persisted, per `Rules.md` P11 and `Memory.md` §6.2. If the
+API is ever hosted separately, the queue must move with it and the polling figure above decides
+the Redis plan.
+
+### Storage per `memory_items` row
+
+| Component | Bytes per row | Source |
+|---|---|---|
+| Heap (400-char content) | 683 | Measured 2026-10-14, PostgreSQL 16.2 (embedded), 10,000 rows, `real[]` standing in for `vector(768)` (12 bytes larger) |
+| TOAST (the embedding, stored out of line) | 4,143 | Same measurement |
+| GIN full-text index | 511 | Same measurement |
+| B-tree indexes | 43 | Same measurement (before the `(org_id, brand_id, kind)` index was added to 0006) |
+| **HNSW index** | **about 4,100 — calculated, not measured** | From pgvector's on-disk layout: one element tuple (3,080-byte vector + header) and one level-0 neighbour tuple (32 × 6 bytes) per row, two rows per 8 KB page. **To be replaced** by the CI measurement (`backend/scripts/measure_memory_storage.py`, database job, real `vector(768)` on `pgvector/pgvector:pg17`, 10,000 rows) |
+| **Total** | **about 9,500** | About 100 rows per MB; 500 MB is about 50,000 rows |
+
+The evaluation's worst case (140 approved runs × 100 items written + 620 seed and relevance-set
+items) is about 14,600 rows, about 146 MB. The larger unknowns are LangGraph checkpoints (Phase 6)
+and any persisted research findings (Phase 5); both are measured before the evaluation.
 
 **Environment variables**
 

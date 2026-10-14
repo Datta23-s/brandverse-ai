@@ -65,6 +65,17 @@ Reported additionally, broken down by campaign position (1st / 2nd / 3rd per bra
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
 coverage, reuse depth (`Memory.md` §8).
 
+**Cost is measured in tokens; actual spend is zero.** Every service runs on a free tier
+(`Rules.md` §4, C0), so no money is paid for any run. Tokens (input + output, per call, from
+`llm_calls`) carry the cost claim. "USD per approved campaign" and CR in USD are computed from
+providers' published list prices at the date of the run; **they are list-price-derived figures,
+not money paid, and must be labelled that way in the dissertation** (e.g. "list-price-equivalent
+USD"). The list prices and their date are recorded with the results.
+
+Tokens are reported **per model tier** as well as in total: model routing (`PRD.md` M6) moves
+tokens to cheaper tiers without necessarily reducing them, so its effect is visible in the
+per-tier breakdown and in list-price USD, not in the token total alone.
+
 ## 5. Statistics
 
 - Mean and SD per metric per arm.

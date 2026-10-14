@@ -67,6 +67,10 @@ jobs:
         run: uv sync --locked
       - name: Database tests
         run: uv run pytest -q -m db
+      - name: Measure memory_items storage (report only)
+        # One-off sizing on real pgvector: per-row heap, TOAST, HNSW and other indexes
+        # (Architecture.md §11, Supabase free tier 500 MB). Read the numbers from this step's log.
+        run: uv run python scripts/measure_memory_storage.py --rows 10000 --chars 400
 
   frontend:
     # Phase 0: workspace + lockfile validation only. Lint, type check, test and build

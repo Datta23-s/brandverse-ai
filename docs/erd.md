@@ -312,7 +312,7 @@ authenticated` plus the `request.jwt.claims` GUC. Policy text under test is the 
 | 2026-10-14 | Scratch harness, PostgreSQL 16.2 (embedded), pgvector/pg_trgm stripped | 39/39 — superseded: the harness pre-created schema `app` with grants, masking finding F1 |
 | 2026-10-14 | `backend/tests/db/` on PostgreSQL 16.2 (embedded) with migrations copied to a scratch dir and pgvector/pg_trgm/HNSW stripped (logic check only, not the gate) | 55 passed; 2 failed as expected (extension and HNSW tests need real pgvector) |
 | 2026-10-14 | After E12/E13: same embedded PostgreSQL 16.2 logic check (pgvector, pg_trgm and HNSW stripped from a scratch copy) | 80 passed; 2 failed as expected (extension and HNSW tests need real pgvector) |
-| — | `backend/tests/db/` on `pgvector/pgvector:pg17` (CI / Docker) | **not yet run** — no GitHub remote, and Docker's engine was not running locally |
+| 2026-10-14 | `backend/tests/db/` on `pgvector/pgvector:pg17` (pinned digest), GitHub Actions run 38571548270 at `7266cec` | **Passed** — the merge-blocking gate, on real pgvector and pg_trgm |
 
 Findings from moving the schema into migrations:
 

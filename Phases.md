@@ -141,8 +141,8 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 
 | Deliverable | Done when |
 |---|---|
-| SearXNG self-hosted | JSON API reachable from the worker |
-| Search abstraction | One interface; SearXNG and a paid SERP both implement it |
+| SearXNG self-hosted | On the developer's laptop in Docker (decided 2026-10-14, `Architecture.md` §11); JSON API reachable from the worker |
+| Search abstraction | One interface; SearXNG and the offline CI mock implement it. No paid SERP — the project spends nothing (`Rules.md` C0) |
 | Trafilatura extraction | Main content extracted, boilerplate stripped |
 | Source scoring | Authority, recency, specificity, corroboration |
 | Provenance capture | Every finding carries its URL and score |
@@ -256,7 +256,7 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | ARR / SRR / CR / LR | Computed with mean, SD, significance tests |
 | Quality rubric scoring | ≥ 2 human raters on ≥ 30 campaigns, Cohen's κ reported |
 | Weight tuning | `R` and `M` weights tuned; defaults and tuned values both reported |
-| Cost analysis | USD per approved campaign per arm |
+| Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
 
 **Exit criteria**
 - [ ] Every reported number traces to a committed raw log
@@ -271,10 +271,26 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 ## Phase 11 — Production Deployment
 **Week 19**
 
-Vercel, Render, Redis, Supabase production config. Secrets in platform env vars. Seeded demo org.
+Vercel (frontend), Supabase production config, the laptop stack (API, worker, Redis, SearXNG —
+`Architecture.md` §11). Secrets in platform env vars and a git-ignored local `.env`. Seeded demo
+org. Free tiers only (`Rules.md` C0).
+
+**Limitation, stated plainly.** On a zero-cost stack the worker, Redis and SearXNG run on the
+developer's laptop, and no free cloud host can reach them without exposing them. A stranger on a
+clean device therefore **cannot run the live pipeline from the public URL**. The public URL serves
+the frontend with a seeded, read-only demo path (a real campaign produced earlier, with its
+evidence and logs); the live pipeline is demonstrated from the laptop.
+
+**Supabase free-tier auto-pause:** the project is paused after 1 week of inactivity. Touch the
+database at least weekly — a real query or API call against the project — for the whole 20 weeks,
+not only at deployment. If it does pause, restore it from the Supabase dashboard (*Restore
+project*; same URL and keys) within the restore window — plan on 90 days — and otherwise restore
+the downloaded backup into a new project and update the URL and keys (`Architecture.md` §11).
+The free tier has no backups: `pg_dump` weekly and after every evaluation batch.
 
 **Exit criteria**
-- [ ] A clean device can run the full demo on the public URL
+- [ ] A clean device can open the public URL and walk the seeded demo path end to end (a completed campaign with evidence, approval and cost logs), with no laptop service running
+- [ ] The live pipeline runs end to end from the laptop, and that run is the one in the recorded fallback video
 - [ ] No secret exists in git history
 - [ ] A rehearsed 8-minute demo script exists with a recorded fallback video
 
@@ -307,6 +323,7 @@ Cost, latency, retrieval quality, failure rates, model usage, approvals, feedbac
 
 | End of | Ask | If no |
 |---|---|---|
+| Every week, weeks 1–20 | Has the Supabase project been touched in the last 7 days? | It pauses. Restore it from the dashboard (*Restore project*) the same day and take a `pg_dump`; see Phase 11 |
 | Week 3 | Does the fake pipeline render live? | Stop; fix before adding logic |
 | Week 7 | Does memory retrieve relevant items at Precision@10 > 0.7? | Stop; the thesis depends on it |
 | Week 11 | Has a real campaign been approved end to end? | Cut to the thesis-critical track now |
