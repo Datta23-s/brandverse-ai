@@ -6,13 +6,17 @@ on:
   push:
   pull_request:
 
+# Runner pinned to an explicit image (2026-10-14): ubuntu-latest moves to Ubuntu 26 from
+# 2026-10-19, which would change the merge-blocking gate with no commit (Rules.md A1, A6).
+# Upgrading the runner is a deliberate change: its own commit, with the database gate and the
+# storage measurement re-run and recorded in Architecture.md §11.
 permissions:
   contents: read
 
 jobs:
   backend:
     name: Backend (lint, type, test)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
@@ -38,7 +42,7 @@ jobs:
     # tested against the real migrations on real pgvector + pg_trgm. Make this a required status
     # check in branch protection.
     name: Database (RLS, merge-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         # pgvector/pgvector:pg17, pinned by multi-arch digest (tag last updated 2026-10-01)
@@ -77,7 +81,7 @@ jobs:
     # Phase 0: workspace + lockfile validation only. Lint, type check, test and build
     # steps are added in Phase 1 with the Next.js app.
     name: Frontend (workspace install)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0

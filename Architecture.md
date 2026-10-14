@@ -1012,18 +1012,30 @@ the Redis plan.
 
 ### Storage per `memory_items` row
 
-| Component | Bytes per row | Source |
-|---|---|---|
-| Heap (400-char content) | 683 | Measured 2026-10-14, PostgreSQL 16.2 (embedded), 10,000 rows, `real[]` standing in for `vector(768)` (12 bytes larger) |
-| TOAST (the embedding, stored out of line) | 4,143 | Same measurement |
-| GIN full-text index | 511 | Same measurement |
-| B-tree indexes | 43 | Same measurement (before the `(org_id, brand_id, kind)` index was added to 0006) |
-| **HNSW index** | **about 4,100 — calculated, not measured** | From pgvector's on-disk layout: one element tuple (3,080-byte vector + header) and one level-0 neighbour tuple (32 × 6 bytes) per row, two rows per 8 KB page. **To be replaced** by the CI measurement (`backend/scripts/measure_memory_storage.py`, database job, real `vector(768)` on `pgvector/pgvector:pg17`, 10,000 rows) |
-| **Total** | **about 9,500** | About 100 rows per MB; 500 MB is about 50,000 rows |
+**Measured 2026-10-14** by `backend/scripts/measure_memory_storage.py` in CI's database job: GitHub
+Actions run 38578508502 at commit `c00371d`, job 115901867221. Conditions: PostgreSQL 17.11 with
+pgvector 0.8.7 (`pgvector/pgvector:pg17`, pinned by digest), the real migrations, 10,000 rows,
+400-character content, random 768-dimension embeddings (3,076 bytes each; incompressible, like real
+ones), after `vacuum analyze`. Runner: the job was labelled `ubuntu-latest`, which at that date
+resolved to ubuntu-24.04 per GitHub's runner-images notice; the exact image version is in the job
+log, which needs admin access, and was not read. CI has since been pinned to `ubuntu-24.04`.
 
-The evaluation's worst case (140 approved runs × 100 items written + 620 seed and relevance-set
-items) is about 14,600 rows, about 146 MB. The larger unknowns are LangGraph checkpoints (Phase 6)
-and any persisted research findings (Phase 5); both are measured before the evaluation.
+| Component | Bytes per row |
+|---|---|
+| Heap (400-character content) | 683 |
+| TOAST (the embedding, stored out of line) | 4,147 |
+| HNSW index (`m = 16, ef_construction = 64`) | 4,097 |
+| GIN full-text index | 510 |
+| B-tree `(org_id, brand_id, kind) where not revoked` | 9 |
+| Primary key | 43 |
+| **Total (`pg_total_relation_size`)** | **9,495** |
+
+The earlier estimate (HNSW about 4,100 B/row, calculated from pgvector's on-disk layout; total about
+9,500) is superseded; the measurement agrees with it. At 9,495 B/row, 500 MB holds roughly
+52,000–55,000 rows (depending on whether Supabase's MB is 10⁶ or 2²⁰ bytes). The evaluation's worst
+case (140 approved runs × 100 items written + 620 seed and relevance-set items, about 14,600 rows)
+is about 139 MB. The larger unknowns are LangGraph checkpoints (Phase 6) and any persisted
+research findings (Phase 5); both are measured before the evaluation.
 
 **Environment variables**
 
