@@ -9,6 +9,7 @@ import psycopg
 import pytest
 from psycopg import errors
 
+from app.evaluation.approvals import EVALUATION_APPROVALS_SQL
 from tests.db.conftest import Tx
 
 pytestmark = pytest.mark.db
@@ -84,10 +85,12 @@ def test_misspelled_sector_rejected(tx: Tx) -> None:
 
 
 @pytest.mark.parametrize("user", ["owner_a", "editor_a", "viewer_a", "approver_a"])
-def test_every_role_reads_only_its_own_org(tx: Tx, user: str) -> None:
+def test_every_role_reads_only_its_own_orgs(tx: Tx, user: str) -> None:
     tx.as_user(user)
-    rows = tx.execute("select id from brands")
-    assert [r[0] for r in rows] == [tx.seed.brand_a]
+    rows = {r[0] for r in tx.execute("select id from brands")}
+    # approver_a also approves in the practice org (rubric §6); nobody here sees org B.
+    practice = {tx.seed.brand_practice} if user == "approver_a" else set()
+    assert rows == {tx.seed.brand_a} | practice
 
 
 def test_viewer_cannot_insert(tx: Tx) -> None:
@@ -610,3 +613,83 @@ def test_decisions_readable_only_by_own_org(tx: Tx) -> None:
     tx.execute("rollback to savepoint s")
     tx.as_user("approver_b")
     assert tx.execute("select id from approvals") == []
+
+
+# ── Calibration rows (docs/approval-rubric.md §6) ────────────────────────────────────────
+
+
+def _calibration_decision(tx: Tx, scorer: str, campaign: object, org: object) -> None:
+    tx.execute(
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
+        "is_calibration) values (%s, %s, %s, 'approve', 60, true)",
+        (campaign, org, tx.seed.users[scorer]),
+    )
+
+
+def test_second_scorer_decides_in_practice_org_only(tx: Tx) -> None:
+    _calibration_decision(tx, "second_scorer", tx.seed.campaign_practice, tx.seed.org_practice)
+    with pytest.raises(errors.RaiseException, match="active approver"):
+        _calibration_decision(tx, "second_scorer", tx.seed.campaign_a, tx.seed.org_a)
+
+
+def test_calibration_row_never_reaches_evaluation_query(tx: Tx) -> None:
+    _decide(tx)  # the one evaluation decision
+    _calibration_decision(tx, "approver_a", tx.seed.campaign_practice, tx.seed.org_practice)
+    _calibration_decision(tx, "second_scorer", tx.seed.campaign_practice, tx.seed.org_practice)
+    # Flagged inside an evaluation org too: the filter is the flag, not the org id.
+    _calibration_decision(tx, "approver_a", tx.seed.campaign_a, tx.seed.org_a)
+    tx.as_service_role()
+    rows = tx.execute(
+        EVALUATION_APPROVALS_SQL,
+        {"org_ids": [tx.seed.org_a, tx.seed.org_b, tx.seed.org_practice]},
+    )
+    assert [(r[1], r[4]) for r in rows] == [(tx.seed.campaign_a, "reject")]
+
+
+def _unflagged_practice_decision(tx: Tx) -> None:
+    tx.execute(
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
+        "is_calibration) values (%s, %s, %s, 'approve', 60, false)",
+        (tx.seed.campaign_practice, tx.seed.org_practice, tx.seed.users["second_scorer"]),
+    )
+
+
+def test_unflagged_practice_approval_is_rejected(tx: Tx) -> None:
+    with pytest.raises(errors.RaiseException, match="practice organisation"):
+        _unflagged_practice_decision(tx)
+
+
+def test_unflagged_practice_approval_never_reaches_evaluation_query(tx: Tx) -> None:
+    # The harness excludes practice orgs itself, even with the database trigger bypassed.
+    tx.execute("alter table approvals disable trigger approvals_practice_is_calibration")
+    _unflagged_practice_decision(tx)
+    _decide(tx)
+    tx.as_service_role()
+    rows = tx.execute(
+        EVALUATION_APPROVALS_SQL,
+        {"org_ids": [tx.seed.org_a, tx.seed.org_b, tx.seed.org_practice]},
+    )
+    assert [(r[1], r[4]) for r in rows] == [(tx.seed.campaign_a, "reject")]
+
+
+@pytest.mark.parametrize("org", ["org_a", "org_practice"])
+def test_owner_cannot_change_is_practice(tx: Tx, org: str) -> None:
+    tx.execute(
+        "insert into org_members (org_id, user_id, role) values (%s, %s, 'owner')",
+        (tx.seed.org_practice, tx.seed.users["owner_a"]),
+    )
+    tx.as_user("owner_a")
+    _raises_permission(
+        tx,
+        "update organisations set is_practice = not is_practice where id = %s",
+        (getattr(tx.seed, org),),
+    )
+
+
+def test_owner_still_updates_org_budget(tx: Tx) -> None:
+    tx.as_user("owner_a")
+    updated = tx.execute(
+        "update organisations set monthly_budget_cap_usd = 75 where id = %s returning id",
+        (tx.seed.org_a,),
+    )
+    assert len(updated) == 1

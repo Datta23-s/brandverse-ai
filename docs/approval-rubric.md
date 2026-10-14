@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Document | `docs/approval-rubric.md` |
-| Version | 1.1 — §2 presentation order amended 2026-10-14, before calibration and run 1 |
+| Version | 1.2 — §2 presentation order (1.1) and §5–§6 calibration record (1.2) amended 2026-10-14, before calibration and run 1 |
 | Date | 14 October 2026 |
 | Governs | Step 12, human approval, for **every** run in **every** arm |
 | Required by | `docs/evaluation-plan.md` D3 — must be committed before the first evaluation run |
@@ -105,7 +105,7 @@ Evaluate in order. **Stop at the first failed blocking gate** and record that ga
 
 ## 5. What gets recorded
 
-Per run, in `campaigns.quality_scores` or an adjacent approvals table:
+Per decision, one row in the `approvals` table (`supabase/migrations/0009_approvals.sql`; never in `campaigns.quality_scores`, which holds the blind raters' scores). Rows are append-only: a re-score is a new row.
 
 ```json
 {
@@ -116,7 +116,8 @@ Per run, in `campaigns.quality_scores` or an adjacent approvals table:
   "failed_gate": "T1.3 | S2.1 | ... | null",
   "reason": "<one sentence, required on anything but approve>",
   "arm_inferred": false,
-  "arm_inference_note": null
+  "arm_inference_note": null,
+  "is_calibration": false
 }
 ```
 
@@ -128,14 +129,15 @@ Per run, in `campaigns.quality_scores` or an adjacent approvals table:
 
 Do this before run 1. It takes under an hour and it is the difference between a defensible κ and an unexplainable one.
 
-1. Generate **10 practice campaigns** on brands that appear in **neither** the evaluation set nor the tuning set.
+1. Generate **10 practice campaigns** on brands that appear in **neither** the evaluation set nor the tuning set, in a dedicated **practice organisation**, marked `organisations.is_practice = true`.
 2. The approver scores all 10 against this rubric.
-3. A second team member independently scores the same 10.
+3. A second team member independently scores the same 10. The second scorer holds an active `approver` role **in the practice organisation only** — no role in any evaluation organisation — so the database's approver key and active-approver trigger apply to their decisions unchanged.
+   Both scorers' decisions are recorded in `approvals` exactly as in §5, with `is_calibration = true`; the database rejects an approval in a practice organisation without it.
 4. Compare. Any disagreement means the rubric is ambiguous at that point — **amend this document**, do not simply argue to agreement.
 5. Re-run steps 2–4 until the two agree on at least 8 of 10.
 6. Commit the amended rubric. Record the calibration date and the final agreement rate in `evaluation-plan.md`.
 
-Practice campaigns are discarded. They never enter the results.
+**Practice campaigns and their approvals are excluded from evaluation, never deleted.** `approvals` is append-only, so calibration rows stay as the record of how agreement was reached. They never enter the results: the exclusion is enforced by a filter in the harness (`backend/app/evaluation/approvals.py`, filtering on `is_calibration`), which also excludes practice organisations, with tests that neither a calibration row nor an unflagged practice-org row ever reaches an evaluation query — not by discipline. This follows the precedent for seed memory (`Memory.md` §7.1: flagged, and filtered out by the harness). The filter is the flag, not the practice organisation's id: org ids are environment-specific and change on a reseed, whereas the flag travels with the row.
 
 ---
 
@@ -160,4 +162,4 @@ If the rubric must change after real runs have started:
 | Approver name | |
 | Calibration date | |
 | Calibration agreement | ___ / 10 |
-| Rubric version applied | 1.1 |
+| Rubric version applied | 1.2 |

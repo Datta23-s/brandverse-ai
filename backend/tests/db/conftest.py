@@ -33,6 +33,9 @@ class Seed:
     product_a: UUID
     run_a: UUID
     campaign_a: UUID
+    org_practice: UUID
+    brand_practice: UUID
+    campaign_practice: UUID
 
 
 @pytest.fixture(scope="session")
@@ -68,11 +71,12 @@ def seed(db_url: str) -> Seed:
         "approver_a",
         "approver_b",
         "agency",
+        "second_scorer",
         "outsider",
         "admin",
     ]
     users = {n: uuid4() for n in names}
-    org_a, org_b = uuid4(), uuid4()
+    org_a, org_b, org_practice = uuid4(), uuid4(), uuid4()
     with psycopg.connect(db_url, autocommit=True) as c:
         for uid in users.values():
             c.execute("insert into auth.users (id) values (%s)", (uid,))
@@ -81,7 +85,9 @@ def seed(db_url: str) -> Seed:
             "('health-supplements', 'Health supplements', true), ('footwear', 'Footwear', false)"
         )
         c.execute(
-            "insert into organisations (id, name) values (%s, 'A'), (%s, 'B')", (org_a, org_b)
+            "insert into organisations (id, name, is_practice) "
+            "values (%s, 'A', false), (%s, 'B', false), (%s, 'Practice', true)",
+            (org_a, org_b, org_practice),
         )
         for user, org, role in [
             ("owner_a", org_a, "owner"),
@@ -92,6 +98,10 @@ def seed(db_url: str) -> Seed:
             # One user, two organisations (agency persona, PRD.md §3).
             ("agency", org_a, "editor"),
             ("agency", org_b, "viewer"),
+            # Calibration (rubric §6): both scorers approve in the practice org; the second
+            # scorer holds no role anywhere else.
+            ("approver_a", org_practice, "approver"),
+            ("second_scorer", org_practice, "approver"),
         ]:
             c.execute(
                 "insert into org_members (org_id, user_id, role) values (%s, %s, %s)",
@@ -123,7 +133,34 @@ def seed(db_url: str) -> Seed:
         campaign_a = one(
             "insert into campaigns (org_id, run_id) values (%s, %s) returning id", (org_a, run_a)
         )
-    return Seed(users, org_a, org_b, brand_a, brand_b, product_a, run_a, campaign_a)
+        brand_p = one(
+            "insert into brands (org_id, name) values (%s, 'BP') returning id", (org_practice,)
+        )
+        product_p = one(
+            "insert into products (org_id, brand_id, name) values (%s, %s, 'PP') returning id",
+            (org_practice, brand_p),
+        )
+        run_p = one(
+            "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
+            (org_practice, product_p),
+        )
+        campaign_practice = one(
+            "insert into campaigns (org_id, run_id) values (%s, %s) returning id",
+            (org_practice, run_p),
+        )
+    return Seed(
+        users,
+        org_a,
+        org_b,
+        brand_a,
+        brand_b,
+        product_a,
+        run_a,
+        campaign_a,
+        org_practice,
+        brand_p,
+        campaign_practice,
+    )
 
 
 class Tx:
@@ -133,7 +170,9 @@ class Tx:
         self.conn = conn
         self.seed = seed
 
-    def execute(self, query: str, params: tuple[object, ...] = ()) -> list[tuple[object, ...]]:
+    def execute(
+        self, query: str, params: tuple[object, ...] | dict[str, object] = ()
+    ) -> list[tuple[object, ...]]:
         cur = self.conn.execute(query, params)
         return cur.fetchall() if cur.description else []
 

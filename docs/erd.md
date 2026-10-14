@@ -66,6 +66,7 @@ erDiagram
     int rate_limit_runs_per_hour
     int rate_limit_requests_per_minute
     timestamptz created_at
+    boolean is_practice "rubric 6 calibration org"
   }
   org_members {
     uuid org_id PK
@@ -203,6 +204,7 @@ erDiagram
     boolean arm_inferred
     text arm_inference_note
     timestamptz decided_at
+    boolean is_calibration "rubric 6 practice row"
   }
 ```
 
@@ -225,7 +227,7 @@ IDs are the ones assigned when this list was first drafted.
 | E10 | Only a per-run cost cap; `budget_cap_usd` had no stated period | One organisation could start unbounded runs, each under the per-run cap | `monthly_budget_cap_usd`, `rate_limit_runs_per_hour`, `rate_limit_requests_per_minute` on `organisations`; checked alongside the per-run cap (`Architecture.md` §9). `budget_cap_usd` renamed — no data existed. | **Accepted 2026-10-14** |
 | E11 | Regulated-sector safety depended on an agent (A4) not built in Phase 6 | Required disclaimers / prohibited phrasings must not depend on generation | `sector_constraints` registry (human-authored, versioned, never edited in place or deleted) and a `sectors` table that `brands.sector` and `memory_items.sector` reference, so a misspelled sector cannot bypass the registry | **Accepted 2026-10-14** |
 | E12 | RLS required an `org_id` claim in the JWT (one active org per token, set by a custom access token hook) | A single org claim forces one organisation per user, contradicting the agency persona (`PRD.md` §3) and any consultant working across client orgs; it also needed a hook to maintain | No org claim. Membership is resolved from `org_members` keyed on `auth.uid()`, always written `(select auth.uid())` so it is evaluated once per statement. Reads: `org_id in (select app.member_org_ids())`, likewise evaluated once per statement; role-specific writes: `app.has_role(org_id, roles)`; both stable `security definer`. **The custom access token hook is no longer required and is not built.** The org a request is for is an explicit API parameter, filtered on per `Rules.md` P3 | **Accepted 2026-10-14** |
-| E13 | Approval decisions had nowhere to live | `campaigns` records only an approval (`approved_by`), not revise / reject / undecided, time spent or arm inference (`docs/approval-rubric.md` §5); `quality_scores` holds the blind raters' scores and must not mix in the approver's decision | `approvals` (migration 0009), one append-only row per decision; composite FK to `campaigns (id, org_id)`; approver constrained as for `campaigns.approved_by` (role FK + active-approver trigger); reason required unless `approve`; no failed gate on `approve`; a note required when `arm_inferred`. Added now rather than before Phase 6, so it is never retrofitted onto populated tables | **Accepted 2026-10-14** |
+| E13 | Approval decisions had nowhere to live | `campaigns` records only an approval (`approved_by`), not revise / reject / undecided, time spent or arm inference (`docs/approval-rubric.md` §5); `quality_scores` holds the blind raters' scores and must not mix in the approver's decision | `approvals` (migration 0009), one append-only row per decision; composite FK to `campaigns (id, org_id)`; approver constrained as for `campaigns.approved_by` (role FK + active-approver trigger); reason required unless `approve`; no failed gate on `approve`; a note required when `arm_inferred`. `is_calibration boolean not null default false` flags the rubric §6 calibration decisions, made in a practice organisation where the second scorer holds `approver` only there; they are excluded from evaluation by the harness filter on the flag (as `is_seed`, E6), never deleted and never filtered by org id, which changes on a reseed. The practice organisation is marked `organisations.is_practice` (backend-set; owners' column-level `update` excludes it); a trigger rejects any approval in a practice org whose `is_calibration` is false, and the harness also excludes practice orgs, so an unflagged practice row can neither be written nor leak. Added now rather than before Phase 6, so it is never retrofitted onto populated tables | **Accepted 2026-10-14** |
 
 `campaigns.approved_by` is additionally constrained (E8 + T6): FK on
 `(org_id, approved_by, approver_role)` → `org_members (org_id, user_id, role)` with
@@ -277,7 +279,7 @@ the roles granted there (E12).
 
 | Table | viewer | approver | editor | owner | Backend (service role) |
 |---|---|---|---|---|---|
-| `organisations` | read | read | read | read, update | all |
+| `organisations` | read | read | read | read, update (not `is_practice`) | all |
 | `org_members` | read | read | read | read, add, revoke | all |
 | `brands`, `products`, `product_claims` | read | read | read, insert, update | + delete¹ | all |
 | `runs` | read | read | read, start | read, start | status updates |

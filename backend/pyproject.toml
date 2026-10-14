@@ -23,7 +23,7 @@ python_version = "3.12"
 files = ["app"]
 
 [[tool.mypy.overrides]]
-module = ["app.core.*", "app.agents.*"]
+module = ["app.core.*", "app.agents.*", "app.evaluation.*"]
 strict = true
 
 [tool.pytest.ini_options]

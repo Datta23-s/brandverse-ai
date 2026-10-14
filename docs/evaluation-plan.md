@@ -41,6 +41,15 @@ All arms share the same cost caps (`PRD.md` §9: 20 LLM calls, 20 searches, 2 re
 Seed memory (`Memory.md` §7.1) is excluded from every evaluation run by a filter in the harness
 code, and a test asserts that no seeded item appears in any evaluation run's retrieved set.
 
+Calibration decisions (`docs/approval-rubric.md` §6) are excluded the same way: they are kept in
+`approvals` with `is_calibration = true`, and the harness reads decisions only through
+`backend/app/evaluation/approvals.py`, which filters on that flag (never on the practice
+organisation's id). `backend/tests/db/test_rls.py::test_calibration_row_never_reaches_evaluation_query`
+asserts that a calibration row — including one flagged inside an evaluation organisation — never
+reaches the evaluation query. The practice organisation is marked `organisations.is_practice`; the
+database rejects an approval there without `is_calibration`, and the harness query excludes
+practice organisations as well (`test_unflagged_practice_approval_never_reaches_evaluation_query`).
+
 ## 4. Metrics
 
 Computed per run from `runs` / `llm_calls`, then aggregated. Baseline is Baseline B unless stated.
@@ -83,7 +92,7 @@ reported (`Rules.md` A5).
 |---|---|---|
 | D1 | **Tuning set is disjoint from the evaluation set.** 10 tuning requests on 10 brands that do not appear among the 30 evaluation requests. No tuning-set brand, product or request may be used in evaluation, and the harness asserts the two sets share no brand. | 2026-10-14 |
 | D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
-| D3 | **One approver for all runs**, across all arms, working from the written rubric **`docs/approval-rubric.md`** (v1.1). Its §6 requires a **calibration pass before run 1**: 10 practice campaigns on brands in **neither** the evaluation set nor the tuning set, scored by the approver and independently by a second team member, the rubric amended until they agree on ≥ 8/10; practice campaigns are discarded. Its §7 **forbids silent mid-evaluation amendment**: any change after run 1 is recorded with its reason and run number, and earlier runs are re-scored or the two periods reported separately. | 2026-10-14 — rubric v1.0 committed; v1.1 (§2 presentation order: constrained randomisation) committed before calibration; approver not yet named; calibration not yet done |
+| D3 | **One approver for all runs**, across all arms, working from the written rubric **`docs/approval-rubric.md`** (v1.2). Its §6 requires a **calibration pass before run 1**: 10 practice campaigns on brands in **neither** the evaluation set nor the tuning set, scored by the approver and independently by a second team member, the rubric amended until they agree on ≥ 8/10; practice campaigns and their approvals are kept, flagged `is_calibration`, and excluded from evaluation by the harness (§3). Its §7 **forbids silent mid-evaluation amendment**: any change after run 1 is recorded with its reason and run number, and earlier runs are re-scored or the two periods reported separately. | 2026-10-14 — rubric v1.0 committed; v1.1 (§2 presentation order: constrained randomisation) and v1.2 (§5–§6 calibration rows kept in `approvals`, flagged and filtered) committed before calibration; approver not yet named; calibration not yet done |
 | D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, with real, publicly findable product specs under pseudonymised brand and product names** (option (a) below). RQ1 is in effect. | 2026-10-14 |
 | D5 | **One organisation per evaluation brand: ten organisations.** Every brand's campaign 1 is a true cold start. *Rationale:* a shared organisation creates an order effect — later brands inherit earlier brands' org-wide memory (`brand_id is null`), which systematically shrinks the D2→D0 delta for reasons unrelated to the contribution. Cross-brand transfer is measured separately, in the optional secondary experiment (§10), never in the primary. | 2026-10-14 |
 
@@ -170,7 +179,9 @@ across brands instead of re-researching).
 | Calibration date | not yet done |
 | Calibration agreement | — / 10 (≥ 8 required) |
 | Practice-campaign brands | not yet chosen; must be in neither `evaluation/test_set.yaml` nor `evaluation/tuning_brands.yaml` |
-| Rubric version applied | 1.1 |
+| Practice organisation | not yet created; `is_practice = true`, holds only the practice campaigns. The approver and the second scorer both hold `approver` there |
+| Second scorer | not yet named; `approver` role in the practice organisation only |
+| Rubric version applied | 1.2 |
 
 ### Points between the rubric and this plan (resolved 2026-10-14)
 
