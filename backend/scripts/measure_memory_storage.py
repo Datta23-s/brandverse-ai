@@ -91,14 +91,33 @@ def main() -> None:
         raise SystemExit("memory_items not found")
     heap, toast, total, emb = row
     n = args.rows
-    print(f"server: {version[0] if version else '?'}")
-    print(f"pgvector: {vector[0] if vector else 'not installed'}")
-    print(f"rows={n} content_chars={args.chars} embedding_bytes={float(emb):.0f}")
-    print(f"heap        {heap:>12,} B  {heap / n:>8.0f} B/row")
-    print(f"toast       {toast:>12,} B  {toast / n:>8.0f} B/row")
+    lines = [
+        f"server: {version[0] if version else '?'}",
+        f"pgvector: {vector[0] if vector else 'not installed'}",
+        f"rows={n} content_chars={args.chars} embedding_bytes={float(emb):.0f}",
+        f"heap        {heap:>12,} B  {heap / n:>8.0f} B/row",
+        f"toast       {toast:>12,} B  {toast / n:>8.0f} B/row",
+    ]
     for relname, amname, size in indexes:
-        print(f"{amname:<6}{relname[:40]:<40} {size:>12,} B  {size / n:>8.0f} B/row")
-    print(f"pg_total_relation_size {total:>12,} B  {total / n:>8.0f} B/row")
+        lines.append(f"{amname:<6}{relname[:40]:<40} {size:>12,} B  {size / n:>8.0f} B/row")
+    lines.append(f"pg_total_relation_size {total:>12,} B  {total / n:>8.0f} B/row")
+    print("\n".join(lines))
+    publish(lines)
+
+
+def publish(lines: list[str]) -> None:
+    """On GitHub Actions, also emit the report as one notice annotation (readable from the public
+    check-runs API without authentication) and as a job summary. One annotation, not one per
+    line: GitHub keeps at most 10 notice annotations per step."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    body = "\n".join(lines)
+    escaped = body.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::notice title=memory_items storage::{escaped}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write(f"### memory_items storage\n\n```\n{body}\n```\n")
 
 
 if __name__ == "__main__":
