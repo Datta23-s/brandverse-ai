@@ -58,7 +58,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 | P2 | Use the Supabase **service key** in client-side code | Bypasses RLS entirely — total tenant compromise |
 | P3 | Query a tenant table without an `org_id` filter | Cross-tenant leak |
 | P4 | Create a table with `org_id` and no RLS policy in the same migration | The policy will be forgotten |
-| P5 | Hardcode a model ID outside `config/models.yaml` | Gemini 2.5 retires 16 Oct 2026; scattered IDs make the migration impossible |
+| P5 | Hardcode a model ID outside `config/models.yaml` | Provider IDs, prices and dimensionality drift without notice; scattered IDs make a migration impossible |
 | P6 | Call an LLM without passing through the LiteLLM gateway | Bypasses budget tracking; makes the evaluation invalid |
 | P7 | Call an LLM without a pre-flight budget check | Breaks the PRD's hard cost cap |
 | P8 | Write to `memory_items` without human approval | Memory poisoning |

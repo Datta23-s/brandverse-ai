@@ -46,7 +46,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 **Exit criteria**
 - [ ] Every team member can explain the 15-step pipeline without notes
 - [ ] `PRD.md` §1.2 departures agreed and rehearsed
-- [ ] Gemini 3.x IDs confirmed against `ai.google.dev` *(2.5 retires 16 Oct 2026)*
+- [ ] Gemini 3.x IDs, prices and embedding dimensionality confirmed against `ai.google.dev` (re-check before every deploy — providers move these without notice)
 - [ ] Test-set design includes repeat requests per brand
 
 ---

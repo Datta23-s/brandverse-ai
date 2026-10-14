@@ -155,7 +155,7 @@ Set `hnsw.ef_search = 100` per session for recall. Below roughly 10,000 rows HNS
 
 | Decision | Value |
 |---|---|
-| Model | `text-embedding-004` (768 dimensions) |
+| Model | `gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072; Google normalises the shortened vector). Model ID lives only in `config/models.yaml`, never here or in an env var. |
 | Chunking | Semantic, 200–400 tokens, 15% overlap |
 | Normalisation | Lowercase, strip boilerplate, collapse whitespace. Never strip numbers or units. |
 | Storage | `vector(768)`, cosine distance |

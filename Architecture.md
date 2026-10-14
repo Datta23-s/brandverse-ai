@@ -75,8 +75,8 @@ A single prompt with web search would produce *a* campaign. It would not produce
 
 ## 4. Model layer and routing
 
-> ### CRITICAL — model deprecation
-> **All Gemini 2.5 models shut down on 16 October 2026.** Any code written against `gemini-2.5-flash`, `gemini-2.5-pro` or `gemini-2.5-flash-lite` will break. Pin the Gemini 3 family. Verify current IDs at `ai.google.dev` before first deploy, and never hardcode a model ID outside `config/models.yaml`.
+> ### Model selection and drift
+> Gemini 3.x is pinned for better cost/capability than 2.5 — **not** because 2.5 has an announced shutdown (as of 14 Oct 2026, Google's deprecations page lists no end date for it; an earlier draft of this document wrongly stated one, from a stale search result rather than the live page). Provider deprecation pages and prices change without much notice. Verify current IDs, prices and shutdown dates at `ai.google.dev` before every deploy, and never hardcode a model ID outside `config/models.yaml`.
 
 ### 4.1 Routing tiers
 
@@ -85,7 +85,7 @@ A single prompt with web search would produce *a* campaign. It would not produce
 | **Low-cost** | `gemini-3.1-flash-lite` | Classification, summarisation, query rewriting, metadata extraction, relevance pre-filter | $0.25 / $1.50 |
 | **Standard** | `gemini-3-flash-preview` | Product intelligence, persona analysis, campaign planning, most agent work | $0.50 / $3.00 |
 | **Strong reasoning** | `gemini-3.1-pro-preview` | Conflicting evidence, high-risk claims, final strategy arbitration | $2.00 / $12.00 |
-| **Dedicated media** | `gemini-3.1-flash-image-preview` | Posters, social visuals | per-image |
+| **Dedicated media** | `gemini-3.1-flash-image` (stable; the `-preview` tag shut down 25 Jun 2026) | Posters, social visuals | $0.067 / 1K images |
 | **Fallback** | OSS model via LiteLLM (Hugging Face / local) | Provider outage, budget exhaustion | — |
 
 ### 4.2 Routing policy
@@ -424,7 +424,7 @@ REDIS_URL=                    SEARXNG_URL=
 LANGGRAPH_STRICT_MSGPACK=true
 MAX_COST_PER_RUN_USD=2.50
 MAX_LLM_CALLS_PER_RUN=20
-EMBEDDING_MODEL=text-embedding-004
+# EMBEDDING_MODEL intentionally omitted — model IDs live only in config/models.yaml (Rules.md P5)
 ```
 
 ---

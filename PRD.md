@@ -262,7 +262,7 @@ Enforcement is **pre-flight, not post-hoc**: estimated cost is computed before e
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| R1 | **Gemini 2.5 retires 16 Oct 2026** | Certain | Total outage | Pin Gemini 3.x model IDs from day one. See `Architecture.md` §4. |
+| R1 | **Model IDs and pricing drift** | High | Build breaks or cost estimates go stale | Pin Gemini 3.x model IDs from day one — better price/capability than 2.5, not because 2.5 has an announced shutdown (it does not, as of 14 Oct 2026). Re-verify IDs, prices and shutdown dates at `ai.google.dev` before every deploy. See `Architecture.md` §4. |
 | R2 | Memory poisoning — a bad fact is stored and reused forever | Medium | High | Only approved, sourced facts are written; every memory row carries provenance and can be revoked |
 | R3 | Memory benefit does not appear in evaluation | Medium | Fatal to thesis | Design the test set with deliberate repeat requests (§8) |
 | R4 | SearXNG instance rate-limited or blocked | High | Medium | Self-host; cache aggressively; fall back to a paid SERP API behind the same interface |
