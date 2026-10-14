@@ -26,7 +26,7 @@ The thesis-critical track ships everything the *finding* depends on and defers e
 P0 → P1 → P2 → P3 → P4 → P5 → P6(5 agents) → P7 → P10 → P11
 ```
 
-Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2, A4, A5), P12 Monitoring.
+Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4 and A5 agents, the persistent competitor advertisement repository), P12 Monitoring.
 
 **Never defer:** P4 Memory, P5 Research, P7 Adaptive Intelligence, P10 Evaluation. Those four *are* the thesis.
 
@@ -46,7 +46,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 **Exit criteria**
 - [ ] Every team member can explain the 15-step pipeline without notes
 - [ ] `PRD.md` §1.2 departures agreed and rehearsed
-- [ ] Gemini 3.x IDs confirmed against `ai.google.dev` *(2.5 retires 16 Oct 2026)*
+- [ ] Gemini 3.x IDs, prices and embedding dimensionality confirmed against `ai.google.dev` (re-check before every deploy — providers move these without notice)
 - [ ] Test-set design includes repeat requests per brand
 
 ---
@@ -59,7 +59,8 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 | Next.js 15 app, deployed | Public URL live on Vercel |
 | FastAPI service, deployed | `/health` returns 200 on Render |
 | Supabase project | Auth working, RLS enabled on every tenant table |
-| Core schema | organisations, brands, products, product_claims migrated |
+| Core schema | Full `Architecture.md` §9 schema migrated (`supabase/migrations/0001`–`0008`), including `memory_items` with HNSW + GIN — pulled forward from Phase 4 so the RLS test covers every tenant table from the start |
+| Database test (merge-blocking) | `backend/tests/db/` passes in CI against `pgvector/pgvector:pg17` with the real migrations; required status check |
 | Redis + ARQ worker | A trivial job enqueues and completes |
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
@@ -100,11 +101,15 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 | Claim classifier | Generated statements labelled verified / deduced / restricted |
 | Evidence storage | Source URL and note persisted per claim |
 | Claim validation gate | Unsourced hard claims blocked |
+| Sector constraint registry enforcement | Per-sector required disclaimers and prohibited phrasings enforced by rule in all three gates (`Architecture.md` §8) |
 
 **Exit criteria**
 - [ ] A product with no verified claims cannot start a run
 - [ ] An attempt to generate a restricted claim is blocked and logged
 - [ ] Every claim in a sample output resolves to a source
+- [ ] Output in a regulated sector missing a required disclaimer is blocked
+- [ ] Output containing a registry-prohibited phrasing is blocked
+- [ ] A regulated sector with no active registry entries blocks the run (fails closed)
 
 ---
 
@@ -113,7 +118,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 
 | Deliverable | Done when |
 |---|---|
-| `memory_items` + HNSW + GIN | Migrated with RLS |
+| `memory_items` + HNSW + GIN | Migrated with RLS — **delivered in Phase 1** (migration 0006) |
 | Embedding pipeline | Chunk, embed, store, with model version recorded |
 | `match_memory` RRF function | Deployed and unit-tested |
 | `M`-score calculator | Returns the per-component breakdown |
@@ -158,12 +163,29 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A2
 | Agent | Full track | Thesis-critical |
 |---|---|---|
 | A1 Product & Brand | Phase 6 | **Phase 6** |
+| A2 Market & Advertisement | Phase 6 | **Phase 6** *(live competitor research only — see 6.1)* |
 | A3 Customer Behaviour | Phase 6 | **Phase 6** |
 | A6 Creative Campaign | Phase 6 | **Phase 6** |
 | A7 Trust & Risk | Phase 6 | **Phase 6** |
-| A4 Sector & Evidence | Phase 9 | **Phase 6** *(pulled forward — regulated-sector safety)* |
-| A2 Market & Advertisement | Phase 9 | Deferred |
-| A5 Growth & Pricing | Phase 9 | Deferred |
+| A4 Sector & Evidence | Phase 9 | Deferred to Phase 9 |
+| A5 Growth & Pricing | Phase 9 | Deferred to Phase 9 |
+
+### 6.1 Why this agent set (decided 2026-10-14)
+
+An earlier draft of this table pulled A4 forward into Phase 6 and deferred A2. That was resolved
+in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7**.
+
+- **A4's safety-critical half is not an agent.** Required disclaimers and prohibited phrasings for
+  regulated sectors are deterministic: they come from regulation, not from generation. They are
+  held in the sector constraint registry inside the Validation Engine (`Architecture.md` §8),
+  maintained by humans, enforced by rule, never LLM-generated, and built in Phase 3. Regulated-
+  sector safety therefore does not depend on an agent shipping, and `Rules.md` T4 makes the
+  registry the hard requirement. A4 as a research agent (sourced proof, evolving regulatory
+  context) stays in Phase 9 as drawn.
+- **A2 is split.** In Phase 6, A2 performs live competitor research through the Phase 5 research
+  layer, which is already on the thesis-critical path. The **persistent competitor advertisement
+  repository with change tracking stays in Phase 9**, and Phase 9's exit criteria own it.
+- The regulated sector stays in the evaluation set, covered by the registry rather than by A4.
 
 | Deliverable | Done when |
 |---|---|
@@ -211,10 +233,13 @@ Poster prompts, social ad formats, cartoon concepts, scripts, storyboards. Honou
 ## Phase 9 — Enterprise Capabilities
 **Weeks 15–16 · Deferred in thesis-critical**
 
-A2, A5, deep research mode, multi-country intelligence.
+A4 (Sector & Evidence research agent), A5, the persistent competitor advertisement repository with
+change tracking, deep research mode, multi-country intelligence. A2's live competitor research
+ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 
 **Exit criteria**
-- [ ] Competitor advertisement repository populated and queryable
+- [ ] Competitor advertisement repository populated, queryable and tracking changes over time
+- [ ] A4 runs alongside the sector constraint registry; the registry remains the hard gate (`Rules.md` T4)
 - [ ] Offer architecture appears in generated strategy
 
 ---

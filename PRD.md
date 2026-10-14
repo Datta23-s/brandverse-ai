@@ -138,6 +138,15 @@ Every design decision in this project defends that sentence. If a feature does n
 - Real consumer PII at any point
 - Training a foundation model
 - Mobile native applications
+- **Data export and deletion endpoints.** Required before any real deployment under India's
+  Digital Personal Data Protection (DPDP) Act, 2023; deferred to post-thesis. The thesis build
+  holds no real consumer PII (above).
+- **DPDP erasure vs the append-only `audit_log` — conflict acknowledged.** A data principal's
+  erasure right conflicts with an audit log that cannot be updated or deleted
+  (`Architecture.md` §9). Intended resolution: **retain the audit event, and pseudonymise or
+  tombstone the data subject** within it, with retention of audit records resting on an
+  **independent legal basis**. This is a **deployment-phase decision requiring legal review**,
+  not a schema change now; the append-only guarantee stays as built until that review concludes.
 
 ---
 
@@ -158,7 +167,7 @@ Each step is a node in the orchestration graph. `Architecture.md` gives the impl
 | 9 | Campaign Strategy | All above | Positioning, channels, messaging pillars | — |
 | 10 | Creative Generation | Strategy | Ad copy, headlines, scripts, poster prompts | Honours `max_media_generations` |
 | 11 | Evidence / Trust Validation | Every generated claim | Pass / flag / block per claim | Blocks publish on any unsourced hard claim |
-| 12 | Human Approval | Validated package | Approved / rejected / revise | `max_revision_rounds = 2` |
+| 12 | Human Approval | Validated package | Approved / rejected / revise, decided against `docs/approval-rubric.md` | `max_revision_rounds = 2` |
 | 13 | Final Campaign Intelligence | Approved package | Report, assets, analytics | — |
 | 14 | Performance Feedback | Optional real metrics | Outcome record | Optional |
 | 15 | Validated Knowledge Memory | Approved facts | Embedded memory rows | Writes only verified or approved-deduced facts |
@@ -262,11 +271,11 @@ Enforcement is **pre-flight, not post-hoc**: estimated cost is computed before e
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| R1 | **Gemini 2.5 retires 16 Oct 2026** | Certain | Total outage | Pin Gemini 3.x model IDs from day one. See `Architecture.md` §4. |
+| R1 | **Model IDs and pricing drift** | High | Build breaks or cost estimates go stale | Pin Gemini 3.x model IDs from day one — better price/capability than 2.5, not because 2.5 has an announced shutdown (it does not, as of 14 Oct 2026). Re-verify IDs, prices and shutdown dates at `ai.google.dev` before every deploy. See `Architecture.md` §4. |
 | R2 | Memory poisoning — a bad fact is stored and reused forever | Medium | High | Only approved, sourced facts are written; every memory row carries provenance and can be revoked |
 | R3 | Memory benefit does not appear in evaluation | Medium | Fatal to thesis | Design the test set with deliberate repeat requests (§8) |
 | R4 | SearXNG instance rate-limited or blocked | High | Medium | Self-host; cache aggressively; fall back to a paid SERP API behind the same interface |
-| R5 | Scope overrun — 7 agents is a lot for a student team | High | High | Phase 6 ships 5 agents. A2 and A5 are deferred. See `Phases.md`. |
+| R5 | Scope overrun — 7 agents is a lot for a student team | High | High | Phase 6 ships 5 agents (A1, A2, A3, A6, A7). A4 and A5 are deferred; regulated-sector safety is carried by the sector constraint registry, not A4. See `Phases.md` §6.1. |
 | R6 | Cost cap makes D2 runs useless | Medium | Medium | Tune caps empirically in Phase 10 and report the tuned values |
 | R7 | Examiner asks why the paper's RF engine is missing | Certain | Medium | §1.2 D1 — rehearse it |
 

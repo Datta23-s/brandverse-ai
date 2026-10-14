@@ -1,0 +1,66 @@
+# BrandverseAI — model registry.
+# The ONLY place a model ID may appear in this repository (Rules.md P5).
+#
+# Verified against live provider docs on 2026-10-14:
+#   https://ai.google.dev/gemini-api/docs/models
+#   https://ai.google.dev/gemini-api/docs/deprecations
+#   https://ai.google.dev/gemini-api/docs/pricing
+#   https://ai.google.dev/gemini-api/docs/embeddings
+# Re-verify before first deploy and whenever a shutdown date below is within 60 days.
+# Prices are USD, paid tier, prompts <= 200k tokens.
+
+verified_at: 2026-10-14
+
+tiers:
+  low:
+    provider: gemini
+    id: gemini-3.1-flash-lite
+    status: stable
+    shutdown: 2027-05-07          # replacement named by Google: gemini-3.5-flash-lite
+    price_per_1m_input_usd: 0.25
+    price_per_1m_output_usd: 1.50
+
+  standard:
+    provider: gemini
+    id: gemini-3-flash-preview
+    status: preview
+    shutdown: null                # none announced; Google names gemini-3.6-flash as replacement
+    price_per_1m_input_usd: 0.50
+    price_per_1m_output_usd: 3.00
+
+  strong:
+    provider: gemini
+    id: gemini-3.1-pro-preview
+    status: preview
+    shutdown: null                # none announced
+    price_per_1m_input_usd: 2.00
+    price_per_1m_output_usd: 12.00
+
+  media:
+    # Architecture.md §4.1 names gemini-3.1-flash-image-preview, which shut down 2026-06-25.
+    # This is its stable successor in the same family.
+    provider: gemini
+    id: gemini-3.1-flash-image
+    status: stable
+    shutdown: null                # none announced
+    price_per_1m_input_usd: 0.50
+    price_per_image_1k_usd: 0.067
+
+  fallback:
+    # OSS fallback via LiteLLM (Architecture.md §4.1). Not yet selected — chosen in Phase 2.
+    provider: null
+    id: null
+
+embedding:
+  # Memory.md §5 names text-embedding-004, which shut down 2026-01-14.
+  # gemini-embedding-2 defaults to 3072 dims; output_dimensionality=768 MUST be passed on every
+  # call to match memory_items.embedding vector(768). The provider normalises truncated outputs
+  # for this model (gemini-embedding-001 would require manual normalisation).
+  provider: gemini
+  id: gemini-embedding-2
+  status: stable
+  shutdown: null                  # none announced
+  dimensions: 768
+  dimension_param: output_dimensionality
+  provider_normalises: true
+  price_per_1m_input_usd: 0.20

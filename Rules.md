@@ -58,7 +58,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 | P2 | Use the Supabase **service key** in client-side code | Bypasses RLS entirely — total tenant compromise |
 | P3 | Query a tenant table without an `org_id` filter | Cross-tenant leak |
 | P4 | Create a table with `org_id` and no RLS policy in the same migration | The policy will be forgotten |
-| P5 | Hardcode a model ID outside `config/models.yaml` | Gemini 2.5 retires 16 Oct 2026; scattered IDs make the migration impossible |
+| P5 | Hardcode a model ID outside `config/models.yaml` | Provider IDs, prices and dimensionality drift without notice; scattered IDs make a migration impossible |
 | P6 | Call an LLM without passing through the LiteLLM gateway | Bypasses budget tracking; makes the evaluation invalid |
 | P7 | Call an LLM without a pre-flight budget check | Breaks the PRD's hard cost cap |
 | P8 | Write to `memory_items` without human approval | Memory poisoning |
@@ -134,7 +134,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 | T1 | Every factual claim in output carries `claim_type` and a source reference |
 | T2 | A `restricted` claim never reaches generated copy under any instruction |
 | T3 | Superlatives ("best", "number one", "fastest") require a cited source or are removed |
-| T4 | Regulated sectors (health, finance, children's products) route to the strong tier and require A4 |
+| T4 | Regulated sectors (health, finance, children's products) route to the strong tier and must pass the sector constraint registry. Where A4 is built, it is additionally required. |
 | T5 | The 8 predatory anti-patterns (`Architecture.md` §8) are blocked, not warned |
 | T6 | A campaign cannot reach `approved` without a recorded human action |
 | T7 | Generated creative is watermarked in metadata as AI-assisted |
