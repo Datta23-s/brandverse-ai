@@ -140,9 +140,13 @@ Every design decision in this project defends that sentence. If a feature does n
 - Mobile native applications
 - **Data export and deletion endpoints.** Required before any real deployment under India's
   Digital Personal Data Protection (DPDP) Act, 2023; deferred to post-thesis. The thesis build
-  holds no real consumer PII (above). The deletion design must reconcile with the append-only
-  `audit_log` (`Architecture.md` §9) — for example by pseudonymising actor identifiers rather
-  than deleting rows — and that reconciliation is part of the deferred work.
+  holds no real consumer PII (above).
+- **DPDP erasure vs the append-only `audit_log` — conflict acknowledged.** A data principal's
+  erasure right conflicts with an audit log that cannot be updated or deleted
+  (`Architecture.md` §9). Intended resolution: **retain the audit event, and pseudonymise or
+  tombstone the data subject** within it, with retention of audit records resting on an
+  **independent legal basis**. This is a **deployment-phase decision requiring legal review**,
+  not a schema change now; the append-only guarantee stays as built until that review concludes.
 
 ---
 
