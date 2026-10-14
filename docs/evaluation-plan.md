@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Phase | 0 — must be agreed in writing before Phase 1 |
+| Phase | 0 — D1–D3 agreed 2026-10-14; D4 blocked on `Rules.md` T8 (see §8) |
 | Track | Thesis-critical (5 agents: A1, A3, A4, A6, A7) |
 | Source of truth | `PRD.md` §7–§8, `Memory.md` §7–§8, `Rules.md` §9 |
 | Date | 14 October 2026 |
@@ -32,8 +32,8 @@ All arms share the same cost caps (`PRD.md` §9: 20 LLM calls, 20 searches, 2 re
 - Requests are run **in order per brand** in the Proposed arm, so memory from campaign 1 is
   available to campaigns 2 and 3. Baselines A and B have no memory, so order does not affect them.
 - Each request is run once per arm. Every run is logged to `runs` and `llm_calls`.
-- Write-back in the Proposed arm requires a human approval (`Rules.md` T6). The approval
-  procedure and approver(s) used during evaluation must be recorded.
+- Write-back in the Proposed arm requires a human approval (`Rules.md` T6). One approver
+  handles every run in every arm, working from a written rubric (decision D3, §8).
 
 ## 3. Seed exclusion
 
@@ -65,19 +65,39 @@ coverage, reuse depth (`Memory.md` §8).
 ## 6. Quality
 
 - Rubric and weights per `PRD.md` §7.1.
-- ≥ 2 human raters on all 30 Proposed campaigns (and the matching baseline outputs), blind to arm.
-  Cohen's κ reported per dimension.
+- Two human raters who did not build the agents rate all 30 requests' outputs in every arm,
+  blind to arm. Cohen's κ reported per rubric dimension (decision D2, §8).
 - LLM-judge score reported separately and labelled as such; never blended into the human score.
 
 ## 7. Tuning
 
 `R` and `M` weights are tuned in Phase 10. To avoid tuning on the test set, tuning uses the
-50-query relevance set (`Memory.md` §8) and a held-out set of requests that are not among the 30
-above. Defaults and tuned values are both reported (`Rules.md` A5).
+50-query relevance set (`Memory.md` §8) and a separate tuning set of 10 requests on brands that do
+not appear in the 30-request evaluation set (decision D1, §8). Defaults and tuned values are both
+reported (`Rules.md` A5).
 
-## 8. Needs agreement
+## 8. Decisions
 
-- [ ] Sectors and the 10 brands (fictional brands only — `Rules.md` T8)
-- [ ] Who approves campaigns during evaluation, and by what criteria
-- [ ] Human raters identified (≥ 2)
-- [ ] Held-out tuning request set (§7) — size and source
+| # | Decision | Agreed |
+|---|---|---|
+| D1 | **Tuning set is disjoint from the evaluation set.** 10 tuning requests on 10 brands that do not appear among the 30 evaluation requests. No tuning-set brand, product or request may be used in evaluation, and the harness asserts the two sets share no brand. | 2026-10-14 |
+| D2 | **Two raters who did not build the agents**, rating blind to arm. Cohen's κ reported per rubric dimension. LLM-judge scores reported separately (§6). | 2026-10-14 |
+| D3 | **One approver for all runs**, across all arms, working from a written approval rubric. The rubric is committed to the repo before the first evaluation run and is not changed during evaluation. | 2026-10-14 — rubric not yet written |
+| D4 | **10 brands across ≥ 5 sectors, including ≥ 1 regulated sector, all with real, publicly findable product specs.** | **Blocked** — see below |
+
+### D4 conflict with `Rules.md` T8
+
+T8: *"The system never generates content impersonating a real person or a real brand it does not
+own."* Generating campaigns for real brands' products conflicts with that rule, and `Rules.md` §0
+ranks Rules above every other document and requires the conflict to be resolved explicitly, not
+silently. The sector requirements in D4 do not conflict; only "real brands" does.
+
+Until resolved, the earlier constraint (fictional brands) stands. Options:
+
+| Option | Effect |
+|---|---|
+| (a) Real products, fictional brand names | Specs remain real and verifiable (so verified claims have live sources); brand names, logos and voice are invented. T8 unchanged. Evidence URLs would point at the real manufacturer, which partly reveals the brand. |
+| (b) Amend T8 with a scoped evaluation exception | E.g. real brands permitted for internal, unpublished evaluation outputs only, marked AI-assisted (T7), never deployed or shown publicly. Requires editing `Rules.md`. |
+| (c) Fictional brands and products | Fully T8-compliant, but verified claims have no independent public source, which weakens the evidence-quality dimension. |
+
+The 30-request set itself (which 10 brands, which sectors) is drawn up once D4 is resolved.

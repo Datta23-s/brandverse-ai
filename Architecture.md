@@ -262,7 +262,15 @@ The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated soc
 
 ## 9. Data model
 
-Abbreviated DDL. Full migrations live in `supabase/migrations/`.
+Abbreviated DDL. **`docs/erd.md` is canonical** — it records why each column and constraint exists
+(issues E1–E7). This section must match it; change both in the same commit. Full migrations live in
+`supabase/migrations/`.
+
+**Tenant consistency pattern.** Every tenant table carries its own `org_id` so RLS is a direct
+column check, never a join. A child's `org_id` is forced to equal its parent's by a composite
+foreign key `(parent_id, org_id) → parent (id, org_id)`, so a row can never point across tenants.
+Composite `on delete set null (col)` requires **PostgreSQL 15+** — confirm the Supabase project
+version before the first migration.
 
 ```sql
 create extension if not exists vector;
@@ -281,36 +289,47 @@ create table brands (
   name text not null,
   voice_guidelines text,
   voice_embedding vector(768),
+  voice_embedding_model text,                                     -- E3
+  voice_embedding_version text,                                   -- E3
   sector text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  unique (id, org_id),
+  check (voice_embedding is null
+         or (voice_embedding_model is not null and voice_embedding_version is not null))
 );
 
 create table products (
   id uuid primary key default gen_random_uuid(),
-  brand_id uuid not null references brands(id) on delete cascade,
+  org_id uuid not null references organisations(id) on delete cascade,   -- E1
+  brand_id uuid not null,
   name text not null,
   category text,
   attributes jsonb default '{}'::jsonb,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  unique (id, org_id),
+  foreign key (brand_id, org_id) references brands (id, org_id) on delete cascade
 );
 
 -- The product truth store: the spine of anti-hallucination
 create table product_claims (
   id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
+  org_id uuid not null references organisations(id) on delete cascade,   -- E1
+  product_id uuid not null,
   claim text not null,
   claim_type text not null check (claim_type in ('verified','deduced','restricted')),
   evidence_url text,
   evidence_note text,
   confidence numeric(3,2) check (confidence between 0 and 1),
   created_by text not null,                 -- 'human' | agent id
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  unique (id, org_id),                                                    -- target for E5
+  foreign key (product_id, org_id) references products (id, org_id) on delete cascade
 );
 
 create table runs (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,
-  product_id uuid references products(id),
+  product_id uuid,
   arm text not null default 'proposed'      -- 'baseline_a' | 'baseline_b' | 'proposed'
     check (arm in ('baseline_a','baseline_b','proposed')),
   status text not null default 'queued',
@@ -325,13 +344,16 @@ create table runs (
   latency_ms int,
   budget_exhausted boolean default false,
   created_at timestamptz default now(),
-  completed_at timestamptz
+  completed_at timestamptz,
+  unique (id, org_id),
+  foreign key (product_id, org_id) references products (id, org_id)     -- E7
 );
 
 -- Every call. The evaluation harness reads this table.
 create table llm_calls (
   id bigserial primary key,
-  run_id uuid not null references runs(id) on delete cascade,
+  org_id uuid not null references organisations(id) on delete cascade,   -- E1
+  run_id uuid not null,
   agent_id text,
   model text not null,
   tier text not null,
@@ -339,17 +361,21 @@ create table llm_calls (
   input_tokens int, output_tokens int,
   cost_usd numeric(10,6),
   latency_ms int,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  foreign key (run_id, org_id) references runs (id, org_id) on delete cascade
 );
 
 create table memory_items (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,
-  brand_id uuid references brands(id) on delete cascade,
-  product_id uuid references products(id) on delete set null,
+  brand_id uuid,
+  product_id uuid,
+  claim_id uuid,                                                          -- E5
   kind text not null,                       -- persona | competitor | insight | claim | creative | sector
   content text not null,
   embedding vector(768),
+  embedding_model text,                                                   -- E2
+  embedding_version text,                                                 -- E2
   sector text,
   source_url text,
   provenance text not null,                 -- run id, agent, or 'human'
@@ -357,8 +383,20 @@ create table memory_items (
   freshness_days int,                       -- after which it decays
   approved boolean default false,
   revoked boolean default false,
+  revoked_by uuid,                                                        -- E4
+  revoked_at timestamptz,                                                 -- E4
+  revoked_reason text,                                                    -- E4
+  is_seed boolean not null default false,                                 -- E6
   created_at timestamptz default now(),
-  last_used_at timestamptz
+  last_used_at timestamptz,
+  foreign key (brand_id, org_id)   references brands (id, org_id) on delete cascade,               -- E7
+  foreign key (product_id, org_id) references products (id, org_id)
+    on delete set null (product_id),                                                               -- E7
+  foreign key (claim_id, org_id)   references product_claims (id, org_id)
+    on delete set null (claim_id),                                                                 -- E5
+  check (embedding is null
+         or (embedding_model is not null and embedding_version is not null)),
+  check (not revoked or (revoked_by is not null and revoked_at is not null))
 );
 
 create index on memory_items using hnsw (embedding vector_cosine_ops);
@@ -366,16 +404,24 @@ create index on memory_items using gin (to_tsvector('english', content));
 
 create table campaigns (
   id uuid primary key default gen_random_uuid(),
-  run_id uuid not null references runs(id) on delete cascade,
+  org_id uuid not null references organisations(id) on delete cascade,   -- E1
+  run_id uuid not null,
   strategy jsonb, creative jsonb, validation jsonb,
   status text default 'draft'
     check (status in ('draft','awaiting_approval','approved','rejected')),
   approved_by uuid, approved_at timestamptz,
-  quality_scores jsonb
+  quality_scores jsonb,
+  foreign key (run_id, org_id) references runs (id, org_id) on delete cascade
 );
 ```
 
-**Row-level security is mandatory on every table carrying `org_id`.** Write the policy in the same migration that creates the table, never in a later one.
+Nullable FK columns (`runs.product_id`, `memory_items.brand_id / product_id / claim_id`) use the
+default `MATCH SIMPLE`: when the reference column is null the constraint is not checked, which is
+the intended behaviour for org-wide items.
+
+**Row-level security is mandatory on every table carrying `org_id`** — every table above except
+`organisations`. Write the policy in the same migration that creates the table, never in a
+later one. Every policy is a direct column check; join-based policies are not permitted.
 
 ```sql
 alter table brands enable row level security;
