@@ -59,7 +59,8 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | Next.js 15 app, deployed | Public URL live on Vercel |
 | FastAPI service, deployed | `/health` returns 200 on Render |
 | Supabase project | Auth working, RLS enabled on every tenant table |
-| Core schema | organisations, brands, products, product_claims migrated |
+| Core schema | Full `Architecture.md` §9 schema migrated (`supabase/migrations/0001`–`0008`), including `memory_items` with HNSW + GIN — pulled forward from Phase 4 so the RLS test covers every tenant table from the start |
+| Database test (merge-blocking) | `backend/tests/db/` passes in CI against `pgvector/pgvector:pg17` with the real migrations; required status check |
 | Redis + ARQ worker | A trivial job enqueues and completes |
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
@@ -117,7 +118,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 
 | Deliverable | Done when |
 |---|---|
-| `memory_items` + HNSW + GIN | Migrated with RLS |
+| `memory_items` + HNSW + GIN | Migrated with RLS — **delivered in Phase 1** (migration 0006) |
 | Embedding pipeline | Chunk, embed, store, with model version recorded |
 | `match_memory` RRF function | Deployed and unit-tested |
 | `M`-score calculator | Returns the per-component breakdown |

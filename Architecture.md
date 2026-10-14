@@ -279,7 +279,8 @@ The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated soc
 
 Full DDL. **`docs/erd.md` is canonical** — it records why each column and constraint exists
 (issues E1–E11) and the role matrix. This section must match it; change both in the same commit.
-Migrations in `supabase/migrations/` are cut from this DDL in Phase 1.
+The SQL below is `supabase/migrations/` concatenated in order; a test
+(`backend/tests/test_schema_doc_sync.py`) fails if the two ever differ.
 
 **Tenant consistency.** Every tenant table carries its own `org_id`. A child's `org_id` is forced
 to equal its parent's by a composite foreign key `(parent_id, org_id) → parent (id, org_id)`, so a
@@ -316,11 +317,21 @@ The column defaults (50.00 USD, 10 runs/hour, 60 requests/minute) are **placehol
 values**; set them per organisation and report any values used in evaluation.
 
 ```sql
+-- ═══ supabase/migrations/0001_extensions.sql ═══
+-- 0001: extensions and the app helper schema.
+-- Down (destructive; only on a database with no BrandverseAI data):
+--   drop schema app cascade; drop extension pg_trgm; drop extension vector;
 create extension if not exists vector;
 create extension if not exists pg_trgm;
 create schema if not exists app;
+-- RLS policies call app.has_role() as the caller's role, so the API roles need USAGE.
+grant usage on schema app to anon, authenticated, service_role;
 
--- ── Platform reference data (not tenant data) ────────────────────────────────────────
+-- ═══ supabase/migrations/0002_sectors_and_registry.sql ═══
+-- 0002: sectors and the sector constraint registry (Architecture.md §8.1). Platform reference
+-- data, not tenant data.
+-- Down: drop table sector_constraints; drop table sectors;
+--   drop function app.sector_constraints_versioned();
 create table sectors (
   id text primary key,                              -- e.g. 'health-supplements'
   label text not null,
@@ -328,7 +339,7 @@ create table sectors (
   created_at timestamptz not null default now()
 );
 
--- Sector constraint registry (§8.1). Human-authored only; versioned, never edited in place.
+-- Human-authored only; versioned, never edited in place.
 create table sector_constraints (
   id uuid primary key default gen_random_uuid(),
   sector_id text not null references sectors(id),
@@ -350,7 +361,7 @@ create table sector_constraints (
 );
 
 create function app.sector_constraints_versioned() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'DELETE' then
     raise exception 'sector_constraints rows are retired, never deleted';
@@ -363,7 +374,17 @@ end $$;
 create trigger sector_constraints_versioned before update or delete on sector_constraints
   for each row execute function app.sector_constraints_versioned();
 
--- ── Tenancy ──────────────────────────────────────────────────────────────────────────
+revoke insert, update, delete, truncate on sectors, sector_constraints
+  from public, anon, authenticated;                                       -- admin path only
+
+alter table sectors            enable row level security;
+alter table sector_constraints enable row level security;
+create policy sectors_read on sectors for select to authenticated using (true);
+create policy sector_constraints_read on sector_constraints for select to authenticated using (true);
+
+-- ═══ supabase/migrations/0003_tenancy_and_rbac.sql ═══
+-- 0003: organisations, membership roles (RBAC) and the role check used by every tenant policy.
+-- Down: drop function app.has_role(uuid, text[]); drop table org_members; drop table organisations;
 create table organisations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -375,7 +396,7 @@ create table organisations (
   created_at timestamptz default now()
 );
 
--- RBAC. One row per (org, user, role); a user may hold several roles. Revoked, never deleted.
+-- One row per (org, user, role); a user may hold several roles. Revoked, never deleted.
 create table org_members (
   org_id uuid not null references organisations(id) on delete cascade,
   user_id uuid not null references auth.users(id),
@@ -388,8 +409,8 @@ create table org_members (
   check ((revoked_at is null) = (revoked_by is null))
 );
 
--- Role check used by every tenant RLS policy: the row's own org_id must be the caller's active
--- org (JWT claim) AND the caller must hold one of the roles there. No parent-table walking.
+-- The row's own org_id must be the caller's active org (JWT claim) AND the caller must hold one
+-- of the roles there. No parent-table walking.
 create function app.has_role(p_org uuid, p_roles text[]) returns boolean
 language sql stable security definer set search_path = '' as $$
   select p_org = (auth.jwt() ->> 'org_id')::uuid
@@ -398,6 +419,24 @@ language sql stable security definer set search_path = '' as $$
                    and m.role = any (p_roles) and m.revoked_at is null);
 $$;
 
+alter table organisations enable row level security;
+alter table org_members   enable row level security;
+
+create policy org_read on organisations for select to authenticated
+  using (app.has_role(id, array['owner','editor','approver','viewer']));
+create policy org_owner_update on organisations for update to authenticated
+  using (app.has_role(id, array['owner'])) with check (app.has_role(id, array['owner']));
+
+create policy members_read on org_members for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy members_owner_insert on org_members for insert to authenticated
+  with check (app.has_role(org_id, array['owner']));
+create policy members_owner_update on org_members for update to authenticated
+  using (app.has_role(org_id, array['owner'])) with check (app.has_role(org_id, array['owner']));
+
+-- ═══ supabase/migrations/0004_product_truth.sql ═══
+-- 0004: brands, products and the product truth store.
+-- Down: drop table product_claims; drop table products; drop table brands;
 create table brands (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,
@@ -441,6 +480,44 @@ create table product_claims (
   foreign key (product_id, org_id) references products (id, org_id) on delete cascade
 );
 
+alter table brands         enable row level security;
+alter table products       enable row level security;
+alter table product_claims enable row level security;
+
+-- read any role; write owner/editor; delete owner
+create policy brands_read   on brands for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy brands_insert on brands for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy brands_update on brands for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy brands_delete on brands for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+create policy products_read   on products for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy products_insert on products for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy products_update on products for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy products_delete on products for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+create policy claims_read   on product_claims for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy claims_insert on product_claims for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy claims_update on product_claims for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']));
+create policy claims_delete on product_claims for delete to authenticated
+  using (app.has_role(org_id, array['owner']));
+
+-- ═══ supabase/migrations/0005_runs_and_llm_calls.sql ═══
+-- 0005: runs and the per-call LLM log the evaluation harness and org budget read.
+-- Down: drop table llm_calls; drop table runs;
 create table runs (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,
@@ -481,6 +558,23 @@ create table llm_calls (
 );
 create index on llm_calls (org_id, created_at);
 
+alter table runs      enable row level security;
+alter table llm_calls enable row level security;
+
+-- runs: read any role; start a run owner/editor. Status updates come from the backend.
+create policy runs_read   on runs for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy runs_insert on runs for insert to authenticated
+  with check (app.has_role(org_id, array['owner','editor']));
+
+create policy llm_calls_read on llm_calls for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+
+-- ═══ supabase/migrations/0006_memory_items.sql ═══
+-- 0006: marketing memory (Memory.md).
+-- Indexes are created without CONCURRENTLY: the table is new and empty here, and CONCURRENTLY
+-- cannot run inside a migration transaction. Later indexes on this table must use it (Rules.md §3.3).
+-- Down: drop table memory_items;
 create table memory_items (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,
@@ -518,6 +612,21 @@ create table memory_items (
 create index on memory_items using hnsw (embedding vector_cosine_ops);
 create index on memory_items using gin (to_tsvector('english', content));
 
+revoke update on memory_items from authenticated;                         -- revocation columns only
+grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items to authenticated;
+
+alter table memory_items enable row level security;
+
+-- read any role; owner/editor may revoke (column grant above limits what they can set)
+create policy memory_read   on memory_items for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+create policy memory_revoke on memory_items for update to authenticated
+  using (app.has_role(org_id, array['owner','editor']))
+  with check (app.has_role(org_id, array['owner','editor']) and revoked_by = auth.uid());
+
+-- ═══ supabase/migrations/0007_campaigns.sql ═══
+-- 0007: campaigns and the approval constraint (Rules.md T6).
+-- Down: drop table campaigns; drop function app.campaigns_active_approver();
 create table campaigns (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organisations(id) on delete cascade,   -- E1
@@ -538,13 +647,13 @@ create table campaigns (
 
 -- The role FK cannot see revoked_at; a revoked approver is rejected here.
 create function app.campaigns_active_approver() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = '' as $$
 begin
   if new.approved_by is not null
      and (tg_op = 'INSERT'
           or new.approved_by is distinct from old.approved_by
           or new.status is distinct from old.status)
-     and not exists (select 1 from org_members m
+     and not exists (select 1 from public.org_members m
                      where m.org_id = new.org_id and m.user_id = new.approved_by
                        and m.role = 'approver' and m.revoked_at is null) then
     raise exception 'approved_by must hold an active approver role in this organisation';
@@ -554,7 +663,16 @@ end $$;
 create trigger campaigns_active_approver before insert or update on campaigns
   for each row execute function app.campaigns_active_approver();
 
--- ── Audit log: append-only for every application role ────────────────────────────────
+alter table campaigns enable row level security;
+
+-- read any role. Approval is written by the backend; the FK + trigger enforce that
+-- approved_by is an active approver of this org regardless of who writes it.
+create policy campaigns_read on campaigns for select to authenticated
+  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
+
+-- ═══ supabase/migrations/0008_audit_log.sql ═══
+-- 0008: append-only audit log.
+-- Not reversible by design: dropping the audit trail destroys evidence. A rollback leaves it.
 create table audit_log (
   id bigint generated always as identity primary key,
   occurred_at timestamptz not null default now(),
@@ -568,7 +686,7 @@ create table audit_log (
 );
 
 create function app.audit_log_append_only() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = '' as $$
 begin
   raise exception 'audit_log is append-only: % is not permitted', tg_op;
 end $$;
@@ -577,95 +695,10 @@ create trigger audit_log_no_update_delete before update or delete on audit_log
 create trigger audit_log_no_truncate before truncate on audit_log
   for each statement execute function app.audit_log_append_only();
 
--- ── Privileges ───────────────────────────────────────────────────────────────────────
 revoke update, delete, truncate on audit_log from public, anon, authenticated, service_role;
 revoke insert on audit_log from public, anon, authenticated;              -- backend writes only
-revoke insert, update, delete, truncate on sectors, sector_constraints
-  from public, anon, authenticated;                                       -- admin path only
-revoke update on memory_items from authenticated;                         -- revocation columns only
-grant update (revoked, revoked_by, revoked_at, revoked_reason) on memory_items to authenticated;
 
--- ── Row-level security: role-aware, on the row's own org_id ──────────────────────────
-alter table sectors            enable row level security;
-alter table sector_constraints enable row level security;
-alter table organisations      enable row level security;
-alter table org_members        enable row level security;
-alter table brands             enable row level security;
-alter table products           enable row level security;
-alter table product_claims     enable row level security;
-alter table runs               enable row level security;
-alter table llm_calls          enable row level security;
-alter table memory_items       enable row level security;
-alter table campaigns          enable row level security;
-alter table audit_log          enable row level security;
-
-create policy sectors_read on sectors for select to authenticated using (true);
-create policy sector_constraints_read on sector_constraints for select to authenticated using (true);
-
-create policy org_read on organisations for select to authenticated
-  using (app.has_role(id, array['owner','editor','approver','viewer']));
-create policy org_owner_update on organisations for update to authenticated
-  using (app.has_role(id, array['owner'])) with check (app.has_role(id, array['owner']));
-
-create policy members_read on org_members for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy members_owner_insert on org_members for insert to authenticated
-  with check (app.has_role(org_id, array['owner']));
-create policy members_owner_update on org_members for update to authenticated
-  using (app.has_role(org_id, array['owner'])) with check (app.has_role(org_id, array['owner']));
-
--- brands, products, product_claims: read any role; write owner/editor; delete owner
-create policy brands_read   on brands for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy brands_insert on brands for insert to authenticated
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy brands_update on brands for update to authenticated
-  using (app.has_role(org_id, array['owner','editor']))
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy brands_delete on brands for delete to authenticated
-  using (app.has_role(org_id, array['owner']));
-
-create policy products_read   on products for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy products_insert on products for insert to authenticated
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy products_update on products for update to authenticated
-  using (app.has_role(org_id, array['owner','editor']))
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy products_delete on products for delete to authenticated
-  using (app.has_role(org_id, array['owner']));
-
-create policy claims_read   on product_claims for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy claims_insert on product_claims for insert to authenticated
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy claims_update on product_claims for update to authenticated
-  using (app.has_role(org_id, array['owner','editor']))
-  with check (app.has_role(org_id, array['owner','editor']));
-create policy claims_delete on product_claims for delete to authenticated
-  using (app.has_role(org_id, array['owner']));
-
--- runs: read any role; start a run owner/editor. Status updates come from the backend.
-create policy runs_read   on runs for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy runs_insert on runs for insert to authenticated
-  with check (app.has_role(org_id, array['owner','editor']));
-
-create policy llm_calls_read on llm_calls for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-
--- memory: read any role; owner/editor may revoke (column grant above limits what they can set)
-create policy memory_read   on memory_items for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-create policy memory_revoke on memory_items for update to authenticated
-  using (app.has_role(org_id, array['owner','editor']))
-  with check (app.has_role(org_id, array['owner','editor']) and revoked_by = auth.uid());
-
--- campaigns: read any role. Approval is written by the backend; the FK + trigger enforce
--- that approved_by is an active approver of this org regardless of who writes it.
-create policy campaigns_read on campaigns for select to authenticated
-  using (app.has_role(org_id, array['owner','editor','approver','viewer']));
-
+alter table audit_log enable row level security;
 create policy audit_owner_read on audit_log for select to authenticated
   using (org_id is not null and app.has_role(org_id, array['owner']));
 ```

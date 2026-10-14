@@ -255,7 +255,7 @@ differs from its parent's, and assert it is rejected.
 |---|---|---|---|---|---|
 | `organisations` | read | read | read | read, update | all |
 | `org_members` | read | read | read | read, add, revoke | all |
-| `brands`, `products`, `product_claims` | read | read | read, insert, update | + delete | all |
+| `brands`, `products`, `product_claims` | read | read | read, insert, update | + delete¹ | all |
 | `runs` | read | read | read, start | read, start | status updates |
 | `llm_calls` | read | read | read | read | insert |
 | `memory_items` | read | read | read, **revoke only** | read, **revoke only** | insert (after approval, `Rules.md` P8) |
@@ -263,22 +263,37 @@ differs from its parent's, and assert it is rejected.
 | `audit_log` | — | — | — | read own org | **insert only** |
 | `sectors`, `sector_constraints` | read | read | read | read | admin path writes |
 
+¹ A product (and so its brand) that has runs cannot be deleted by anyone: `runs` are the
+evaluation's raw logs (`Rules.md` A1) and the `runs → products` FK has no delete action.
+
 "Revoke only": `authenticated` holds column-level `update` on the four revocation columns of
 `memory_items` and nothing else, and the policy requires `revoked_by = auth.uid()`.
 
 ## 5. Schema test record
 
-**2026-10-14** — `Architecture.md` §9 DDL applied to a throwaway **PostgreSQL 16.2** (embedded,
-Windows) with stand-ins for Supabase's `auth.users`, `auth.uid()`, `auth.jwt()` and the
-`anon` / `authenticated` / `service_role` roles and default grants. Differences from production:
-pgvector and pg_trgm were unavailable, so `vector(768)` was replaced by `real[]`, the HNSW index
-was skipped, and the `pg_trgm` extension line was skipped (no trigram operator is used).
-**39 of 39 checks passed**, covering: cross-org composite FKs, sector FK, every row of the role
-matrix above, memory revoke-but-not-approve, approver FK and revoked-approver trigger, audit log
-append-only for service role and for the table owner (update, delete, truncate), registry
-versioning and authorship, org cap check, and `on delete set null (product_id)`.
+The schema is tested by `backend/tests/db/` (merge-blocking, `Rules.md` §6), which applies
+`supabase/migrations/` **unmodified** to `pgvector/pgvector:pg17` (pinned by digest in CI) after a
+test-only platform stub (`backend/tests/db/supabase_platform_stub.sql`): Supabase's API roles and
+default grants, a minimal `auth.users`, and `auth.uid()` / `auth.jwt()` copied verbatim from
+Supabase's own auth migrations. Requests are simulated the way PostgREST does it: `set local role
+authenticated` plus the `request.jwt.claims` GUC. Policy text under test is the deployed text.
 
-Not tested here: behaviour on Supabase itself (custom JWT `org_id` claim, real `auth` schema),
-pgvector, and anything in application code — including the registry's fail-closed rule, which is
-enforced by the Validation Engine (Phase 3), not by the schema. The test harness is not yet in the
-repository: it needs `pgserver` and `psycopg`, which are new dependencies (`Rules.md` §1.2).
+| Date | Environment | Result |
+|---|---|---|
+| 2026-10-14 | Scratch harness, PostgreSQL 16.2 (embedded), pgvector/pg_trgm stripped | 39/39 — superseded: the harness pre-created schema `app` with grants, masking finding F1 |
+| 2026-10-14 | `backend/tests/db/` on PostgreSQL 16.2 (embedded) with migrations copied to a scratch dir and pgvector/pg_trgm/HNSW stripped (logic check only, not the gate) | 55 passed; 2 failed as expected (extension and HNSW tests need real pgvector) |
+| — | `backend/tests/db/` on `pgvector/pgvector:pg17` (CI / Docker) | **not yet run** — no GitHub remote, and Docker's engine was not running locally |
+
+Findings from moving the schema into migrations:
+
+- **F1 (fixed).** No migration granted the API roles `USAGE` on schema `app`, so every RLS policy
+  calling `app.has_role()` would have failed on Supabase with "permission denied for schema app".
+  The first harness hid this by creating the schema itself. Fixed in `0001_extensions.sql`.
+- **F2 (test corrected, schema unchanged).** A product with runs cannot be deleted (see ¹ in §4);
+  the original test assumed it could.
+- All `app.*` functions now pin `search_path = ''` and schema-qualify table references.
+
+Not covered by these tests: Supabase's real `auth` service and its custom-claim hook that must put
+`org_id` in the JWT; whether pgvector is installed in Supabase's `extensions` schema (the
+migrations create it in the default schema); and application code beyond the two Phase 1
+application-layer checks.

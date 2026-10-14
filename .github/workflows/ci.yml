@@ -29,8 +29,44 @@ jobs:
         run: uv run ruff check .
       - name: Type check
         run: uv run mypy
-      - name: Test
-        run: uv run pytest -q
+      - name: Test (no database)
+        run: uv run pytest -q -m "not db"
+
+  database:
+    # Merge-blocking (Rules.md §6): tenant isolation, RBAC, approval and audit-log guarantees,
+    # tested against the real migrations on real pgvector + pg_trgm. Make this a required status
+    # check in branch protection.
+    name: Database (RLS, merge-blocking)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # pgvector/pgvector:pg17, pinned by multi-arch digest (tag last updated 2026-10-01)
+        image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      REQUIRE_DB_TESTS: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+          working-directory: backend
+      - name: Install (locked)
+        run: uv sync --locked
+      - name: Database tests
+        run: uv run pytest -q -m db
 
   frontend:
     # Phase 0: workspace + lockfile validation only. Lint, type check, test and build
