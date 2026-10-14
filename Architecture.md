@@ -1040,7 +1040,8 @@ research findings (Phase 5); both are measured before the evaluation.
 **Environment variables**
 
 ```
-SUPABASE_URL=                 SUPABASE_SERVICE_KEY=
+SUPABASE_URL=                 SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=          DATABASE_URL=
 GOOGLE_API_KEY=               LITELLM_MASTER_KEY=
 REDIS_URL=                    SEARXNG_URL=
 LANGGRAPH_STRICT_MSGPACK=true

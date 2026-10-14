@@ -11,6 +11,7 @@ Usage: TEST_DATABASE_URL=... python scripts/measure_memory_storage.py [--rows N]
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import psycopg
@@ -18,6 +19,12 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "backend"))
+from tests.db.target_guard import (  # noqa: E402 — needs the path above
+    ManagedSupabaseTarget,
+    check_not_managed_supabase,
+)
+
 STUB = REPO_ROOT / "backend" / "tests" / "db" / "supabase_platform_stub.sql"
 DB_NAME = "brandverse_storage_measure"
 ORG = "00000000-0000-0000-0000-000000000001"
@@ -50,6 +57,10 @@ def main() -> None:
     args = ap.parse_args()
 
     url = os.environ["TEST_DATABASE_URL"]
+    try:
+        check_not_managed_supabase(url)  # drops and recreates a database: never Supabase
+    except ManagedSupabaseTarget as e:
+        raise SystemExit(str(e)) from None
     with psycopg.connect(url, autocommit=True) as admin:
         name = sql.Identifier(DB_NAME)
         admin.execute(sql.SQL("drop database if exists {} with (force)").format(name))

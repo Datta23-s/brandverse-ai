@@ -1,7 +1,8 @@
 """Database fixtures: a fresh database with the real migrations applied, and per-test transactions.
 
 Needs a PostgreSQL with pgvector and pg_trgm (CI: pgvector/pgvector:pg17 service container).
-Set TEST_DATABASE_URL to a superuser connection on a throwaway server. With REQUIRE_DB_TESTS=1
+Set TEST_DATABASE_URL to a superuser connection on a throwaway server; a managed Supabase host is
+refused before any connection (target_guard.py). With REQUIRE_DB_TESTS=1
 (set in CI) a missing database is a failure, not a skip, so these tests can never pass silently.
 """
 
@@ -16,6 +17,8 @@ import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
+
+from tests.db.target_guard import ManagedSupabaseTarget, check_not_managed_supabase
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "supabase" / "migrations"
@@ -45,6 +48,13 @@ def db_url() -> str:
         if os.environ.get("REQUIRE_DB_TESTS") == "1":
             pytest.fail("REQUIRE_DB_TESTS=1 but TEST_DATABASE_URL is not set")
         pytest.skip("TEST_DATABASE_URL not set; database tests skipped locally")
+
+    # These tests drop and recreate a database: never against the Supabase project. Stops the
+    # whole session before any connection is opened.
+    try:
+        check_not_managed_supabase(url)
+    except ManagedSupabaseTarget as e:
+        pytest.exit(str(e), returncode=pytest.ExitCode.USAGE_ERROR)
 
     with psycopg.connect(url, autocommit=True) as admin:
         name = sql.Identifier(TEST_DB_NAME)
