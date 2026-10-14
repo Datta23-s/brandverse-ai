@@ -378,9 +378,8 @@ undecided — is a row in `approvals` (`docs/approval-rubric.md` §5): campaign,
 outcome, failed gate, reason, seconds spent, arm inference and its note, decision time. The
 approver is constrained exactly as `campaigns.approved_by` is (role FK + active-approver trigger);
 a reason is required on anything but `approve`; direct `update` and `delete` are revoked from
-every application role, so a re-score after a rubric amendment is a new row (limits: see the
-stated limitation under "Audit log" below — a cascade from `runs` or `organisations`, and the
-table owner). `campaigns.approved_by` stays the operational
+every application role, so a re-score after a rubric amendment is a new row (limit: the table
+owner — see the stated limitation under "Audit log" below). `campaigns.approved_by` stays the operational
 approval state; `campaigns.quality_scores` holds only the blind raters' scores and never the
 approver's decision. Calibration decisions (`docs/approval-rubric.md` §6) are rows here too, made
 in a practice organisation where the second scorer holds `approver`, and flagged
@@ -407,40 +406,64 @@ are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejec
 > `postgres`, so **no in-database protection against the owner is possible**: whatever `postgres`
 > installs, `postgres` can remove.
 >
-> As of 2026-10-14 there are also two gaps **for the application roles themselves**:
-> `service_role` (the backend) holds `DELETE` on `memory_items`, `runs` and `organisations`, so it
-> can hard-delete memory, and deleting a run or an organisation cascades into `campaigns` and
-> `approvals`. Until those grants are revoked (option 1 below), "never deleted" for memory items
-> and approval decisions is a code convention, not an enforced property.
+> State on the project after migration 0010 (checked 2026-10-14):
 >
 > | Table | Claim | Holds against the application roles | Holds against `postgres` |
 > |---|---|---|---|
-> | `audit_log` | append-only | Yes | No |
-> | `approvals` | append-only | Direct `update`/`delete`: yes. Via `delete` on `runs` or `organisations` (cascade): **no** | No |
-> | `sector_constraints` | never edited in place or deleted | Yes (trigger) | No |
-> | `memory_items` | never hard-deleted (`Memory.md` §6.4) | `authenticated`: yes (no delete policy). `service_role`: **no** | No |
-> | `org_members` | roles revoked, never deleted | `authenticated`: yes (no delete policy). `service_role`: **no**, except a membership an approval references (foreign key) | No |
+> | `audit_log` | append-only | Yes (grants revoked; trigger also blocks `truncate`) | No |
+> | `approvals` | append-only | Yes: direct `update`/`delete`/`truncate` revoked, and since 0010 no application role can delete the `runs` or `organisations` rows that would cascade into it | No |
+> | `memory_items` | never hard-deleted (`Memory.md` §6.4) | Directly: yes (0010). **Via a brand: no** — `memory_items.brand_id` is `on delete cascade`, and org owners (policy) and `service_role` may delete brands | No |
+> | `org_members` | roles revoked, never deleted | Yes (0010) | No |
+> | `sector_constraints` | never edited in place or deleted | `update`/`delete`: yes (trigger). **`truncate` by `service_role`: no** — the trigger fires on `delete` only, and the grant is not revoked | No |
+> | `llm_calls` | raw logs, retained (`Rules.md` A1) | **No**: `service_role` holds `delete` and `truncate`; `anon` and `authenticated` hold `truncate` | No |
 >
-> **Hardening that is possible, and its cost** (checked on the project 2026-10-14; none built):
-> 1. **Close the application-role gaps** — a new migration revoking `delete` on `memory_items`,
->    `runs`, `campaigns`, `organisations` and `org_members` from `anon`, `authenticated` and
->    `service_role`, so
->    deletion of those becomes a deliberate `postgres` operation. Real prevention for application
->    code. Cost: one small migration and tests; organisation deletion then needs a documented
->    manual procedure.
-> 2. **Tamper evidence for the owner case** — a hash chain on `audit_log` (and `approvals`): a
->    before-insert trigger stores `sha256(previous hash ‖ row)` (`pgcrypto` `digest()` is available),
->    inserts serialised by an advisory lock, and the head hash is anchored outside the database,
->    committed to git with the weekly `pg_dump`. An altered or deleted past row breaks the chain
->    detectably unless the anchors are rewritten too. Detection, not prevention. Cost: one
->    migration, a verification script, the weekly anchoring step; zero rupees; negligible at this
->    volume.
-> 3. **Dump comparison** — the weekly `pg_dump` (§11) already gives point-in-time copies; diffing
->    successive dumps detects changes to rows older than the previous dump. Cost: a diff script.
+> `TRUNCATE` ignores row-level security, and Supabase's default privileges grant it to all three
+> application roles on every new table; on `brands`, `products` and `product_claims` it is blocked
+> today only because their foreign keys would cascade into `memory_items`. Proposed next fix, not
+> yet approved: a migration revoking `delete` and `truncate` on `llm_calls`, `sector_constraints`
+> and `sectors`, and `truncate` on every remaining table, from the application roles; and
+> `memory_items.brand_id` changed to `on delete no action`, so a brand with memory cannot be
+> deleted (the same rule as a product with runs).
+>
+> **Decisions on hardening (2026-10-14):**
+> 1. **Revoking application-role deletes — done, as a correctness fix, not hardening:**
+>    migration 0010. The application role deleting rows the design keeps was a violation of the
+>    documented design (`Memory.md` §6.4, approvals' append-only property), not a platform limit.
+> 2. **Hash chain — approved in principle, deferred, scoped to `approvals` and `audit_log`.** A
+>    before-insert trigger stores `sha256(previous hash ‖ row)` (`pgcrypto` `digest()` is
+>    available), inserts serialised by an advisory lock; the head hash is anchored outside the
+>    database, committed to git with the weekly `pg_dump`. **Built and verified before
+>    calibration begins** (`Phases.md` Phase 10). Its value is evidential: `Rules.md` A1 requires
+>    every reported number to trace to a raw log, and the chain is how the project shows that
+>    approvals and audit events were not edited after the fact. It is **detection, not
+>    prevention**, and is claimed as nothing more.
+> 3. **Diffing successive weekly dumps — declined** as redundant with the hash chain: the chain
+>    detects any altered or deleted row, including rows written between two dumps, which dump
+>    diffing cannot see.
 > 4. *Not available:* transferring ownership to a role `postgres` cannot use (PostgreSQL requires
 >    the current owner to be able to `SET ROLE` to the new owner — denied on the project), and an
 >    event trigger blocking DDL (allowed, but owned by `postgres`, which can drop it; it only adds
 >    a step).
+>
+> **Stale comments in migrations.** Migrations 0002 (`sector_constraints rows are retired, never
+> deleted`) and 0003 (`Revoked, never deleted`) carry comments written before this block. They
+> state a guarantee that does not hold against the table owner, and they **cannot be edited** under
+> the `Rules.md` §3.3 trigger. A reader finding them should read this section instead.
+
+**Deleting an organisation — manual procedure.** Since 0010 no application role can delete an
+organisation; it is a deliberate operation by `postgres`, the table owner:
+
+1. **Never while its runs, campaigns or approvals are evaluation evidence** (`Rules.md` A1): the
+   cascade removes them. Archive first, or do not delete.
+2. Take a `pg_dump` of the project and keep it.
+3. Append an `audit_log` row recording who is deleting which organisation, and why
+   (`actor_type = 'user'`, `action = 'delete_organisation'`).
+4. In the SQL editor (or `psql` as `postgres` through the session pooler), in one transaction:
+   `delete from organisations where id = '<org id>';` — the foreign keys cascade to its members,
+   brands, products, claims, runs, LLM calls, memory, campaigns and approvals. `audit_log` rows are
+   kept: they carry no foreign key.
+5. Confirm the expected rows are gone, then commit. A DPDP erasure request follows the separate
+   procedure in `PRD.md` (pending legal review), not this one.
 
 **Organisation budget and rate limits.** Checked alongside the per-run cap (`PRD.md` §9), never
 instead of it:
@@ -948,6 +971,18 @@ alter table approvals enable row level security;
 -- approver_id is an active approver of this org regardless of who writes it.
 create policy approvals_read on approvals for select to authenticated
   using (org_id in (select app.member_org_ids()));
+
+-- ═══ supabase/migrations/0010_revoke_app_role_deletes.sql ═══
+-- 0010: correctness fix (Architecture.md §9, stated limitation; Memory.md §6.4).
+-- The application roles could delete rows the design says are never deleted: service_role could
+-- hard-delete memory_items, and deleting a run or an organisation cascaded into campaigns and
+-- approvals, defeating approvals' append-only property. Deleting from these tables is now a
+-- deliberate postgres operation (Architecture.md §9, "Deleting an organisation").
+-- TRUNCATE is revoked with DELETE: it removes rows without any row-level check.
+-- Down: grant delete, truncate on memory_items, runs, campaigns, organisations, org_members
+--   to anon, authenticated, service_role;
+revoke delete, truncate on memory_items, runs, campaigns, organisations, org_members
+  from public, anon, authenticated, service_role;
 ```
 
 ---
@@ -1069,7 +1104,7 @@ moment every schema change is a new migration — no in-place edits, no exceptio
 | `pg_trgm` | 1.6, in `public` |
 | Database size | 10.8 MB empty (Supabase's own schemas), 11.7 MB after the migrations |
 | Result | 13 tables, row-level security on every one, 27 policies, 7 `app.*` functions, 6 triggers |
-| Migration history | Applied with psycopg, not the Supabase CLI: there is **no** `supabase_migrations` history table. Each later migration is applied the same way and recorded here with its date and commit, until a CLI-based workflow is adopted. |
+| Migration history | 0001–0009 were applied with psycopg; the Supabase CLI was adopted the same day, before 0010. `supabase migration repair --status applied 0001 … 0009` recorded them in `supabase_migrations.schema_migrations`, and **0010 was applied with `supabase db push`** (2026-10-14 15:13 UTC). The CLI accepts the `NNNN_name.sql` convention (all ten listed, none skipped). |
 
 **Decision (2026-10-14): `vector` and `pg_trgm` stay in `public`.** `create extension` puts them
 in the first existing schema on the search path, which is `public` both on Supabase and in CI.
@@ -1115,6 +1150,21 @@ are re-compared after any restore or upgrade.
 Conclusion: in everything the RLS policies depend on — the two auth functions, the API roles'
 RLS-relevant attributes and the default grants — the stub matches the platform, so the CI
 database suite's policy results transfer. A separate suite against the live project was not built.
+
+### Applying migrations — Supabase CLI (adopted 2026-10-14)
+
+Every migration from 0010 on is applied with the Supabase CLI, pinned to **2.120.0** and run
+through `npx` (no global install), against the session pooler string:
+
+```
+npx supabase@2.120.0 migration list --db-url "$DATABASE_URL"     # repo vs project, before and after
+npx supabase@2.120.0 db push --dry-run --db-url "$DATABASE_URL"  # shows exactly what will apply
+npx supabase@2.120.0 db push --db-url "$DATABASE_URL"
+```
+
+`supabase_migrations.schema_migrations` on the project is the record of what has been applied;
+`migration list` must show local and remote identical after every push. The full database suite
+passes on CI's pgvector image before a push, never after.
 
 ### Database connections from the laptop — session pooler only
 

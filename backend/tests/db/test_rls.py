@@ -693,3 +693,38 @@ def test_owner_still_updates_org_budget(tx: Tx) -> None:
         (tx.seed.org_a,),
     )
     assert len(updated) == 1
+
+
+# ── Application roles cannot delete what the design keeps (0010) ─────────────────────────
+
+_NO_DELETE = ["memory_items", "runs", "campaigns", "organisations", "org_members"]
+
+
+@pytest.mark.parametrize("table", _NO_DELETE)
+@pytest.mark.parametrize("stmt", ["delete from {}", "truncate {}"])
+def test_service_role_cannot_delete_or_truncate(tx: Tx, table: str, stmt: str) -> None:
+    tx.as_service_role()
+    _raises_permission(tx, stmt.format(table))
+
+
+@pytest.mark.parametrize("table", _NO_DELETE)
+def test_org_owner_cannot_delete(tx: Tx, table: str) -> None:
+    tx.as_user("owner_a")
+    _raises_permission(tx, f"delete from {table}")  # noqa: S608 - table from fixed list
+
+
+def test_backend_cannot_cascade_away_approvals(tx: Tx) -> None:
+    _decide(tx)
+    tx.execute("savepoint s")
+    tx.as_service_role()
+    _raises_permission(tx, "delete from runs where id = %s", (tx.seed.run_a,))
+    tx.execute("rollback to savepoint s")
+    assert len(tx.execute("select id from approvals")) == 1
+
+
+def test_table_owner_can_still_delete_an_organisation(tx: Tx) -> None:
+    # The documented manual procedure (Architecture.md §9) runs as the table owner, which 0010
+    # does not restrict; here the CI superuser stands in for postgres.
+    org = tx.execute("insert into organisations (name) values ('doomed') returning id")[0][0]
+    tx.execute("delete from organisations where id = %s", (org,))
+    assert tx.execute("select id from organisations where id = %s", (org,)) == []

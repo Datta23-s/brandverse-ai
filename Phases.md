@@ -270,6 +270,7 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | Quality rubric scoring | ≥ 2 human raters on ≥ 30 campaigns, Cohen's κ reported |
 | Weight tuning | `R` and `M` weights tuned; defaults and tuned values both reported |
 | Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
+| **Hash chain on `approvals` and `audit_log`** | Built and verified **before calibration begins** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on — detection, not prevention |
 
 **Exit criteria**
 - [ ] Every reported number traces to a committed raw log
