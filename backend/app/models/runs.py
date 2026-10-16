@@ -25,7 +25,10 @@ def utc_now() -> datetime:
 
 
 class _Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # Output schemas list every field as required: the API always emits defaulted fields too.
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, json_schema_serialization_defaults_required=True
+    )
 
 
 # ── API in / out ────────────────────────────────────────────────────────────────────────────

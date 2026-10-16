@@ -27,3 +27,9 @@ Thumbs.db
 
 # Supabase CLI local state (version cache, link info) — machine-local
 supabase/.temp/
+
+# Next.js / Playwright
+next-env.d.ts
+playwright-report/
+test-results/
+blob-report/

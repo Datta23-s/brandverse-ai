@@ -56,7 +56,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 
 | Deliverable | Done when |
 |---|---|
-| Next.js 15 app, deployed | Public URL live on Vercel |
+| Next.js 15 app, running locally | Runs on the laptop against the local API (amended 2026-10-16; public deployment is Phase 11 — see below) |
 | FastAPI service, deployed | `/health` returns 200 on the laptop (worker-host decision, `Architecture.md` §11; Render free has no workers) |
 | Supabase project | Auth working, RLS enabled on every tenant table |
 | Core schema | Full `Architecture.md` §9 schema migrated (`supabase/migrations/0001`–`0008`), including `memory_items` with HNSW + GIN — pulled forward from Phase 4 so the RLS test covers every tenant table from the start |
@@ -70,6 +70,16 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 - [ ] The fake pipeline animates in the browser
 
 > Building the SSE stream in Phase 1 against a fake run is the highest-leverage decision in this plan. It gives you a demo from week 3 and a debugging surface for everything after.
+
+**Amended 2026-10-16 — no public Vercel URL in Phase 1, stated plainly.** The original deliverable
+was "Public URL live on Vercel". It is not achievable in this phase: the API, the ARQ worker and
+Redis run on the developer's laptop (`Architecture.md` §11, worker-host decision), and a
+Vercel-hosted frontend cannot reach them without a tunnel exposing the laptop's services, which
+this project does not build. The run view needs the API for every request and the SSE stream, so
+a public frontend would have nothing to talk to. In Phase 1 the Next.js app therefore runs
+locally against the local API. The public deployment — the frontend on Vercel serving a seeded,
+read-only demo path — is Phase 11 work, amended the same way and for the same reason (Phase 11,
+"Limitation, stated plainly").
 
 ---
 

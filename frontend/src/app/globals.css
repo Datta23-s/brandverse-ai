@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Design tokens — Design.md §3, §5, §6. The single source; Tailwind reads them via @theme. */
+:root {
+  /* Base */
+  --bv-void: #05060f;
+  --bv-deep: #0a0d1c;
+  --bv-surface: #111528;
+  --bv-border: #1e2440;
+
+  /* Brand — colour carries meaning (Design.md §3); never decorative */
+  --bv-primary: #5eead4; /* aqua: retrieved from memory */
+  --bv-secondary: #8b7cf6; /* violet: newly generated */
+  --bv-accent: #fbbf24; /* amber: verified by evidence */
+  --bv-danger: #fb7185; /* rose: blocked, risky, failed */
+
+  /* Text */
+  --bv-text: #eef1f8;
+  --bv-text-muted: #9aa3bd;
+  --bv-text-faint: #5c6484;
+
+  /* Effects */
+  --bv-glass: rgba(255, 255, 255, 0.045);
+  --bv-glass-edge: rgba(255, 255, 255, 0.1);
+  --bv-glow: 0 0 48px rgba(94, 234, 212, 0.18);
+
+  /* Radius */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 22px;
+  --r-full: 999px;
+
+  /* Motion */
+  --m-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --m-base: 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  --m-slow: 650ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bv-void: var(--bv-void);
+  --color-bv-deep: var(--bv-deep);
+  --color-bv-surface: var(--bv-surface);
+  --color-bv-border: var(--bv-border);
+  --color-bv-primary: var(--bv-primary);
+  --color-bv-secondary: var(--bv-secondary);
+  --color-bv-accent: var(--bv-accent);
+  --color-bv-danger: var(--bv-danger);
+  --color-bv-text: var(--bv-text);
+  --color-bv-muted: var(--bv-text-muted);
+  --color-bv-faint: var(--bv-text-faint);
+  --color-bv-glass: var(--bv-glass);
+  --color-bv-glass-edge: var(--bv-glass-edge);
+
+  --radius-bv-sm: var(--r-sm);
+  --radius-bv-md: var(--r-md);
+  --radius-bv-lg: var(--r-lg);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--bv-void);
+  color: var(--bv-text);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
+/* Design.md §5: elevation from border luminance and blur, not shadows. */
+.glass {
+  background: var(--bv-glass);
+  border: 1px solid var(--bv-glass-edge);
+  backdrop-filter: blur(20px) saturate(140%);
+  border-radius: var(--r-lg);
+}
+
+/* Design.md §10: a visible 2px aqua focus ring on every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--bv-primary);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* An in-progress step breathes: motion that means "working" (Design.md §6 rule 1). */
+@keyframes bv-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+.bv-breathe {
+  animation: bv-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes bv-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.bv-enter {
+  animation: bv-enter var(--m-base) both;
+}
+
+/* Design.md §6 rule 2 / N10: reduced motion stops motion — it does not reduce it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

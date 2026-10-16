@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # The fake 15-step run (Phases.md Phase 1). Never mounted in production.
     fake_runs_enabled: bool = True
 
+    # Browser origins allowed to call the API: the local Next.js app (Phases.md Phase 1, amended).
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     @field_validator("database_url")
     @classmethod
     def _session_pooler_only(cls, v: SecretStr | None) -> SecretStr | None:

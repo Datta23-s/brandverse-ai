@@ -1223,7 +1223,23 @@ docker compose up -d redis              # repo root compose.yaml: redis:7.4-alpi
 uv run python -m app.api                # FastAPI on 127.0.0.1:8000
 uv run python -m app.workers            # ARQ worker
 uv run python -m scripts.enqueue_ping   # smoke test: a trivial job enqueues and completes
+npm run dev -w frontend                 # from the repo root: Next.js on 127.0.0.1:3000
 ```
+
+- **Frontend (Phase 1 chunk B1, 2026-10-16).** Next.js 15 App Router, run locally against the
+  local API (Phase 1 amended: no public URL until Phase 11). The run view (`/runs/{id}`) streams
+  with `fetch`, not `EventSource`: it sends `Last-Event-ID` itself when it reconnects, and
+  authenticated streaming needs an `Authorization` header, which `EventSource` cannot send. It
+  reproduces `EventSource`'s behaviour explicitly — reconnect after the server's `retry:` delay
+  (doubling on consecutive failures, capped at 30 s, giving up after 8), resume with
+  `Last-Event-ID`, stop quietly on `204`, stop with an error on `404`/`403`. Every event is
+  validated against the contract before it reaches the view. The API allows CORS from
+  `http://localhost:3000` and `http://127.0.0.1:3000` only (`cors_origins`).
+- **Shared contracts.** `backend/scripts/export_contracts.py` writes the run contracts (the 15
+  steps and the JSON Schemas of the request, response and events) to
+  `frontend/src/contracts/run-contracts.json`. A backend test fails if that file is stale; a
+  frontend test fails if the zod schemas disagree with it (fields, required fields, bounds,
+  enums). The frontend reads the step list from the file rather than retyping it.
 
 - **Settings** (`app/core/config.py`): pydantic-settings, read once from the environment and the
   repository's `.env`; nothing else reads `os.environ`. `DATABASE_URL` is validated (a

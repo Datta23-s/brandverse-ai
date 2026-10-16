@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health, runs
 from app.api.deps import Resources
@@ -64,6 +65,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await redis.aclose(close_connection_pool=True)
 
     app = FastAPI(title="BrandverseAI API", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["GET", "POST"],
+        # Last-Event-ID: the run view resumes a dropped stream (it streams with fetch, not
+        # EventSource, so it sends the header itself).
+        allow_headers=["Content-Type", "Last-Event-ID"],
+    )
     app.include_router(health.router)
     # The stream endpoint is the real pipeline's too; only the fake trigger is gated.
     app.include_router(runs.router)
