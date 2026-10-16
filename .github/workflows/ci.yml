@@ -17,6 +17,22 @@ jobs:
   backend:
     name: Backend (lint, type, test)
     runs-on: ubuntu-24.04
+    services:
+      redis:
+        # Same image as the laptop (compose.yaml, Architecture.md §11).
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # The queue, the worker and the SSE stream are tested against real Redis; a missing Redis
+      # fails the job rather than skipping those tests.
+      REDIS_TEST_URL: redis://127.0.0.1:6379/15
+      REQUIRE_REDIS_TESTS: "1"
     defaults:
       run:
         working-directory: backend

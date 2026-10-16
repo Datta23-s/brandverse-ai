@@ -57,7 +57,7 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | Deliverable | Done when |
 |---|---|
 | Next.js 15 app, deployed | Public URL live on Vercel |
-| FastAPI service, deployed | `/health` returns 200 on Render |
+| FastAPI service, deployed | `/health` returns 200 on the laptop (worker-host decision, `Architecture.md` §11; Render free has no workers) |
 | Supabase project | Auth working, RLS enabled on every tenant table |
 | Core schema | Full `Architecture.md` §9 schema migrated (`supabase/migrations/0001`–`0008`), including `memory_items` with HNSW + GIN — pulled forward from Phase 4 so the RLS test covers every tenant table from the start |
 | Database test (merge-blocking) | `backend/tests/db/` passes in CI against `pgvector/pgvector:pg17` with the real migrations; required status check |

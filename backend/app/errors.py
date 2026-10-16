@@ -7,3 +7,11 @@ class BrandverseError(Exception):
 
 class ApprovalNotPermitted(BrandverseError):
     """The actor may not approve this campaign (Rules.md T6)."""
+
+
+class RunEventCorrupt(BrandverseError):
+    """A run-progress stream holds an entry that is not a valid run event."""
+
+
+class JobNotEnqueued(BrandverseError):
+    """ARQ refused to enqueue a job (a job with the same ID already exists)."""

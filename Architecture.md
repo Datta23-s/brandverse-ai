@@ -1025,6 +1025,8 @@ alter table memory_items
 | `POST` | `/api/v1/runs` | Start a campaign run → `202` + `run_id` |
 | `GET` | `/api/v1/runs/{id}` | Status, current step, budget consumed |
 | `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI |
+| `POST` | `/api/v1/runs/fake` | Phase 1: start a fake 15-step run (no LLM, no pipeline) → `202` + `run_id`; never mounted in production |
+| `GET` | `/health`, `/health/ready` | Liveness (no dependencies); readiness (Redis and database, `503` if either fails) |
 | `POST` | `/api/v1/runs/{id}/approve` | Resume the interrupted graph |
 | `POST` | `/api/v1/runs/{id}/revise` | Request revision (bounded by `max_revision_rounds`) |
 | `GET` | `/api/v1/campaigns/{id}` | Final package with evidence |
@@ -1211,6 +1213,49 @@ connection holds one server connection for its whole life. Keep the laptop's tot
 fixed: one pool per process, sized explicitly — about 5 connections across API, ARQ worker and
 LangGraph checkpointer together — never a library default, and never one connection per
 concurrent agent (agents share the worker's pool). Raise it only with a measured reason.
+
+### Runtime on the laptop — as built (Phase 1 chunk A, 2026-10-16)
+
+From `backend/`, with Docker Desktop running:
+
+```
+docker compose up -d redis              # repo root compose.yaml: redis:7.4-alpine, AOF on, bound to 127.0.0.1
+uv run python -m app.api                # FastAPI on 127.0.0.1:8000
+uv run python -m app.workers            # ARQ worker
+uv run python -m scripts.enqueue_ping   # smoke test: a trivial job enqueues and completes
+```
+
+- **Settings** (`app/core/config.py`): pydantic-settings, read once from the environment and the
+  repository's `.env`; nothing else reads `os.environ`. `DATABASE_URL` is validated (a
+  `postgresql://` URL with a host; the transaction pooler's port 6543 is refused) and never
+  echoed in a validation error.
+- **Connection budget, enforced at load.** API pool `max 2`, worker pool `max 2`, LangGraph
+  checkpointer `1` reserved (Phase 6): 5 in total, and `Settings` refuses any combination over
+  `db_connection_budget = 5`. Pools use `min_size = 0` and close connections idle for 120 s, so
+  an idle process holds no server connection. Supavisor replaces the client's `application_name`
+  with `Supavisor` in `pg_stat_activity`, so per-process attribution is not visible server-side
+  (checked 2026-10-16); the budget is enforced by pool sizing, not observed per process.
+- **Event loop.** psycopg's async mode refuses Windows' default `ProactorEventLoop`, so the API
+  (uvicorn `loop="asyncio:SelectorEventLoop"`) and the worker (`asyncio.run(..., loop_factory=
+  SelectorEventLoop)`) both run on a selector loop.
+- **`127.0.0.1`, not `localhost`.** On this laptop `localhost` tries `::1` first and takes about
+  2 s to fall back (measured 2026-10-16: 2.08 s against 0.02 s), longer than ARQ's 1 s connect
+  timeout. Redis defaults to `redis://127.0.0.1:6379/0`.
+- **Jobs are JSON, not pickle.** ARQ's serializer is replaced; every payload is a Pydantic model
+  dumped to JSON and validated again by the job.
+- **Run progress** is a Redis Stream per run (`run:{id}:events`, TTL 7 days, MAXLEN ~1000). The
+  API writes `run.queued` before enqueueing; the worker writes the rest. The SSE endpoint replays
+  and then follows the stream: SSE `event` is the event type (`run.queued`, `run.started`,
+  `step`, `run.completed`, `run.failed`), `id` is the stream entry ID (`Last-Event-ID` resumes
+  after it; reconnecting after the final event gets `204`, which stops `EventSource`), `data` is
+  the event as JSON. Step events carry `step` (1–15), `name` and `status`
+  (`started`/`completed`/`skipped`/`failed`). Step names come from `app/core/pipeline.py`, which a
+  test keeps in line with §5.1; step 6 is `research` (`focused_research`/`deep_research`, skipped
+  at D0) and step 7 is `run_agents` (`select_agents` then the fan-out).
+- **Logs** are JSON lines on stdout, `run_id` bound per run through a context variable,
+  ASCII-escaped (a redirected stdout on Windows is cp1252 and ARQ logs `→`).
+- **Not yet built:** authentication and the org check on reading a run's stream. Run IDs are
+  random UUIDs and the API listens on 127.0.0.1 only, which is not access control.
 
 ### Storage per `memory_items` row
 

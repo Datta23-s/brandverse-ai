@@ -1,0 +1,25 @@
+# Local services on the worker host (Architecture.md §11: the laptop is the worker host).
+# Start with:  docker compose up -d redis
+name: brandverse
+
+services:
+  redis:
+    # Version verified on the laptop 2026-10-14 (Architecture.md §11).
+    image: redis:7.4-alpine
+    # AOF on so queued ARQ jobs and run-progress streams survive a laptop restart.
+    # appendfsync everysec: at most one second of writes lost on a crash.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    ports:
+      # Bound to localhost only: nothing on the network should reach the queue.
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redis-data:
