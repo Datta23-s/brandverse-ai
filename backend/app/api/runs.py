@@ -3,8 +3,10 @@
 `GET /api/v1/runs/{id}/stream` is the endpoint the real pipeline will stream through from Phase 6;
 only `POST /api/v1/runs/fake` is specific to Phase 1.
 
-Not yet here (chunk B and later): authentication and the org check on reading a run's stream.
-Run IDs are random UUIDs and the API listens on localhost only, but that is not access control.
+The stream endpoint has no authentication or organisation check yet (chunk B). Until it does, the
+stream guard below refuses every run that is not a fake run, so no real run is ever streamable
+unauthenticated. Remove the guard only in the change that adds authentication and the org check
+(Architecture.md §11, "Unauthenticated stream guard").
 """
 
 import logging
@@ -21,7 +23,7 @@ from app.core.logging import bind_run_id
 from app.core.run_events import STREAM_START, at_or_before, parse_entry_id
 from app.errors import JobNotEnqueued
 from app.models.runs import FakeRunJob, FakeRunRequest, RunAccepted, RunFailed, RunQueued
-from app.workers.jobs import RUN_FAKE_PIPELINE
+from app.workers.jobs import RUN_FAKE_PIPELINE, fake_run_job_id
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
@@ -47,11 +49,12 @@ async def start_fake_run(
         # Written before enqueueing, so the stream exists (and can be subscribed to) immediately.
         await resources.events.append(RunQueued(run_id=run_id, mode="fake"))
         try:
+            job_id = fake_run_job_id(run_id)
             queued = await resources.redis.enqueue_job(
-                RUN_FAKE_PIPELINE, job.model_dump(mode="json"), _job_id=f"fake-run:{run_id}"
+                RUN_FAKE_PIPELINE, job.model_dump(mode="json"), _job_id=job_id
             )
             if queued is None:
-                raise JobNotEnqueued(f"job fake-run:{run_id} already exists")
+                raise JobNotEnqueued(f"job {job_id} already exists")
         except Exception as e:
             log.exception("fake run could not be enqueued")
             await resources.events.append(
@@ -60,6 +63,28 @@ async def start_fake_run(
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "run queue unavailable") from e
         log.info("fake run queued", extra={"request": job.request.model_dump(mode="json")})
     return RunAccepted(run_id=run_id, stream_url=stream_path(run_id))
+
+
+UNAUTHENTICATED_STREAM_REFUSAL = (
+    "streaming is limited to fake runs until authentication and the organisation check exist"
+    " (Architecture.md §11, unauthenticated stream guard)"
+)
+
+
+async def refuse_unless_fake_run(run_id: UUID, resources: ResourcesDep) -> None:
+    """UNAUTHENTICATED STREAM GUARD — remove only together with authentication + org check.
+
+    Fails closed: a run streams only if its first event is `run.queued` with mode `fake`. A real
+    run, a stream whose first event is anything else, or one whose first event was trimmed away,
+    is refused.
+    """
+    first = await resources.events.first(run_id)
+    if first is not None and isinstance(first.event, RunQueued) and first.event.mode == "fake":
+        return
+    log.warning(
+        "refused to stream a non-fake run without authentication", extra={"run": str(run_id)}
+    )
+    raise HTTPException(status.HTTP_403_FORBIDDEN, UNAUTHENTICATED_STREAM_REFUSAL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +105,7 @@ async def stream_cursor(
     last = await resources.events.last(run_id)
     if last is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such run, or its events have expired")
+    await refuse_unless_fake_run(run_id, resources)
 
     # A malformed Last-Event-ID is not trusted as a position: replay from the start.
     after = STREAM_START
@@ -96,6 +122,7 @@ async def stream_cursor(
     response_class=EventSourceResponse,
     responses={
         status.HTTP_204_NO_CONTENT: {"description": "Run already finished at Last-Event-ID"},
+        status.HTTP_403_FORBIDDEN: {"description": "Not a fake run: no streaming without auth"},
         status.HTTP_404_NOT_FOUND: {"description": "Unknown run, or its events expired"},
     },
 )

@@ -70,6 +70,14 @@ class RunEventLog:
             entry_id, _ = await tx.execute()
         return _text(entry_id)
 
+    async def first(self, run_id: UUID) -> StoredEvent | None:
+        """The oldest event still in the stream, or None if the run has no stream."""
+        entries = await self._redis.xrange(stream_key(run_id), count=1)
+        if not entries:
+            return None
+        entry_id, fields = entries[0]
+        return _decode(run_id, entry_id, fields)
+
     async def last(self, run_id: UUID) -> StoredEvent | None:
         """The most recent event, or None if the run has no stream (unknown or expired)."""
         entries = await self._redis.xrevrange(stream_key(run_id), count=1)

@@ -7,6 +7,7 @@ import pytest
 from app.core.pipeline import PIPELINE_STEPS
 from app.models.runs import FakeRunJob, FakeRunRequest, RunEvent, StepEvent
 from app.workers.fake_run import execute_fake_run
+from app.workers.jobs import fake_run_job_id, run_id_from_job_id
 
 pytestmark = pytest.mark.anyio
 
@@ -83,3 +84,10 @@ async def test_simulated_failure_stops_the_run() -> None:
     assert events[-1].type == "run.failed"
     assert events[-1].step == 4  # type: ignore[union-attr]
     assert not any(isinstance(e, StepEvent) and e.step > 4 for e in events)
+
+
+def test_run_id_round_trips_through_the_job_id() -> None:
+    run_id = uuid4()
+    assert run_id_from_job_id(fake_run_job_id(run_id)) == run_id
+    assert run_id_from_job_id("4897066c975940bda7d098f4fe9880d4") is None  # e.g. a ping job
+    assert run_id_from_job_id("fake-run:not-a-uuid") is None

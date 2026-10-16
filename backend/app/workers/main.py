@@ -16,7 +16,7 @@ from app.core.db import create_db_pool, ping_database
 from app.core.logging import configure_logging
 from app.core.redis import arq_redis_settings, json_deserializer, json_serializer
 from app.core.run_events import RunEventLog
-from app.workers.jobs import PING, RUN_FAKE_PIPELINE, ping, run_fake_pipeline
+from app.workers.jobs import PING, RUN_FAKE_PIPELINE, bind_job_run_id, ping, run_fake_pipeline
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ def build_worker(settings: Settings, *, burst: bool = False) -> Worker:
         ],
         redis_settings=arq_redis_settings(settings),
         on_startup=on_startup,
+        on_job_start=bind_job_run_id,
         on_shutdown=on_shutdown,
         ctx={"settings": settings},
         burst=burst,

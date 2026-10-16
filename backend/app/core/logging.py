@@ -26,6 +26,15 @@ def current_run_id() -> str | None:
     return _run_id.get()
 
 
+def set_run_id(run_id: str) -> None:
+    """Bind `run_id` for the rest of the current task (and tasks it starts).
+
+    Only for code that runs at the start of a task it does not own, such as an ARQ job hook;
+    elsewhere use `bind_run_id`, which restores the previous value.
+    """
+    _run_id.set(run_id)
+
+
 @contextmanager
 def bind_run_id(run_id: str) -> Iterator[None]:
     """Attach `run_id` to every log line emitted inside this block (and tasks it starts)."""

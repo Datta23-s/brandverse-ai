@@ -15,6 +15,9 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, m
 from app.core.pipeline import PIPELINE_STEPS, TOTAL_STEPS
 
 ResearchDepth = Literal["D0", "D1", "D2"]
+# "fake": the Phase 1 fake run. "pipeline": the real LangGraph pipeline (Phase 6). The SSE
+# endpoint streams only "fake" until authentication exists (app/api/runs.py, the stream guard).
+RunMode = Literal["fake", "pipeline"]
 
 
 def utc_now() -> datetime:
@@ -76,7 +79,7 @@ class RunQueued(_Event):
     """Written by the API before the job is enqueued, so the stream exists from the start."""
 
     type: Literal["run.queued"] = "run.queued"
-    mode: Literal["fake"]
+    mode: RunMode
     total_steps: int = TOTAL_STEPS
 
 

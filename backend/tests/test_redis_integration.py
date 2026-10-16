@@ -5,6 +5,9 @@ with only the pipeline itself faked (Phases.md Phase 1).
 """
 
 import asyncio
+import io
+import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -16,14 +19,24 @@ import uvicorn
 from fastapi import FastAPI
 
 from app.api.main import create_app
+from app.api.runs import UNAUTHENTICATED_STREAM_REFUSAL
 from app.core.config import Settings
+from app.core.logging import configure_logging
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.redis import create_arq_pool
 from app.core.run_events import RunEventLog, stream_key
 from app.errors import RunEventCorrupt
 from app.models.jobs import PingJob, PingResult
-from app.models.runs import RunCompleted, RunQueued, RunStarted, StepEvent, StepStatus
-from app.workers.jobs import PING
+from app.models.runs import (
+    FakeRunJob,
+    FakeRunRequest,
+    RunCompleted,
+    RunQueued,
+    RunStarted,
+    StepEvent,
+    StepStatus,
+)
+from app.workers.jobs import PING, RUN_FAKE_PIPELINE, fake_run_job_id
 from app.workers.main import build_worker
 from tests.conftest import make_settings
 from tests.sse import SseMessage, parse_stream
@@ -236,6 +249,40 @@ async def test_malformed_last_event_id_replays_from_start(redis_settings: Settin
     assert [(m.event, m.id, m.data) for m in replay] == [(m.event, m.id, m.data) for m in full]
 
 
+async def test_real_run_is_refused_while_stream_is_unauthenticated(
+    redis_settings: Settings,
+) -> None:
+    """The unauthenticated stream guard: a real (pipeline) run must never be streamable.
+
+    Remove this test only together with the guard, in the change that adds authentication and
+    the org check (Architecture.md §11).
+    """
+    run_id = uuid4()
+    async with event_log(redis_settings) as log:
+        await log.append(RunQueued(run_id=run_id, mode="pipeline"))
+        await log.append(RunStarted(run_id=run_id))
+        last = await log.append(RunCompleted(run_id=run_id))
+    async with api(redis_settings) as client:
+        r, _ = await read_stream(client, run_id)
+        resumed, _ = await read_stream(client, run_id, last_event_id=last)
+    assert r.status_code == 403
+    assert r.json() == {"detail": UNAUTHENTICATED_STREAM_REFUSAL}
+    assert r.headers["content-type"] == "application/json"  # no event stream was opened
+    # The guard runs before the resume logic: no 204 that would confirm the run exists and ended.
+    assert resumed.status_code == 403
+
+
+async def test_stream_not_opened_by_a_fake_run_is_refused(redis_settings: Settings) -> None:
+    # Fails closed: no `run.queued` with mode "fake" first (missing, trimmed, or never written).
+    run_id = uuid4()
+    async with event_log(redis_settings) as log:
+        await log.append(RunStarted(run_id=run_id))
+        await log.append(RunCompleted(run_id=run_id))
+    async with api(redis_settings) as client:
+        r, _ = await read_stream(client, run_id)
+    assert r.status_code == 403
+
+
 async def test_unknown_run_is_404(redis_settings: Settings) -> None:
     async with api(redis_settings) as client:
         r = await client.get(f"/api/v1/runs/{uuid4()}/stream")
@@ -331,3 +378,37 @@ async def test_events_arrive_live_while_the_run_progresses(redis_settings: Setti
 def test_step_status_values_are_the_wire_values() -> None:
     assert [s.value for s in StepStatus] == ["started", "completed", "skipped", "failed"]
     assert StepEvent.model_fields["status"].annotation is StepStatus
+
+
+# ── run_id on ARQ's own log lines (Rules.md P12) ─────────────────────────────────────────────
+
+
+async def test_arq_log_lines_carry_the_run_id(redis_settings: Settings) -> None:
+    run_id = uuid4()
+    job = FakeRunJob(run_id=run_id, request=FakeRunRequest(step_delay_ms=0))
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    captured = io.StringIO()
+    pool = await create_arq_pool(redis_settings)
+    try:
+        configure_logging("INFO", stream=captured)
+        await pool.enqueue_job(
+            RUN_FAKE_PIPELINE, job.model_dump(mode="json"), _job_id=fake_run_job_id(run_id)
+        )
+        await pool.enqueue_job(PING, {"message": "no run"})
+        await drain_queue(redis_settings)
+    finally:
+        root.handlers[:] = saved_handlers
+        root.setLevel(saved_level)
+        await pool.aclose(close_connection_pool=True)
+
+    lines = [json.loads(line) for line in captured.getvalue().splitlines()]
+    arq_lines = [e for e in lines if e["logger"] == "arq.worker"]
+    fake = [e for e in arq_lines if fake_run_job_id(run_id) in e["msg"]]
+    pings = [e for e in arq_lines if ":ping(" in e["msg"] or ":ping " in e["msg"]]
+    # ARQ's start (→) and finish (←) lines for the run's job carry its run_id ...
+    assert any("→" in e["msg"] for e in fake) and any("←" in e["msg"] for e in fake)
+    assert {e["run_id"] for e in fake} == {str(run_id)}
+    # ... as do the job's own lines, and a job that belongs to no run gets none (no leakage).
+    assert {e["run_id"] for e in lines if e["logger"] == "app.workers.fake_run"} == {str(run_id)}
+    assert pings and {e["run_id"] for e in pings} == {None}

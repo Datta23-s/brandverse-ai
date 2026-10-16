@@ -1024,7 +1024,7 @@ alter table memory_items
 |---|---|---|
 | `POST` | `/api/v1/runs` | Start a campaign run → `202` + `run_id` |
 | `GET` | `/api/v1/runs/{id}` | Status, current step, budget consumed |
-| `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI |
+| `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI. Until authentication lands, fake runs only (`403` otherwise; §11, unauthenticated stream guard) |
 | `POST` | `/api/v1/runs/fake` | Phase 1: start a fake 15-step run (no LLM, no pipeline) → `202` + `run_id`; never mounted in production |
 | `GET` | `/health`, `/health/ready` | Liveness (no dependencies); readiness (Redis and database, `503` if either fails) |
 | `POST` | `/api/v1/runs/{id}/approve` | Resume the interrupted graph |
@@ -1253,9 +1253,21 @@ uv run python -m scripts.enqueue_ping   # smoke test: a trivial job enqueues and
   test keeps in line with §5.1; step 6 is `research` (`focused_research`/`deep_research`, skipped
   at D0) and step 7 is `run_agents` (`select_agents` then the fan-out).
 - **Logs** are JSON lines on stdout, `run_id` bound per run through a context variable,
-  ASCII-escaped (a redirected stdout on Windows is cp1252 and ARQ logs `→`).
-- **Not yet built:** authentication and the org check on reading a run's stream. Run IDs are
-  random UUIDs and the API listens on 127.0.0.1 only, which is not access control.
+  ASCII-escaped (a redirected stdout on Windows is cp1252 and ARQ logs `→`). ARQ's own lines
+  carry `run_id` too: the worker's `on_job_start` hook binds it from the job ID
+  (`fake-run:{run_id}`) inside the job's task, before ARQ logs the job's start. Lines ARQ logs
+  before that hook (job expired, undecodable, max retries exceeded) have no `run_id`.
+
+**Unauthenticated stream guard (2026-10-16).** `GET /api/v1/runs/{id}/stream` has no
+authentication and no organisation check yet. Until it does, it **refuses every run that is not
+a fake run** with `403`: a run streams only if its first event is `run.queued` with mode `fake`,
+and anything else — a real (`pipeline`) run, a stream opened by any other event, or one whose
+first event was trimmed — is refused (fail closed, before any 204/resume logic, so a refusal
+does not even confirm whether the run finished). Run IDs being random UUIDs and the API
+listening on 127.0.0.1 is not access control. **The guard is removed only in the change that
+adds authentication and the org check (chunk B)**, together with its tests
+(`test_real_run_is_refused_while_stream_is_unauthenticated`,
+`test_stream_not_opened_by_a_fake_run_is_refused`), never on its own.
 
 ### Storage per `memory_items` row
 
