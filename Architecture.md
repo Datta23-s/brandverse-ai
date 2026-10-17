@@ -2064,6 +2064,15 @@ rollback left nothing, the role included. Live rows before the push: 0 runs, 0 c
 the post-apply read matched the dry run, and a full read of every table's delete/truncate posture
 and every `app.*` function (50 checks) against `test_table_posture.py` found no mismatch.
 
+0021 (rule provenance; two new trigger functions; four synthetic rule rows) had the same
+procedure after CI passed on `fb5f2cf`: the rolled-back dry run showed `rules_provenance` arriving
+NOT NULL with default `illustrative` on all nine sectors, `source_url` and `created_by` nullable
+under the new `sector_constraints_source` CHECK, both trigger functions with pinned `search_path`
+as stated, exactly the four synthetic rules (no URL, no author, the fixed source sentence), and no
+write grant on `sectors` for `anon` or `authenticated`; the rollback left nothing. Pushed with the
+CLI **2026-10-17 16:04 UTC**; `migration list` identical through 0021; the post-apply read matched
+and the full posture comparison found no mismatch (52 checks).
+
 ### Live project — permanent footprint
 
 What the live Supabase project holds that is not evaluation data, and why. Application roles
@@ -2078,7 +2087,8 @@ what is in the database is written down, not reconstructed. **Read on 2026-10-17
 | 2 `organisations` + 2 `org_members` | `E2E Org A`, `E2E Org B`, each with its user as owner | One org per E2E user; created through `app.create_organisation` by `scripts/ensure_e2e_users.py` | `is_test = true` (0020), set 2026-10-17 by that script for organisations its own users own; every evaluation read filters it (`backend/tests/db/test_test_organisations.py`) |
 | 1 `auth.users`, 1 `organisations`, 1 `org_members` | The project owner's account and organisation `Datta` | Phase 1 exit criterion: the owner's own sign-up, through the real form and confirmation email. Kept as the owner's demo and exploration organisation: anything clicked through there is not evaluation data | `is_test = true`, set 2026-10-17 by `scripts/flag_test_organisation.py --owner-email <owner> --name Datta` — found through its owner **and** its name, exactly one match required, so an evaluation organisation the same person owns can never be flagged by it |
 | 1 `brands`, 1 `products` | `Capstone Project` (sector not yet chosen) and `SHampoo`, in `Datta` | The Phase 1 sign-up → brand → product evidence, kept in place (`Phases.md` Phase 1) | `Datta`'s `is_test` flag |
-| 9 `sectors` | The sector keys (0018) | Registry keys `brands.sector` references | Reference data, not evaluation data |
+| 9 `sectors` | The sector keys (0018), all `rules_provenance = 'illustrative'` (0021) | Registry keys `brands.sector` references | Reference data, not evaluation data; every report naming a sector prints its provenance |
+| 4 `sector_constraints` (0021, 2026-10-17 16:04 UTC) | `health-supplements`: prohibited phrase `miracle cure`; prohibited regex `guaranteed\s+results?`; required disclaimer on all output "Illustrative disclaimer (synthetic rule): consult a qualified professional before use."; required disclaimer triggered by `protein` "Illustrative disclaimer (synthetic rule): protein content varies by serving size." Each: `source_url` null, `source_note` "Synthetic rule, not derived from any regulation. Illustrative only.", `created_by` null | The illustrative rule set that lets the regulated sector run and exercises both rule kinds (§8.1). Retired, never deleted (0002 trigger) — replacing them with a cited set is a deployment step | Reference data, not evaluation data |
 | **Run fixture**, 3 rows, created 2026-10-17 15:16 UTC by the first live E2E run after 0017 | In `E2E Org A`: brand `E2E run fixture` (`4bd4db13-97c6-4296-b923-598316c22cdd`, sector `footwear`); product `E2E fixture shoe` (`c1308e7b-0fcd-4d26-9269-e2a6572dbb52`); verified claim "Upper made of recycled mesh" (`deeb1b96-65b0-4b0f-8e30-4a547f813cd5`), evidence `https://example.com/e2e-fixture-spec`, `created_by = 'human'`, `entered_by` = the E2E A user (derived by the 0017 trigger) | From Phase 3 a run needs a product with an active verified claim, so the run-view and tenancy specs need one. Kept and reused (`frontend/e2e/support.ts`, `ensureRunnableProduct`) rather than re-created per run. The claim cannot be deleted (0017). The brand and product have no runs, so the org owner *could* delete them, cascading the claim; the specs never do. The ids are recorded here as a description of what exists, not as a filter | `E2E Org A`'s `is_test` flag |
 | 9 `audit_log` rows, then about 3 per full live E2E run | All in `E2E Org A`. First run (15:16–15:17 UTC): `brand.sector_set` × 2 (the two setup specs' brands), `run.blocked` × 1 (`no_verified_claims`), `brand.sector_set` × 3 for fixture brands. Second run (15:22–15:23 UTC): `brand.sector_set` × 2, `run.blocked` × 1 | Every sector change and every gate block is audited (0019, admission); append-only. **Two of the first run's fixture audits belong to duplicate fixture brands** a race in `ensureRunnableProduct` created (it counted brands before the list had loaded); the two empty duplicates were deleted by the backend role at 15:18 UTC, the helper was fixed to wait for each list, and their audit rows remain — the trail of the mistake, not removed | Not read by the evaluation; rows carry `E2E Org A`'s id |
 
@@ -2087,7 +2097,7 @@ a product with no runs cascades to its claims); none of these remain. Developmen
 calls never go to the live project; they are logged to the local throwaway database (§4.4,
 tally). Live counts at the read above: `brands` 2, `products` 2, `product_claims` 1 (the
 fixture's), `audit_log` 9, `runs`, `llm_calls`, `memory_items`, `campaigns`, `approvals` and
-`sector_constraints` all 0. Every organisation on the project is `is_test = true`; none is an
+`sector_constraints` all 0; after 0021 (16:04 UTC), `sector_constraints` 4. Every organisation on the project is `is_test = true`; none is an
 evaluation organisation yet.
 
 A new kind of lasting row added to the live project is added to this table in the same change.
