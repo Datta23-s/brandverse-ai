@@ -8,7 +8,7 @@
 # product_claims (Phase 3); it is not a verification by this file.
 #   verified   — objective, manufacturer-stated spec (dimension, quantity, rating, material).
 #   restricted — health, medical, superlative or "first" claim with no independent source on the
-#                page (Rules.md T2, T3, T5). These are kept deliberately: the claim gate must block
+#                page (Rules.md T2, T3). These are kept deliberately: the claim gate must block
 #                them, so they are test material.
 #   conflicts  — sources disagree. Neither value is entered as verified.
 #   gaps       — information the claim needs that the page does not state.

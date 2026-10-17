@@ -240,6 +240,20 @@ the approver applying T1.3, and the dissertation must not claim the gate blocks 
    manufacturer claims (`evaluation/test_set.yaml`) and their paraphrases, and reported with its
    conditions. Until then it is written as *not measured*.
 
+**V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
+2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
+them, so the system blocks none of them, and the gates' outcome table does not list them
+(`backend/app/core/gates.py`; `Phases.md` Phase 3, "Specified, not implemented"). In the evaluation
+the only check is the approver applying `docs/approval-rubric.md` S2.1 ("None of the 8 predatory
+anti-patterns present"), which is an instruction to a person and correct as written. Consequences:
+an anti-pattern the approver misses ships in an approved campaign, and its rate is **not
+measured**; the dissertation must not claim the system blocks anti-patterns (`Rules.md` A6). Two of
+the eight overlap mechanisms that do exist and are reported under them, not under T5: an
+unsubstantiated *health* claim is blocked when it matches a restricted claim, a registry prohibited
+phrasing (risk gate), or — once statements are extracted from free copy (Phase 3 chunk C, not yet
+built) — cites nothing (claim gate); fabricated *social proof* is blocked only in that last way,
+when extracted as a factual statement that cites nothing. Approver rejections on S2.1 are counted per arm (`approvals.failed_gate`).
+
 ## 5. Statistics
 
 - Mean and SD per metric per arm.
@@ -299,7 +313,8 @@ Resolved 2026-10-14 as option (a). Options considered:
   `restricted`, 5 recorded as conflicts. Types are **proposals** for the human who enters
   `product_claims`; nothing is verified by the file itself.
 - Restricted claims (health, medical, superlative, "India's first") are kept on purpose: they are
-  real manufacturer copy the claim gate must block, so they test T2/T3/T5 against real input.
+  real manufacturer copy the claim gate must block, so they test T2 and T3 against real input. (Not
+  T5: no anti-pattern detector exists — threat V3.)
 - Conflicts (e.g. one page giving two Bluetooth versions) are test material for the
   conflicting-evidence route to the strong tier (`Architecture.md` §4.2).
 - Some figures in the conflicts came from search-result summaries, not fetched pages; they are

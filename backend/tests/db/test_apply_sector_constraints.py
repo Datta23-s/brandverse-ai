@@ -157,7 +157,7 @@ def test_an_uncommitted_rule_file_is_refused() -> None:
 
 
 def test_a_committed_file_reports_its_commit() -> None:
-    source = committed_source(REPO_ROOT / "config" / "superlatives" / "v1.yaml")
-    assert source["source_file"] == "config/superlatives/v1.yaml"
+    source = committed_source(REPO_ROOT / "config" / "sector_constraints" / "README.md")
+    assert source["source_file"] == "config/sector_constraints/README.md"
     assert len(source["commit"]) == 40
     assert Path(REPO_ROOT / source["source_file"]).exists()

@@ -807,7 +807,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "The 409 body when admission refuses a run (blocked and logged; Rules.md T5).",
+      "description": "The 409 body when admission refuses a run (blocked and logged; Rules.md T2).",
       "properties": {
         "message": {
           "title": "Message",

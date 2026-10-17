@@ -508,7 +508,7 @@ Three independent gates. Any `block` stops publication.
 |---|---|---|
 | **Claim** | Every factual assertion maps to a `verified` claim or a scored source. **Registry:** a claim matching a `prohibited_phrase` rule for the brand's sector is blocked even if `verified` — a manufacturer stating something does not make it permissible to advertise. A claim matching a `required_disclaimer` rule's trigger must carry that disclaimer. | `pass` / `flag` / `block` |
 | **Brand voice** | Cosine distance between generated copy embedding and brand voice vector. **Registry:** required disclaimer text is excluded from the similarity score and must appear verbatim; any rewording of it for voice is a block. | `pass` if above threshold; `block` on altered disclaimer |
-| **Risk** | Restricted claims, regulated-sector language, superlatives without proof, 8 predatory marketing anti-patterns. **Registry:** full copy scanned for every active `prohibited_phrase`; every applicable `required_disclaimer` must be present. | `pass` / `block` |
+| **Risk** | Restricted claims, regulated-sector language, superlatives without proof, 8 predatory marketing anti-patterns (**specified, not implemented** — no detector exists; `Rules.md` T5 is unmet; §8.3, `Phases.md` Phase 3). **Registry:** full copy scanned for every active `prohibited_phrase`; every applicable `required_disclaimer` must be present. | `pass` / `block` |
 
 ### 8.1 Sector constraint registry
 
@@ -536,7 +536,7 @@ Substituting a real, cited rule set is a **deployment step, outside the research
 retire the synthetic rows, enter cited ones through the authoring path, then mark the sector
 `authoritative` (the trigger refuses this while synthetic rules are active).
 
-The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming.
+The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming. **Status (2026-10-18): specified, not implemented.** No detector for any of the eight exists, none appears in the gates' outcome table, and `Rules.md` T5 is unmet until one does. Until then the only check is the human approver's (`docs/approval-rubric.md` S2.1; threat V3 in `docs/evaluation-plan.md`).
 
 ### 8.2 Product truth store and run admission — as built (Phase 3 chunk A, 2026-10-17)
 
@@ -562,8 +562,8 @@ no deduced claim is eligible — the gate fails closed, it does not treat "no sc
 product has an active verified claim, the brand's sector is covered by the registry (no sector
 blocks; a regulated sector with no active rules blocks — fail closed), and the brief asks for no
 restricted claim of the product and uses no wording a registry rule for the sector prohibits.
-Every failing check is reported together. **How it fails: blocked, never warned** (`Rules.md` T2,
-T5): the API answers `409` with every reason, nothing is queued, and an `audit_log` row
+Every failing check is reported together. **How it fails: blocked, never warned** (`Rules.md` T2):
+the API answers `409` with every reason, nothing is queued, and an `audit_log` row
 (`action = 'run.blocked'`, actor `service`/`run_admission`, the requesting user and the reasons in
 `details`) is appended by the backend's own role. A failure to write that row is logged as an error
 and the run stays blocked. Wired into the fake-run endpoint from Phase 3; Phase 6's
@@ -587,13 +587,15 @@ the sector's active rules, deterministically:
 | Gate | Checks | Findings |
 |---|---|---|
 | Claim | Each factual statement (an exact quote from the copy, with what it cites) is labelled from its citation, never by a model | resolves to a source (verified); `deduced_labelled` (flag); `unsourced_claim`, `cites_unknown_claim`, `cites_retired_claim`, `cites_restricted_claim`, `deduced_unlabelled`, `statement_not_in_copy` (block) |
-| Risk | The whole copy | `restricted_claim_in_copy`, `prohibited_phrase`, `missing_disclaimer`, `unsupported_superlative` (Rules.md T3: a superlative is allowed only in a statement citing a verified claim whose own text states it), `registry_coverage`, `registry_rule_invalid`; the eight anti-patterns are mapped as blocks with no detector yet |
+| Risk | The whole copy | `restricted_claim_in_copy`, `prohibited_phrase`, `missing_disclaimer`, superlatives in two tiers (Rules.md T3; a superlative passes only in a statement citing a verified claim whose own text states it): unambiguous ones unsupported → `unsupported_superlative` (block); context-dependent ones ("leading", "the only", "ultimate") unsupported → `context_superlative` (**flag** for the reviewer — raised for a person, neither silently permitted nor wrongly blocked), `registry_coverage`, `registry_rule_invalid`. **Not the eight anti-patterns (T5)**: no detector exists, so none is in the outcome table — T5 is unmet (`Phases.md` Phase 3) |
 | Brand voice, registry half | Required disclaimers | `altered_disclaimer` — present but with case or punctuation changed, distinct from `missing_disclaimer`; `voice_scoring_text` strips disclaimer text before Phase 6's similarity, which is not built here |
 
-`SEVERITY` is closed and immutable: every finding kind blocks except `deduced_labelled`, which
-flags; an exception anywhere is a `gate_error` block. A blocked report is appended to `audit_log`
-(`output.blocked`, actor `validation_engine`) and names the sector with its provenance and the
-superlative list version (`config/superlatives/`, hash-locked; v1 proposed 2026-10-17).
+`SEVERITY` is closed and immutable: every finding kind blocks except `deduced_labelled` and
+`context_superlative`, which flag; an exception anywhere is a `gate_error` block. A blocked report
+is appended to `audit_log` (`output.blocked`, actor `validation_engine`) and names the sector with
+its provenance and the superlative list version (`config/superlatives/`: both tiers in one file
+under one hash, so the thesis can state which word sat on which tier; v1 is a draft awaiting the
+project owner's word-by-word decision, 2026-10-18, and is fixed before any evaluation use).
 
 **The authoring path** (`backend/scripts/apply_sector_constraints.py`, `config/sector_constraints/`):
 reviewed YAML files, dry run by default, committed files only (the commit recorded in every audit

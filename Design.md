@@ -220,7 +220,7 @@ More than any other screen, `PipelineStepper` is what a panel will remember. It 
 3. **How it works** — the 15 steps as a visual flow
 4. **Adaptive intelligence** — D0/D1/D2, memory reuse bands, model routing
 5. **The seven agents** — grid with roles
-6. **Evidence and trust** — claim types, validation gates, anti-patterns blocked
+6. **Evidence and trust** — claim types, validation gates. *The eight anti-patterns are specified but no detector exists (`Phases.md` Phase 3): the page names them as checked by the human approver, never as blocked by the system, until a detector ships.*
 7. **Results** — ARR / SRR / CR / LR. *Show real measured numbers or label them as targets. Never present a target as a result.*
 8. **Research** — the paper, the authors, the institution
 9. **Footer**

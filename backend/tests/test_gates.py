@@ -26,7 +26,11 @@ from app.core.sector_registry import Sector, SectorConstraint
 from app.core.truth import Claim, ProductTruth
 
 TODAY = date(2026, 10, 17)
-LEXICON = Superlatives("test", ("best", "fastest", "india's first"))
+LEXICON = Superlatives(
+    "test",
+    block=("best", "fastest", "india's first", "market leading"),
+    flag=("leading", "the only"),
+)
 SUPPLEMENTS = Sector("health-supplements", regulated=True)
 FOOTWEAR = Sector("footwear", regulated=False)
 ALWAYS = "Illustrative disclaimer (synthetic rule): consult a qualified professional before use."
@@ -89,21 +93,41 @@ def test_every_finding_kind_has_an_outcome_and_a_gate() -> None:
     assert set(SEVERITY) == set(get_args(FindingKind)) == set(GATE_OF)
 
 
-def test_only_a_labelled_deduction_is_not_a_block() -> None:
-    assert {k for k, v in SEVERITY.items() if v != "block"} == {"deduced_labelled"}
+def test_only_a_labelled_deduction_and_a_context_superlative_flag() -> None:
+    flagged = {k for k, v in SEVERITY.items() if v != "block"}
+    assert flagged == {"deduced_labelled", "context_superlative"}
     assert set(SEVERITY.values()) == {"block", "flag"}  # nothing is ever only a warning
 
 
-@pytest.mark.parametrize(
-    "kind",
-    [
-        "false_scarcity", "fabricated_social_proof", "undisclosed_paid_endorsement",
-        "vulnerability_targeting", "dark_pattern_consent", "unsubstantiated_health_claim",
-        "fictional_price_anchoring", "confirmshaming",
-    ],
+ANTI_PATTERNS = (
+    "false_scarcity", "fabricated_social_proof", "undisclosed_paid_endorsement",
+    "vulnerability_targeting", "dark_pattern_consent", "unsubstantiated_health_claim",
+    "fictional_price_anchoring", "confirmshaming",
 )  # fmt: skip
-def test_the_eight_anti_patterns_block(kind: FindingKind) -> None:
-    assert SEVERITY[kind] == "block" and GATE_OF[kind] == "risk"  # Rules.md T5
+
+
+def test_no_anti_pattern_is_listed_until_a_detector_exists() -> None:
+    # Rules.md T5 is unmet: no detector exists, so the outcome table must not claim enforcement.
+    # A detector's finding kind is added, mapped to block, in the same change that builds it.
+    listed = {
+        k
+        for k in SEVERITY
+        if any(
+            word in k
+            for word in (
+                "scarcity",
+                "social_proof",
+                "endorsement",
+                "vulnerab",
+                "dark_pattern",
+                "health_claim",
+                "anchoring",
+                "shaming",
+            )
+        )
+    }
+    assert listed == set()
+    assert not set(ANTI_PATTERNS) & set(SEVERITY)
 
 
 def test_the_maps_cannot_be_changed_at_runtime() -> None:
@@ -232,6 +256,28 @@ def test_a_superlative_the_cited_verified_claim_states_is_allowed() -> None:
     assert kinds(copy, (Statement("fastest drying sole", "v2"),)) == []
 
 
+def test_a_context_dependent_superlative_without_a_source_is_flagged_not_blocked() -> None:
+    report = evaluate({"body": "The only shoe you need."}, (), truth(), LEXICON, TODAY)
+    assert [(f.kind, f.outcome) for f in report.findings] == [("context_superlative", "flag")]
+    assert report.outcome == "flag"
+
+
+def test_a_flag_tier_word_inside_a_block_tier_phrase_is_reported_once_as_a_block() -> None:
+    assert kinds({"body": "A market leading trail shoe."}) == ["unsupported_superlative"]
+    assert kinds({"body": "Leading to drier feet."}) == ["context_superlative"]
+
+
+def test_back_to_back_repeats_of_a_block_phrase_do_not_leak_to_the_flag_tier() -> None:
+    assert kinds({"body": "Market leading, market leading grip."}) == ["unsupported_superlative"]
+
+
+def test_a_context_superlative_the_cited_verified_claim_states_passes() -> None:
+    cork = Claim("v3", "The only sole made of cork", "verified", "https://x.invalid", False)
+    t = ProductTruth(FOOTWEAR, (cork,), ())
+    copy = {"body": "The only sole made of cork."}
+    assert kinds(copy, (Statement("The only sole made of cork", "v3"),), t) == []
+
+
 def test_a_superlative_the_cited_claim_does_not_state_still_blocks() -> None:
     copy = {"body": "The fastest recycled mesh upper."}
     assert kinds(copy, (Statement("fastest recycled mesh upper", "v1"),)) == [
@@ -277,10 +323,20 @@ def test_voice_scoring_ignores_prescribed_disclaimer_text() -> None:
 # ── The superlative list is versioned and locked ─────────────────────────────────────────────
 
 
-def test_the_released_list_loads_and_includes_t3s_examples() -> None:
+def test_the_released_list_loads_with_both_tiers_and_t3s_examples_block() -> None:
     lexicon = load_superlatives()
     assert lexicon.version == "v1"
-    assert {"best", "number one", "fastest"} <= set(lexicon.phrases)  # Rules.md T3's examples
+    assert {"best", "number one", "fastest"} <= set(lexicon.block)  # Rules.md T3's examples
+    assert {"leading", "the only", "ultimate"} <= set(lexicon.flag)
+
+
+def test_a_phrase_on_both_tiers_is_refused(tmp_path: Path) -> None:
+    text = (gates.SUPERLATIVES_DIR / "v1.yaml").read_text(encoding="utf-8") + "  - best\n"
+    (tmp_path / "v1.yaml").write_text(text, encoding="utf-8")
+    lock = f"v1 sha256:{gates.file_sha256(tmp_path / 'v1.yaml')}\n"
+    (tmp_path / "versions.lock").write_text(lock, encoding="utf-8")
+    with pytest.raises(ValueError, match="on both tiers"):
+        load_superlatives("v1", tmp_path)
 
 
 def test_an_edited_released_list_is_refused(tmp_path: Path) -> None:

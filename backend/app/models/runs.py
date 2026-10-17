@@ -71,7 +71,7 @@ class BlockReasonOut(Contract):
 
 
 class RunBlocked(Contract):
-    """The 409 body when admission refuses a run (blocked and logged; Rules.md T5)."""
+    """The 409 body when admission refuses a run (blocked and logged; Rules.md T2)."""
 
     message: str
     reasons: list[BlockReasonOut]

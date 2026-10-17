@@ -8,16 +8,22 @@ Three gates judge generated copy against the product's truth and its sector's re
   restricted citations alike (Rules.md T1, T2, P9).
 - **risk** — the whole copy is scanned: the product's restricted claims, every active
   prohibited phrasing of the sector, every applicable required disclaimer, superlatives without a
-  cited source (T3), registry coverage (fail closed). The eight predatory anti-patterns (T5) are
-  mapped below as blocking so no later detector can be wired as a warning; no detector for them
-  is built in Phase 3.
+  cited source (T3), registry coverage (fail closed).
+
+**Not implemented: the eight predatory anti-patterns (Rules.md T5).** No detector exists, so none of
+the eight appears in the outcome table: listing them as blocking would claim enforcement that does
+not happen. T5 is therefore unmet (recorded in Phases.md, Phase 3). When a detector is built, its
+finding kind is added here mapped to `block` — T5 allows nothing else.
 - **brand_voice, registry half** — a required disclaimer reworded rather than omitted is its own
   finding (`altered_disclaimer`), and `voice_scoring_text` removes disclaimer text before Phase 6
   scores voice similarity. The similarity score itself is not built here.
 
-**How a gate fails: blocked, never warned** (Rules.md T2, T5). `SEVERITY` maps every finding
-kind to its outcome and cannot be changed at runtime; only `deduced_labelled` is a `flag` (a
-labelled deduction is allowed, and shown to the reviewer); everything else blocks. An exception
+**How a gate fails: blocked, never warned** (Rules.md T2). `SEVERITY` maps every finding
+kind to its outcome and cannot be changed at runtime. Two kinds flag for the human reviewer rather
+than block: `deduced_labelled` (a labelled deduction is allowed, and shown) and
+`context_superlative` (a context-dependent superlative such as "leading" or "the only", with no
+citation: raised for a person rather than silently permitted or wrongly blocked). Everything else
+blocks. An exception
 anywhere in evaluation is itself a block (`gate_error`), never a pass. A block is logged and
 appended to audit_log (`record_gate_block`).
 
@@ -66,17 +72,9 @@ FindingKind = Literal[
     "prohibited_phrase",
     "missing_disclaimer",
     "unsupported_superlative",
+    "context_superlative",
     "registry_coverage",
     "registry_rule_invalid",
-    # risk gate: the eight predatory anti-patterns (Rules.md T5) — blocking; no detector yet
-    "false_scarcity",
-    "fabricated_social_proof",
-    "undisclosed_paid_endorsement",
-    "vulnerability_targeting",
-    "dark_pattern_consent",
-    "unsubstantiated_health_claim",
-    "fictional_price_anchoring",
-    "confirmshaming",
     # brand-voice gate, registry half
     "altered_disclaimer",
     # any gate
@@ -84,8 +82,9 @@ FindingKind = Literal[
 ]
 
 # Every finding kind's outcome, fixed. A new kind with no entry fails the test suite.
+FLAGGED: frozenset[FindingKind] = frozenset({"deduced_labelled", "context_superlative"})
 SEVERITY: Mapping[FindingKind, Outcome] = MappingProxyType(
-    {kind: ("flag" if kind == "deduced_labelled" else "block") for kind in get_args(FindingKind)}
+    {kind: ("flag" if kind in FLAGGED else "block") for kind in get_args(FindingKind)}
 )
 GATE_OF: Mapping[FindingKind, GateName] = MappingProxyType(
     {
@@ -115,8 +114,11 @@ SUPERLATIVES_DIR: Path = REPO_ROOT / "config" / "superlatives"
 
 @dataclass(frozen=True, slots=True)
 class Superlatives:
+    """A versioned superlative list in two tiers (config/superlatives/<version>.yaml)."""
+
     version: str
-    phrases: tuple[str, ...]
+    block: tuple[str, ...]  # unambiguous: unsupported -> block
+    flag: tuple[str, ...] = ()  # context-dependent: unsupported -> flag for the reviewer
 
 
 def load_superlatives(version: str = "v1", directory: Path = SUPERLATIVES_DIR) -> Superlatives:
@@ -135,7 +137,11 @@ def load_superlatives(version: str = "v1", directory: Path = SUPERLATIVES_DIR) -
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if data.get("version") != version:
         raise ValueError(f"superlatives {path.name} declares version {data.get('version')!r}")
-    return Superlatives(version, tuple(str(p) for p in data["phrases"]))
+    block = tuple(str(p) for p in data["block"])
+    flag = tuple(str(p) for p in data.get("flag") or ())
+    if set(map(normalise, block)) & set(map(normalise, flag)):
+        raise ValueError(f"superlatives {version}: a phrase is on both tiers")
+    return Superlatives(version, block, flag)
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,23 +268,42 @@ def _claim_gate(
 def _superlatives(
     copy: str, statements: Sequence[Statement], truth: ProductTruth, lexicon: Superlatives
 ) -> list[Finding]:
-    findings = []
+    """Block-tier phrases first; then flag-tier phrases in what remains once every block-tier
+    occurrence is taken out, so "leading" inside "market leading" is reported once, as a block."""
     verified = {c.id: c for c in truth.active("verified")}
-    for phrase in lexicon.phrases:
-        if not contains_phrase(copy, phrase):
-            continue
-        supported = any(
+
+    def supported(phrase: str) -> bool:
+        return any(
             contains_phrase(s.text, phrase)
             and s.claim_id in verified
             and contains_phrase(verified[s.claim_id].text, phrase)
             for s in statements
         )
-        if not supported:
+
+    findings = []
+    rest = f" {normalise(copy)} "
+    for phrase in lexicon.block:
+        if not contains_phrase(copy, phrase):
+            continue
+        needle = f" {normalise(phrase)} "
+        while needle in rest:  # replace() skips back-to-back repeats; loop until none is left
+            rest = rest.replace(needle, " ")
+        if not supported(phrase):
             findings.append(
                 Finding(
                     "unsupported_superlative",
                     f"superlative {phrase!r} with no verified claim that states it (Rules.md T3)",
-                    (f"superlatives:{lexicon.version}:{phrase}",),
+                    (f"superlatives:{lexicon.version}:block:{phrase}",),
+                )
+            )
+    for phrase in lexicon.flag:
+        if f" {normalise(phrase)} " in rest and not supported(phrase):
+            findings.append(
+                Finding(
+                    "context_superlative",
+                    f"{phrase!r} may be a superlative claim with no verified claim that states it; "
+                    "for the reviewer to judge (Rules.md T3)",
+                    (f"superlatives:{lexicon.version}:flag:{phrase}",),
                 )
             )
     return findings

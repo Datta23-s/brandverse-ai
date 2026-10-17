@@ -157,15 +157,17 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
   Phase 6's `POST /api/v1/runs` must call the same `app/core/admission.py`.
 - [ ] An attempt to generate a restricted claim is blocked and logged
 - [ ] Every claim in a sample output resolves to a source
-- [x] Output in a regulated sector missing a required disclaimer is blocked — **ticked 2026-10-17
-  on test evidence.** `tests/db/test_gates_db.py::test_criterion_4_regulated_output_missing_a_required_disclaimer_is_blocked`:
+- [ ] Output in a regulated sector missing a required disclaimer is blocked — **PROVISIONAL, not
+  settled (2026-10-17; box left open 2026-10-18).** Phase 3 cannot exit on this until a generator
+  exists and real output passes the gates. Shown on test evidence only: `tests/db/test_gates_db.py::test_criterion_4_regulated_output_missing_a_required_disclaimer_is_blocked`:
   the gates (`app/core/gates.py`) loaded the stored health-supplements rules through
   `load_product_truth` — the same four rows as on the live project (0021, applied 16:04 UTC) — and
   copy mentioning protein without the triggered disclaimer was blocked (`missing_disclaimer`); a
   reworded disclaimer is a distinct `altered_disclaimer` block (`tests/test_gates.py`); compliant copy
   passes. No generator exists yet, so no live output was checked; the rules are illustrative.
-- [x] Output containing a registry-prohibited phrasing is blocked — **ticked 2026-10-17 on test
-  evidence.** `tests/db/test_gates_db.py::test_criterion_5_output_with_a_registry_prohibited_phrasing_is_blocked`:
+- [ ] Output containing a registry-prohibited phrasing is blocked — **PROVISIONAL, not settled
+  (2026-10-17; box left open 2026-10-18).** Phase 3 cannot exit on this until a generator exists
+  and real output passes the gates. Shown on test evidence only: `tests/db/test_gates_db.py::test_criterion_5_output_with_a_registry_prohibited_phrasing_is_blocked`:
   copy with "miracle cure" and "Guaranteed results" was blocked by both stored prohibited rules (a
   phrase and a regex), and the block was appended to `audit_log` (`output.blocked`,
   `test_a_block_is_written_to_audit_log`). As for criterion 4: the stored rules, no live output.
@@ -196,7 +198,19 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 `Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Chunk B (output
 gates, superlative list v1, registry authoring path, staged write-back; 2026-10-17): §8.3. The
 brand-voice gate's registry half is built; its similarity score is Phase 6. Chunk C (the claim
-classifier) remains. Paraphrase of a restricted claim is not caught by deterministic matching —
+classifier) remains.
+
+> **Specified, not implemented: detectors for the eight predatory anti-patterns (`Rules.md` T5;
+> decided 2026-10-18).** `Architecture.md` §8 specifies them for the risk gate. None is built, so
+> none is in the gates' outcome table — listing them as blocking would claim enforcement that does
+> not happen — and **T5 is unmet**. Reason: several cannot be detected from copy at all —
+> undisclosed paid endorsement needs the commercial relationship, price anchoring on fictional
+> prices needs real price history, vulnerability targeting depends on who is targeted, dark-pattern
+> consent is a property of a UI flow, not of text — and keyword lists for the rest would be shallow
+> detectors with an unmeasured miss rate, another claim the code could not back. Until a detector
+> exists the approver checks them (`docs/approval-rubric.md` S2.1; threat V3). Where detectors are
+> built (the natural home is A7's risk assessment, Phase 6) is not yet scheduled; whichever phase
+> builds one adds its finding kind to the outcome table mapped to `block`, in the same change. Paraphrase of a restricted claim is not caught by deterministic matching —
 threat V2 in `docs/evaluation-plan.md`.
 
 ---

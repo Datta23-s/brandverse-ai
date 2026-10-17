@@ -1,6 +1,6 @@
 """Run admission: pipeline steps 2 and 3 (PRD.md §5; Architecture.md §5.1, `validate_product_truth`
 → [blocked] → END). A run that fails any check does not start; it is blocked and logged (Rules.md
-T2, T5 — blocked, never warned).
+T2 — blocked, never warned).
 
 A run is admitted only if all hold:
 - the product has at least one active (unretired) verified claim (PRD.md §5 step 2;
