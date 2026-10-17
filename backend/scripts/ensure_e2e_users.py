@@ -12,6 +12,10 @@ and would accumulate. Permanent footprint: 2 users + 2 organisations.
 - Each user's organisation is created through OUR API (POST /api/v1/organisations →
   app.create_organisation, migration 0012), so the live function is exercised. The API must be
   running locally with SUPABASE_URL set.
+- Each organisation the script's users own is then flagged `is_test` (migration 0020), with the
+  backend's own database role, so every evaluation read excludes it and everything in it (the
+  run fixture included) by the flag, never by a remembered id. The organisation is found through
+  the user's own membership, not by a stored id.
 
 Usage (from backend/, API running):  uv run python -m scripts.ensure_e2e_users
 Idempotent: a second run changes nothing and reprints the state.
@@ -26,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import psycopg
 
 from app.core.config import REPO_ROOT, get_settings
 
@@ -35,6 +40,17 @@ USERS = {
     "A": ("e2e-a@brandverse-e2e.example.com", "E2E Org A"),
     "B": ("e2e-b@brandverse-e2e.example.com", "E2E Org B"),
 }
+
+
+# Only an organisation this user OWNS is flagged: the script cannot mark anyone else's as a test.
+FLAG_TEST_ORG_SQL = """
+update public.organisations o set is_test = true
+where o.id = %(org)s
+  and exists (select 1 from public.org_members m
+              where m.org_id = o.id and m.user_id = %(user)s and m.role = 'owner'
+                and m.revoked_at is null)
+returning o.name, o.is_test
+"""
 
 
 def read_env_file() -> dict[str, str]:
@@ -63,8 +79,12 @@ async def main() -> int:
         s.supabase_url is None
         or s.supabase_secret_key is None
         or s.supabase_publishable_key is None
+        or s.database_url is None
     ):
-        print("SUPABASE_URL, SUPABASE_SECRET_KEY and SUPABASE_PUBLISHABLE_KEY must be set in .env")
+        print(
+            "SUPABASE_URL, SUPABASE_SECRET_KEY, SUPABASE_PUBLISHABLE_KEY and DATABASE_URL must be "
+            "set in .env"
+        )
         return 1
     base = str(s.supabase_url).rstrip("/")
     admin = {"apikey": s.supabase_secret_key.get_secret_value()}
@@ -129,6 +149,14 @@ async def main() -> int:
             env[f"E2E_{label}_ORG_ID"] = orgs[0]["id"]
             write_env_file(env)
             print(f"{label}: organisations {[(o['name'], o['roles']) for o in orgs]}")
+            async with await psycopg.AsyncConnection.connect(
+                s.database_url.get_secret_value()
+            ) as conn:  # commits on exit
+                for org in orgs:
+                    cur = await conn.execute(
+                        FLAG_TEST_ORG_SQL, {"org": org["id"], "user": me.json()["user_id"]}
+                    )
+                    print(f"{label}: flagged is_test {await cur.fetchall()}")
     return 0
 
 

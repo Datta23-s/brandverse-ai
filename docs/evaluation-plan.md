@@ -50,6 +50,16 @@ reaches the evaluation query. The practice organisation is marked `organisations
 database rejects an approval there without `is_calibration`, and the harness query excludes
 practice organisations as well (`test_unflagged_practice_approval_never_reaches_evaluation_query`).
 
+Test organisations are excluded the same way (migration 0020, 2026-10-17): the fixed E2E
+organisations on the live project — and everything in them, including the lasting run fixture
+(`Architecture.md` §11, "Live project — permanent footprint") — are marked
+`organisations.is_test`, set by the backend only (`backend/scripts/ensure_e2e_users.py` flags the
+organisations its own users own). Every evaluation read filters `not o.is_practice and not
+o.is_test`; `backend/tests/db/test_test_organisations.py` asserts that a test organisation's runs,
+LLM calls and approvals reach none of the reads even when its id is passed in, that the same rows
+are counted once the flag is off (so the flag is what excludes them), and that every `*_SQL` read
+in `backend/app/evaluation/` carries both filters.
+
 ## 4. Metrics
 
 Computed per run from `runs` / `llm_calls`, then aggregated. Baseline is Baseline B unless stated.
@@ -135,10 +145,14 @@ a verified claim for it**, and the copy passes. **Mocks cannot measure how often
 a fake model returns whatever the test scripts — so the rate **remains not measured until real
 model calls are approved** for that purpose.
 
-*Divergence in writing.* `docs/approval-rubric.md` T1.3 requires "No `restricted` claim appears in
-any form, including paraphrase". The rubric therefore promises more than the code delivers. Until
-the rate above is measured, paraphrase is caught only by the human approver applying T1.3, and the
-dissertation must not claim the gate blocks paraphrases (`Rules.md` A6).
+*The rubric and the code, stated so they are not read as contradicting each other.*
+`docs/approval-rubric.md` T1.3 requires "No `restricted` claim appears in any form, including
+paraphrase". **T1.3 is an instruction to the human approver about what to look for, not a claim
+about what the code detects: a human can catch a paraphrase; the deterministic gate cannot.** The
+rubric is correct as written and is left unchanged (decided 2026-10-17); this threat is where the
+code-side limitation is recorded. Until the rate above is measured, paraphrase is caught only by
+the approver applying T1.3, and the dissertation must not claim the gate blocks paraphrases
+(`Rules.md` A6).
 
 *Mitigation.*
 1. Restricted claims are never given to the copy-writing step: the context it receives holds

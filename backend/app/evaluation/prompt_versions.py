@@ -14,9 +14,9 @@ the versions each arm used, and flags
 Every row counts, refusals included: a refused call still shows which prompt the code would have
 sent, so a version change is caught even in a run that was refused before it reached the model.
 
-Scoped to the evaluation organisations passed in (Rules.md P3), excluding practice organisations,
-as the approvals read is (app/evaluation/approvals.py). `since` / `until` bound the evaluation
-period by call time.
+Scoped to the evaluation organisations passed in (Rules.md P3), excluding practice and test
+organisations (is_practice, is_test: flags, never ids), as the approvals read is
+(app/evaluation/approvals.py). `since` / `until` bound the evaluation period by call time.
 """
 
 from collections import defaultdict
@@ -34,6 +34,7 @@ join public.runs r on r.id = c.run_id and r.org_id = c.org_id
 join public.organisations o on o.id = c.org_id
 where c.org_id = any(%(org_ids)s)
   and not o.is_practice
+  and not o.is_test
   and (%(since)s::timestamptz is null or c.created_at >= %(since)s::timestamptz)
   and (%(until)s::timestamptz is null or c.created_at < %(until)s::timestamptz)
 group by r.arm, c.prompt_id, c.prompt_version

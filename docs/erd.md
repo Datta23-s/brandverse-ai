@@ -67,6 +67,7 @@ erDiagram
     int rate_limit_requests_per_minute
     timestamptz created_at
     boolean is_practice "rubric 6 calibration org"
+    boolean is_test "fixed E2E orgs (0020)"
   }
   org_members {
     uuid org_id PK
@@ -238,6 +239,7 @@ IDs are the ones assigned when this list was first drafted.
 | E17 | Budget enforcement and the audit log could disagree; waits were not recorded | Rules.md A1 requires every reported number to trace to a raw log, so caps (C3), daily quota (C9) and RPM pacing (C10) must be queries of `llm_calls`, not a counter; concurrent calls must not both pass a check one should fail; C10 waits must be kept apart from latency | Migration 0013: `rate_limit_wait_ms`; `outcome` (`pending` reservation written in the admission transaction under an advisory lock, then `ok` / `invalid_output` / `error` / `rate_limited`; `refused` records a pre-flight refusal and is never counted); `finished_at`. Tested in `test_llm_ledger.py` (incl. a concurrency test that fails without the lock) | **Accepted 2026-10-17** |
 | E18 | No record of which prompt produced a call | Without it the evaluation cannot show that every run in an arm used the same prompts; a prompt edited mid-evaluation would silently invalidate the comparison (Rules.md A5, A6) | Migration 0014: `prompt_id`, `prompt_version` on `llm_calls`, NOT NULL, format-checked; versions are immutable files locked by hash (`config/prompts/versions.lock`). Detection is a query: `app/evaluation/prompt_versions.py` flags more than one version per prompt within an arm, or different versions across arms. Tested in `test_prompt_versions.py`, `test_llm_ledger.py`, `test_llm_prompts.py` | **Accepted 2026-10-17** |
 | E19 | Product truth constraints were labels only, and provenance was caller-supplied | `claim_type` was checked, but nothing tied `verified` to evidence or to a human; members can insert `product_claims` through the REST API, so `created_by = 'human'` was forgeable; claims could be edited or deleted after a campaign cited them; a user could insert a run already `blocked` or costed | Migrations 0015–0019 (Phase 3 chunk A): `runs.status` CHECK incl. `blocked`; user-inserted runs forced to the initial state; per-type CHECKs on `product_claims` (verified = human + http(s) URL; deduced = confidence + basis; restricted = reason); `entered_by`, `retired_at`, `retired_by`, `retired_reason`, set by a trigger from `auth.uid()`; claims retired, never edited or deleted; sector keys seeded; brand sector changes audited by a security-definer trigger owned by `app_audit_writer`. General rule: `Architecture.md` §9, "Trust-deciding columns" | **Accepted 2026-10-17** |
+| E20 | Test organisations were kept out of evaluation only by nobody passing their ids | The live project's fixed E2E organisations and their lasting run fixture can never be deleted (0010, 0017), so they must be excluded by a property, not by remembered ids, which are environment-specific | Migration 0020: `organisations.is_test boolean not null default false`, backend-set (owners' column-level update excludes it; the 0012 bootstrap's insert policy refuses it). Every evaluation read filters `not o.is_practice and not o.is_test`; `test_test_organisations.py` checks each read, a control with the flag off, and that every `*_SQL` read carries both filters | **Accepted 2026-10-17** |
 
 `campaigns.approved_by` is additionally constrained (E8 + T6): FK on
 `(org_id, approved_by, approver_role)` → `org_members (org_id, user_id, role)` with
@@ -290,7 +292,7 @@ the roles granted there (E12).
 
 | Table | viewer | approver | editor | owner | Backend (service role) |
 |---|---|---|---|---|---|
-| `organisations` | read | read | read | read, update (not `is_practice`) | all but delete/truncate (0010) |
+| `organisations` | read | read | read | read, update (not `is_practice`, `is_test`) | all but delete/truncate (0010) |
 | `org_members` | read | read | read | read, add, revoke | all but delete/truncate (0010) |
 | `brands`, `products` | read | read | read, insert, update | + delete¹ | all |
 | `product_claims` | read | read | read, enter, retire (who and when from the JWT, 0017) | same; never edit or delete | agent claims (never `verified`), no edit, no delete |

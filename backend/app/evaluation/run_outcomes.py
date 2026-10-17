@@ -9,8 +9,9 @@ fails loudly rather than vanishing from the totals.
 
 Read from `runs` only: status is written by the backend alone (0005 gives API roles no update
 policy, and 0016 forces a user-inserted run to start as 'queued'). Scoped to the evaluation
-organisations passed in (Rules.md P3), excluding practice organisations, as the approvals and
-prompt-version reads are. `since` / `until` bound the period by run creation time.
+organisations passed in (Rules.md P3), excluding practice and test organisations (is_practice,
+is_test: flags, never ids), as the approvals and prompt-version reads are. `since` / `until`
+bound the period by run creation time.
 """
 
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from public.runs r
 join public.organisations o on o.id = r.org_id
 where r.org_id = any(%(org_ids)s)
   and not o.is_practice
+  and not o.is_test
   and (%(since)s::timestamptz is null or r.created_at >= %(since)s::timestamptz)
   and (%(until)s::timestamptz is null or r.created_at < %(until)s::timestamptz)
 group by r.arm, r.status

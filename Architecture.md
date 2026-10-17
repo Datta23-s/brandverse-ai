@@ -563,9 +563,10 @@ with status `blocked` (0015), so every gate-blocked run is counted per arm
 **Matching is deterministic and literal** (`backend/app/core/text_match.py`): case- and
 punctuation-insensitive whole-word phrase match, or a stored regex; never an LLM judgement. **It
 cannot catch a paraphrase of a restricted claim.** That gap is threat V2
-(`docs/evaluation-plan.md`); `docs/approval-rubric.md` T1.3 ("in any form, including
-paraphrase") currently promises more than this code delivers, and the human approver is what
-covers paraphrase until the classifier (chunk C) is measured.
+(`docs/evaluation-plan.md`). `docs/approval-rubric.md` T1.3 ("in any form, including
+paraphrase") is unchanged and correct: it tells the human approver what to look for, and a human
+can catch a paraphrase. It is not a claim about what the code detects; until the classifier
+(chunk C) is measured, the approver is what covers paraphrase.
 
 **Not built yet in Phase 3:** the output-side gates (claim, risk, brand-voice registry half) and
 the registry authoring path (chunk B); the claim classifier (chunk C). Registry *content* is
@@ -1693,6 +1694,22 @@ revoke app_audit_writer from current_user;
 
 create trigger brands_audit_sector after insert or update of sector on brands
   for each row execute function app.audit_brand_sector();
+
+-- ═══ supabase/migrations/0020_organisations_is_test.sql ═══
+-- 0020: test organisations are marked by a flag, and every evaluation read excludes them by it.
+-- The live project holds rows that are not evaluation data and can never be deleted by
+-- application roles (0010, 0017): the two fixed E2E organisations and everything in them,
+-- including the lasting run fixture (a brand, a product and a verified claim). Before this, they
+-- were kept out of evaluation only by nobody passing their ids to the harness. Now they are
+-- flagged and filtered, like the practice organisation (0009) and seed memory (is_seed): the flag,
+-- never a remembered id, is the filter, because ids are environment-specific and change on a
+-- reseed. Set by the backend only (backend/scripts/ensure_e2e_users.py flags the organisations its
+-- own users own): owners' column-level update (0009) does not include it, and the organisation
+-- bootstrap (0012) cannot create a flagged organisation.
+-- Down: alter policy org_creator_insert on organisations with check (not is_practice);
+--   alter table organisations drop column is_test;
+alter table organisations add column is_test boolean not null default false;
+alter policy org_creator_insert on organisations with check (not is_practice and not is_test);
 ```
 
 ---
