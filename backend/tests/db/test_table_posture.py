@@ -167,7 +167,7 @@ def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx:
     assert memberships == []
 
 
-# ── llm_calls, column by column (migration 0013) ─────────────────────────────────────────────
+# ── llm_calls, column by column (migrations 0013, 0014) ─────────────────────────────────────────
 #
 # The raw log the budget and the evaluation read (Rules.md A1). Written only by the backend's own
 # role: no API role may insert a row or update any column (0013), and none may delete or truncate
@@ -179,6 +179,8 @@ LLM_CALLS_COLUMNS = {
     "input_tokens", "output_tokens", "cost_usd", "latency_ms", "created_at",
     # 0013
     "rate_limit_wait_ms", "outcome", "finished_at",
+    # 0014
+    "prompt_id", "prompt_version",
 }  # fmt: skip
 
 

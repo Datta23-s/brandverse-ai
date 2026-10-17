@@ -1,0 +1,4 @@
+# Released prompt versions: <id> <version> sha256:<hash of the file, LF line endings>.
+# Append-only. A released version is never edited or removed (app/llm/prompts.py).
+smoke_capital_city v1 sha256:b68f6f8619c387f765d562794c6728b786f94d152215a6ce175d492c39ffce94
+structured_repair v1 sha256:229cb7767ef7dc36f8ca791b7c85f05b12fe1771689ac7590408b6092a181b51

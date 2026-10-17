@@ -27,8 +27,9 @@ from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
-from app.llm.gateway import LLMGateway, Prompt
+from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallContext, CallLedger
+from app.llm.prompts import library_from
 from app.llm.registry import Tier, registry_from
 from tests.db.target_guard import managed_supabase_hosts
 
@@ -108,9 +109,11 @@ async def main(args: argparse.Namespace) -> int:
             max_cost_per_run_usd=0.05,
             pending_expiry_s=settings.llm_pending_expiry_s,
         )
+        prompts = library_from(settings.prompts_dir)
         gateway = LLMGateway(
             registry,
             ledger,
+            prompts,
             api_key=settings.google_api_key.get_secret_value(),
             timeout_s=60,
             max_rate_limit_waits=1,
@@ -121,10 +124,7 @@ async def main(args: argparse.Namespace) -> int:
             result = await gateway.structured(
                 CapitalCity,
                 tier=tier,
-                prompt=Prompt(
-                    system="You answer geography questions as JSON matching the given schema.",
-                    user="What is the capital of Portugal?",
-                ),
+                prompt=prompts.get("smoke_capital_city", "v1").render(country="Portugal"),
                 ctx=ctx,
                 route_reason="smoke test: Phase 2 chunk A live verification (cheap tier)",
                 max_output_tokens=128,
@@ -137,12 +137,13 @@ async def main(args: argparse.Namespace) -> int:
 
     with psycopg.connect(args.database_url) as c:
         rows = c.execute(
-            "select id, model, tier, outcome, input_tokens, output_tokens, cost_usd, latency_ms, "
-            "rate_limit_wait_ms, finished_at - created_at, route_reason "
+            "select id, model, tier, prompt_id, prompt_version, outcome, input_tokens, "
+            "output_tokens, cost_usd, latency_ms, rate_limit_wait_ms, finished_at - created_at, "
+            "route_reason "
             "from llm_calls where run_id = %s order by id",
             (ctx.run_id,),
         ).fetchall()
-    counted = [r for r in rows if r[3] != "refused"]
+    counted = [r for r in rows if r[5] != "refused"]
     print(f"llm_calls rows for this run: {len(rows)}; real calls made: {len(counted)}")
     for r in rows:
         print("  ", r)

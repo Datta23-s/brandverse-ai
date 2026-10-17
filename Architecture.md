@@ -252,6 +252,55 @@ left to discipline: the gateway refuses the strong tier unless `llm_allow_strong
 records the refusal (`test_the_strong_tier_is_refused_unless_explicitly_allowed`). The smoke script
 constructs its gateway with the strong tier off whatever the settings say.
 
+#### Prompts — versioned templates, recorded per call (Phase 2 chunk B, 2026-10-17)
+
+- **Templates are files**, `config/prompts/<prompt_id>/<version>.yaml`, each naming its own id
+  and version (which must match its path), its variables and its system/user text, with
+  `string.Template` placeholders (`$name`) — no inline f-strings, no expressions. The gateway
+  accepts only a `RenderedPrompt` (`app/llm/prompts.py`); callers name the version explicitly
+  (there is no "latest"). The repair prompt is a template too (`structured_repair@v1`).
+- **A released version is immutable.** `config/prompts/versions.lock` holds each version file's
+  SHA-256 (line endings normalised); the library refuses to load if a file is edited, unlocked
+  or missing. A change is a new version file, a new lock line and a caller naming it. Stated
+  limitation: someone could edit a file *and* its lock line; that is a deliberate act visible in
+  the diff, not an accident.
+- **Every `llm_calls` row records `prompt_id` and `prompt_version`** (migration 0014, NOT NULL),
+  refusals included. A repair call records the repair template; its `route_reason` names the
+  prompt it repaired.
+- **A mid-evaluation prompt change is detectable.** `app/evaluation/prompt_versions.py` reads
+  `llm_calls` joined to `runs.arm` for the evaluation organisations (practice organisations
+  excluded), optionally bounded by time, and flags a prompt used in more than one version within
+  an arm (`mixed_within_arm`) or in different versions by arms that both use it
+  (`differs_across_arms`). Refusals count: they show what the code would have sent.
+  Tested in `tests/db/test_prompt_versions.py`.
+
+#### Budget breach — a partial run, flagged (Rules.md C4)
+
+`app/core/budgeted_run.py` runs a run's LLM steps in order; when the ledger refuses a call with
+`BudgetExceeded` (C3), the run stops there and returns the completed steps' outputs, the steps
+not run and the refusal's reason, flagged `budget_exhausted`. The `runs` row is set to
+`status = 'partial'`, `budget_exhausted = true`; `llm_call_count` and `total_cost_usd` are derived
+from `llm_calls` when the run ends. Statuses written: `completed`, `partial`, `failed`. The Phase 6
+pipeline inherits this behaviour. `QuotaExhausted` is not a budget breach (C9 downgrade/defer, not
+built yet) and fails the run. Tested with a mocked provider in `tests/db/test_budgeted_run.py`.
+
+#### Cost visibility — measured (2026-10-17)
+
+From the provider's reply reaching the gateway to a separate connection reading that call's
+cost: **20 mocked calls against local Postgres, min 9.5 ms, median 11.3 ms, max 19.4 ms**
+(`test_cost_is_in_the_database_within_one_second_of_every_call`, which asserts every interval is
+under 1 s). The one real call (above) completed its row 24 ms after the reply. Production writes
+go through the Supavisor session pooler instead: a read-only transaction of the same shape as
+`ledger.finish()` (BEGIN, one statement, COMMIT) took **min 35 ms, median 36 ms, max 48 ms** over
+20 runs from the laptop. That is a proxy measurement; no row was written to the live project.
+
+Live tier switch, mocked provider (`scripts/demo_tier_switch.py`, 2026-10-17): one edited line
+in a copy of `config/models.yaml` (`id: gemini-3.1-flash-lite` → `id: mock-switched-model`);
+the provider received `gemini/gemini-3.1-flash-lite` before and `gemini/mock-switched-model`
+after, the `llm_calls` rows recorded each, and the other tiers were unchanged. Rows went to their
+own throwaway database (`brandverse_tier_switch_demo`), not to `brandverse_e2e`, so mocked calls
+never enter the real-call tally.
+
 ---
 
 ## 5. Orchestration
@@ -1225,6 +1274,22 @@ alter table llm_calls
   add column finished_at timestamptz;
 
 revoke insert, update on llm_calls from public, anon, authenticated, service_role;
+
+-- ═══ supabase/migrations/0014_llm_call_prompt_version.sql ═══
+-- 0014: every llm_calls row records the prompt template that produced it (prompt_id,
+-- prompt_version; config/prompts/, backend/app/llm/prompts.py). Refusals record the prompt they
+-- would have sent; a repair call records the repair template. The evaluation's check that every
+-- run in an arm used the same prompts is a query of this table (Rules.md A5, A6;
+-- backend/app/evaluation/prompt_versions.py). NOT NULL with no default: a call with no recorded
+-- prompt cannot enter the raw log; the table held no rows on the project when this applied.
+-- Formats are the ones the template loader enforces. Grants unchanged (0013 revoked INSERT and
+-- UPDATE on the whole table). No index.
+-- Down: alter table llm_calls drop column prompt_version, drop column prompt_id;
+alter table llm_calls
+  add column prompt_id text not null
+    check (prompt_id ~ '^[a-z][a-z0-9_]{0,62}$'),
+  add column prompt_version text not null
+    check (prompt_version ~ '^v[1-9][0-9]{0,5}$');
 ```
 
 ---
@@ -1439,6 +1504,11 @@ dry run on the live project read every `llm_calls` column's INSERT/UPDATE privil
 API roles (none), the table's SELECT/DELETE/TRUNCATE, both CHECK constraints and the row count
 (0); the rollback left the table as it was. Pushed with the CLI 2026-10-17 10:20 UTC; `migration
 list` identical; the live posture read after the push matched `test_table_posture.py`.
+
+0014 had the same procedure: the rolled-back dry run showed both columns arriving NOT NULL with
+their CHECK constraints, no API role able to write any `llm_calls` column, and 0 rows; the
+rollback left the table as it was. Pushed with the CLI 2026-10-17 11:27 UTC; `migration list`
+identical; the live posture read after the push matched.
 
 ### Database connections from the laptop — session pooler only
 

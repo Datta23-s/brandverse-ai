@@ -1,0 +1,12 @@
+# The one repair prompt (Rules.md §3.1, C8): sent once, after a reply that did not validate.
+# Appended as a user turn after the model's own invalid reply, so it has no system part.
+# A released version is never edited: a change is a new file (v2.yaml) and a new lock entry.
+id: structured_repair
+version: v1
+description: Ask the model to correct a reply that failed schema validation, quoting the errors.
+variables: [errors]
+system: null
+user: |-
+  Your previous reply could not be used: it must be a single JSON object matching the required schema, with no other text. The validator reported:
+  $errors
+  Reply again with only the corrected JSON object.

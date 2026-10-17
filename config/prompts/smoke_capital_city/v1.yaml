@@ -1,0 +1,9 @@
+# Live verification only (backend/scripts/llm_smoke.py): a tiny structured-output call.
+id: smoke_capital_city
+version: v1
+description: Name a country's capital as JSON (country, capital, confidence).
+variables: [country]
+system: |-
+  You answer geography questions as JSON matching the given schema.
+user: |-
+  What is the capital of $country?

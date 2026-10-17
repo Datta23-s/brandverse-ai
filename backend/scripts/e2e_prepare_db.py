@@ -22,16 +22,16 @@ STUB = REPO_ROOT / "backend" / "tests" / "db" / "supabase_platform_stub.sql"
 MIGRATIONS = sorted((REPO_ROOT / "supabase" / "migrations").glob("*.sql"))
 
 
-def main(admin_url: str) -> str:
+def main(admin_url: str, db_name: str = DB_NAME) -> str:
     check_not_managed_supabase(admin_url, "the e2e database URL")
     with psycopg.connect(admin_url, autocommit=True) as admin:
-        name = sql.Identifier(DB_NAME)
+        name = sql.Identifier(db_name)
         admin.execute(sql.SQL("drop database if exists {} with (force)").format(name))
         admin.execute(sql.SQL("create database {}").format(name))
     p = conninfo_to_dict(admin_url)
     url = (
         f"postgresql://{p['user']}:{p.get('password', '')}"
-        f"@{p['host']}:{p.get('port', 5432)}/{DB_NAME}"
+        f"@{p['host']}:{p.get('port', 5432)}/{db_name}"
     )
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute(STUB.read_text(encoding="utf-8").encode())

@@ -95,6 +95,8 @@ class Settings(BaseSettings):
     # ── LLM calls (Phase 2) ──────────────────────────────────────────────────────────────────
     # The model registry: the only place a model ID appears (Rules.md P5).
     models_config_path: Path = REPO_ROOT / "config" / "models.yaml"
+    # Versioned prompt templates and their lock (app/llm/prompts.py).
+    prompts_dir: Path = REPO_ROOT / "config" / "prompts"
     google_api_key: SecretStr | None = None
     # Per-run hard caps (Rules.md C3), enforced from llm_calls before every call.
     max_llm_calls_per_run: int = Field(default=20, ge=1)

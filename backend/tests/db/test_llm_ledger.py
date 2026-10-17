@@ -16,13 +16,16 @@ from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
 from app.errors import BudgetExceeded, QuotaExhausted
-from app.llm.gateway import LLMGateway, Prompt
+from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallContext, CallLedger, Usage
+from app.llm.prompts import PromptRef
 from app.llm.registry import ModelRegistry, Tier
 from tests.db.conftest import Seed
-from tests.llm_fakes import FakeCompletion, make_registry, reply
+from tests.llm_fakes import FakeCompletion, judge, make_registry, prompt_library, reply
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db]
+
+P = PromptRef("test_judge", "v1")
 
 
 @pytest.fixture
@@ -74,9 +77,10 @@ def insert_calls(
     with psycopg.connect(db_url, autocommit=True) as c:
         for _ in range(n):
             c.execute(
-                "insert into llm_calls (org_id, run_id, model, tier, route_reason, outcome, "
-                "cost_usd, created_at) "
-                "values (%s, %s, %s, 'cheap', 'seeded', %s, %s, now() - %s::interval)",
+                "insert into llm_calls (org_id, run_id, model, tier, prompt_id, prompt_version, "
+                "route_reason, outcome, cost_usd, created_at) "
+                "values (%s, %s, %s, 'cheap', 'test_judge', 'v1', 'seeded', %s, %s, "
+                "now() - %s::interval)",
                 (ctx.org_id, ctx.run_id, model, outcome, cost, age),
             )
 
@@ -95,7 +99,7 @@ async def test_admission_writes_a_pending_row_and_finish_completes_it(
     pool: AsyncConnectionPool[AsyncConnection], run_ctx: CallContext, db_url: str
 ) -> None:
     led = ledger(pool, make_registry())
-    admission = await led.admit(run_ctx, Tier.CHEAP, "default tier", 0.001)
+    admission = await led.admit(run_ctx, Tier.CHEAP, P, "default tier", 0.001)
     assert admission.call_id is not None
     assert rows(db_url, run_ctx.run_id) == [
         ("pending", "default tier", None, None, None, None, 0, False)
@@ -119,7 +123,7 @@ async def test_the_run_call_cap_is_counted_from_llm_calls(
     registry = make_registry()
     insert_calls(db_url, run_ctx, registry.model(Tier.CHEAP).id, 20)
     with pytest.raises(BudgetExceeded, match="20 of 20 LLM calls"):
-        await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, "default tier", 0.001)
+        await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, P, "default tier", 0.001)
     # The refusal is itself logged, with its reason (Rules.md C9) — and is not a call.
     assert [r[0] for r in rows(db_url, run_ctx.run_id)] == ["refused"]
 
@@ -130,7 +134,7 @@ async def test_refusals_are_not_counted_as_calls(
     registry = make_registry(rpm=1000)  # this test is about counting, not RPM pacing
     insert_calls(db_url, run_ctx, registry.model(Tier.CHEAP).id, 19)
     insert_calls(db_url, run_ctx, registry.model(Tier.CHEAP).id, 30, outcome="refused")
-    admission = await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, "default tier", 0.001)
+    admission = await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, P, "default tier", 0.001)
     assert admission.call_id is not None
 
 
@@ -140,11 +144,11 @@ async def test_the_run_cost_cap_includes_the_estimate_and_pending_calls(
     registry = make_registry()
     insert_calls(db_url, run_ctx, registry.model(Tier.CHEAP).id, 1, cost=2.45)
     led = ledger(pool, registry)
-    first = await led.admit(run_ctx, Tier.CHEAP, "default tier", 0.02)  # 2.45 + 0.02
+    first = await led.admit(run_ctx, Tier.CHEAP, P, "default tier", 0.02)  # 2.45 + 0.02
     assert first.call_id is not None
     # Still pending: counted at the estimate. 2.45 + 2 x 0.04 would pass 2.50.
     with pytest.raises(BudgetExceeded, match=r"\$2\.5300 of \$2\.50"):
-        await led.admit(run_ctx, Tier.CHEAP, "default tier", 0.04)
+        await led.admit(run_ctx, Tier.CHEAP, P, "default tier", 0.04)
 
 
 async def test_the_daily_quota_counts_since_midnight_pacific_only(
@@ -162,9 +166,9 @@ async def test_the_daily_quota_counts_since_midnight_pacific_only(
     insert_calls(db_url, run_ctx, model, 50, age=before_reset)  # yesterday's: not counted
     insert_calls(db_url, run_ctx, model, 2)
     led = ledger(pool, registry, calls=1000, cost=1000)
-    assert (await led.admit(run_ctx, Tier.STRONG, "high risk", 0.0)).call_id is not None
+    assert (await led.admit(run_ctx, Tier.STRONG, P, "high risk", 0.0)).call_id is not None
     with pytest.raises(QuotaExhausted, match="3 of 3 requests since the daily reset"):
-        await led.admit(run_ctx, Tier.STRONG, "high risk", 0.0)
+        await led.admit(run_ctx, Tier.STRONG, P, "high risk", 0.0)
 
 
 async def test_rpm_pacing_asks_for_a_wait_and_writes_nothing(
@@ -172,7 +176,7 @@ async def test_rpm_pacing_asks_for_a_wait_and_writes_nothing(
 ) -> None:
     registry = make_registry(rpm=5)
     insert_calls(db_url, run_ctx, registry.model(Tier.CHEAP).id, 5, age="20 seconds")
-    admission = await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, "default tier", 0.0)
+    admission = await ledger(pool, registry).admit(run_ctx, Tier.CHEAP, P, "default tier", 0.0)
     assert admission.call_id is None
     assert 39 <= admission.wait_s <= 41  # the oldest call in the window leaves it in ~40 s
     assert rows(db_url, run_ctx.run_id) == []
@@ -198,7 +202,7 @@ async def test_concurrent_admissions_never_exceed_the_quota(
 
     async def one() -> bool:
         try:
-            return (await led.admit(run_ctx, Tier.STRONG, "high risk", 0.0)).call_id is not None
+            return (await led.admit(run_ctx, Tier.STRONG, P, "high risk", 0.0)).call_id is not None
         except QuotaExhausted:
             return False
 
@@ -212,30 +216,71 @@ class Answer(BaseModel):
     answer: str
 
 
-async def test_cost_is_in_the_database_when_the_call_returns(
+class TimedCompletion(FakeCompletion):
+    """The fake provider, noting when each reply is handed back to the gateway."""
+
+    def __init__(self, *script: object) -> None:
+        super().__init__(*script)
+        self.returned_at: list[float] = []
+
+    async def __call__(self, **kwargs: object) -> object:
+        response = await super().__call__(**kwargs)
+        self.returned_at.append(time.perf_counter())
+        return response
+
+
+COST_VISIBILITY_CALLS = 20
+
+
+async def test_cost_is_in_the_database_within_one_second_of_every_call(
     pool: AsyncConnectionPool[AsyncConnection], run_ctx: CallContext, db_url: str
 ) -> None:
-    """Phases.md Phase 2: "cost per call appears in the database within one second"."""
-    registry = make_registry()
+    """Phases.md Phase 2 exit criterion: "cost per call appears in the database within one
+    second" — over 20 mocked calls, not one observation.
+
+    Each interval runs from the moment the provider's reply reaches the gateway to the moment a
+    SEPARATE connection has read that call's row with its cost: an upper bound on the time to
+    visibility, independent of any clock difference between the app and Postgres.
+    """
+    registry = make_registry(rpm=1000)
+    completion = TimedCompletion(
+        *[reply('{"answer": "42"}', 200 + i, 30) for i in range(COST_VISIBILITY_CALLS)]
+    )
     gateway = LLMGateway(
         registry,
-        ledger(pool, registry),
+        ledger(pool, registry, calls=1000, cost=1000),
+        prompt_library(),
         api_key="test",
         timeout_s=5,
         max_rate_limit_waits=0,
         max_rate_limit_wait_s=1,
-        completion=FakeCompletion(reply('{"answer": "42"}', 200, 30)),
+        completion=completion,
     )
-    returned = await gateway.structured(
-        Answer, tier=Tier.CHEAP, prompt=Prompt("s", "u"), ctx=run_ctx, route_reason="default tier"
+    intervals_ms: list[float] = []
+    with psycopg.connect(db_url, autocommit=True) as observer:
+        for i in range(COST_VISIBILITY_CALLS):
+            returned = await gateway.structured(
+                Answer, tier=Tier.CHEAP, prompt=judge(), ctx=run_ctx, route_reason="default tier"
+            )
+            row = observer.execute(
+                "select outcome, input_tokens, output_tokens, cost_usd, finished_at is not null "
+                "from llm_calls where run_id = %s order by id desc limit 1",
+                (run_ctx.run_id,),
+            ).fetchone()
+            intervals_ms.append((time.perf_counter() - completion.returned_at[i]) * 1000)
+            assert returned == Answer(answer="42")
+            assert row is not None
+            assert row[0] == "ok" and row[1:3] == (200 + i, 30) and row[4] is True
+            expected = ((200 + i) * 0.25 + 30 * 1.50) / 1e6
+            assert float(row[3]) == pytest.approx(expected, abs=5e-7)  # numeric(10,6)
+
+    intervals_ms.sort()
+    print(  # noqa: T201 — the measurement is recorded in Architecture.md §4.4
+        f"\ncost visible after provider reply, {len(intervals_ms)} calls: "
+        f"min {intervals_ms[0]:.1f} ms, median {intervals_ms[len(intervals_ms) // 2]:.1f} ms, "
+        f"max {intervals_ms[-1]:.1f} ms"
     )
-    seen_at = time.monotonic()
-    (row,) = rows(db_url, run_ctx.run_id)
-    assert time.monotonic() - seen_at < 1.0
-    assert returned == Answer(answer="42")
-    assert row[0] == "ok" and row[2:4] == (200, 30)
-    assert float(row[4]) == pytest.approx((200 * 0.25 + 30 * 1.50) / 1e6)  # type: ignore[arg-type]
-    assert row[7] is True  # finished_at set
+    assert intervals_ms[-1] < 1000
 
 
 async def test_abandoned_reservations_stop_counting_after_the_expiry(
@@ -246,10 +291,10 @@ async def test_abandoned_reservations_stop_counting_after_the_expiry(
     model = registry.model(Tier.STRONG).id
     led = ledger(pool, registry, calls=1000, cost=1000, expiry=900)
     insert_calls(db_url, run_ctx, model, 3, outcome="pending", age="901 seconds")  # abandoned
-    assert (await led.admit(run_ctx, Tier.STRONG, "high risk", 0.0)).call_id is not None
+    assert (await led.admit(run_ctx, Tier.STRONG, P, "high risk", 0.0)).call_id is not None
     insert_calls(db_url, run_ctx, model, 2, outcome="pending", age="899 seconds")  # still live
     with pytest.raises(QuotaExhausted, match="3 of 3"):
-        await led.admit(run_ctx, Tier.STRONG, "high risk", 0.0)
+        await led.admit(run_ctx, Tier.STRONG, P, "high risk", 0.0)
 
 
 async def test_the_daily_report_counts_refusals_and_abandoned_calls(
@@ -274,8 +319,9 @@ async def test_the_daily_report_counts_refusals_and_abandoned_calls(
         def add(outcome: str, n: int, *, cost: float = 0.001, offset: str = "12 hours") -> None:
             for _ in range(n):
                 c.execute(
-                    "insert into llm_calls (org_id, run_id, model, tier, route_reason, outcome, "
-                    "cost_usd, created_at) values (%s, %s, %s, 'cheap', 'seeded', %s, %s, "
+                    "insert into llm_calls (org_id, run_id, model, tier, prompt_id, "
+                    "prompt_version, route_reason, outcome, cost_usd, created_at) "
+                    "values (%s, %s, %s, 'cheap', 'test_judge', 'v1', 'seeded', %s, %s, "
                     "%s::timestamptz + %s::interval)",
                     (run_ctx.org_id, run_ctx.run_id, model, outcome, cost, midnight, offset),
                 )
@@ -331,12 +377,12 @@ async def test_locks_are_per_run_and_per_model_not_global(
                 (f"llm:model:{registry.model(Tier.CHEAP).id}",),
             )
             # Another run, another model: proceeds at once.
-            free = await asyncio.wait_for(led.admit(other_run, Tier.STANDARD, "x", 0.0), 2)
+            free = await asyncio.wait_for(led.admit(other_run, Tier.STANDARD, P, "x", 0.0), 2)
             assert free.call_id is not None
             # The held run (any model) and the held model (any run) must wait.
             for blocked in (
-                led.admit(held_run, Tier.STANDARD, "x", 0.0),
-                led.admit(other_run, Tier.CHEAP, "x", 0.0),
+                led.admit(held_run, Tier.STANDARD, P, "x", 0.0),
+                led.admit(other_run, Tier.CHEAP, P, "x", 0.0),
             ):
                 task = asyncio.create_task(blocked)
                 await asyncio.sleep(0.5)
@@ -345,3 +391,45 @@ async def test_locks_are_per_run_and_per_model_not_global(
                 await asyncio.gather(task, return_exceptions=True)
     finally:
         await holder.close()
+
+
+async def test_every_row_records_its_prompt_refusals_included(
+    pool: AsyncConnectionPool[AsyncConnection], run_ctx: CallContext, db_url: str
+) -> None:
+    """Migration 0014: which template produced each call (Rules.md A5, A6)."""
+    registry = make_registry()
+    led = ledger(pool, registry, calls=1)
+    other = PromptRef("test_other", "v7")
+    await led.admit(run_ctx, Tier.CHEAP, P, "default tier", 0.0)
+    with pytest.raises(BudgetExceeded):
+        await led.admit(run_ctx, Tier.CHEAP, other, "default tier", 0.0)
+    await led.refuse(run_ctx, Tier.STANDARD, other, "refused: test")
+    with psycopg.connect(db_url) as c:
+        got = c.execute(
+            "select outcome, prompt_id, prompt_version from llm_calls where run_id = %s "
+            "order by id",
+            (run_ctx.run_id,),
+        ).fetchall()
+    assert got == [
+        ("pending", "test_judge", "v1"),
+        ("refused", "test_other", "v7"),
+        ("refused", "test_other", "v7"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("prompt_id", "prompt_version"),
+    [(None, "v1"), ("test_judge", None), ("Bad-Id", "v1"), ("test_judge", "1"), ("x", "v0")],
+)
+def test_the_database_refuses_a_call_without_a_well_formed_prompt(
+    db_url: str, run_ctx: CallContext, prompt_id: str | None, prompt_version: str | None
+) -> None:
+    with (
+        psycopg.connect(db_url) as c,
+        pytest.raises((psycopg.errors.NotNullViolation, psycopg.errors.CheckViolation)),
+    ):
+        c.execute(
+            "insert into llm_calls (org_id, run_id, model, tier, prompt_id, prompt_version, "
+            "route_reason) values (%s, %s, 'm', 'cheap', %s, %s, 'r')",
+            (run_ctx.org_id, run_ctx.run_id, prompt_id, prompt_version),
+        )

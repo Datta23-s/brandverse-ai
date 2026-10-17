@@ -7,9 +7,19 @@ import pytest
 from pydantic import BaseModel, Field
 
 from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, StructuredOutputInvalid
-from app.llm.gateway import REPAIR_PROMPT_VERSION, LLMGateway, Prompt, retry_delay_s
+from app.llm.gateway import LLMGateway, retry_delay_s
+from app.llm.prompts import PromptRef
 from app.llm.registry import Tier
-from tests.llm_fakes import FakeCompletion, FakeLedger, ctx, make_registry, rate_limit, reply
+from tests.llm_fakes import (
+    FakeCompletion,
+    FakeLedger,
+    ctx,
+    judge,
+    make_registry,
+    prompt_library,
+    rate_limit,
+    reply,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -39,6 +49,7 @@ def gateway(
     gw = LLMGateway(
         make_registry(unique=False),
         ledger,  # type: ignore[arg-type]
+        prompt_library(),
         api_key="test-key",
         timeout_s=30,
         max_rate_limit_waits=max_waits,
@@ -53,7 +64,7 @@ async def ask(gw: LLMGateway, tier: Tier = Tier.CHEAP) -> Verdict:
     return await gw.structured(
         Verdict,
         tier=tier,
-        prompt=Prompt(system="Judge the claim.", user="Is water wet?"),
+        prompt=judge(),
         ctx=ctx(),
         route_reason="test: default tier",
         max_output_tokens=256,
@@ -72,6 +83,17 @@ async def test_valid_output_is_returned_as_the_schema_and_logged() -> None:
     assert row["rate_limit_wait_ms"] == 0
     assert row["latency_ms"] >= 0
     assert row["route_reason"] == "test: default tier"
+    assert row["prompt"] == PromptRef("test_judge", "v1")
+
+
+async def test_the_rendered_template_is_what_the_model_receives() -> None:
+    completion = FakeCompletion(reply('{"supported": true, "confidence": 0.9}'))
+    gw, _, _ = gateway(completion)
+    await ask(gw)
+    assert completion.calls[0]["messages"] == [
+        {"role": "system", "content": "Judge the claim."},
+        {"role": "user", "content": "Is water wet?"},
+    ]
 
 
 async def test_every_call_disables_hidden_retries_and_names_the_schema() -> None:
@@ -94,7 +116,12 @@ async def test_invalid_output_is_repaired_once(bad: str | None) -> None:
     first, second = ledger.rows.values()
     assert first["outcome"] == "invalid_output"
     assert second["outcome"] == "ok"
-    assert second["route_reason"].startswith(REPAIR_PROMPT_VERSION)
+    # The repair is its own versioned template, recorded as such; the reason names what it repairs.
+    assert first["prompt"] == PromptRef("test_judge", "v1")
+    assert second["prompt"] == PromptRef("structured_repair", "v1")
+    assert second["route_reason"].startswith(
+        "structured_repair@v1 after invalid output of test_judge@v1: "
+    )
     repair_messages = completion.calls[1]["messages"]
     assert repair_messages[-2] == {"role": "assistant", "content": bad or ""}
     assert "single JSON object" in repair_messages[-1]["content"]
@@ -216,6 +243,7 @@ async def test_the_strong_tier_is_refused_unless_explicitly_allowed() -> None:
     assert completion.calls == []  # never reaches the provider
     assert ledger.rows == {}  # never admitted, so never counted
     assert ledger.refused and "disabled" in ledger.refused[0]  # but recorded
+    assert ledger.refused_prompts == [PromptRef("test_judge", "v1")]  # with its prompt
 
 
 async def test_the_strong_tier_works_when_allowed() -> None:
@@ -224,6 +252,7 @@ async def test_the_strong_tier_works_when_allowed() -> None:
     gw = LLMGateway(
         make_registry(unique=False),
         FakeLedger(),  # type: ignore[arg-type]
+        prompt_library(),
         api_key="k",
         timeout_s=5,
         max_rate_limit_waits=0,

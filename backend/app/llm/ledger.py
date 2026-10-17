@@ -9,7 +9,7 @@ admission (a race-free per-run cap needs that), never the model call itself:
    since the last daily reset (C9) and in the last 60 seconds (its RPM, C10);
 2. refuse — writing a 'refused' row with the reason (C9: "log the reason in route_reason") — or
    ask the caller to wait for the RPM window, or
-3. write the call's row as 'pending' and return its id.
+3. write the call's row as 'pending' — with its prompt's id and version (0014) — and return its id.
 The pending row IS the reservation: a concurrent admission sees it, so two calls cannot both pass
 a check that only one of them should. The row is completed after the call (`finish`).
 
@@ -36,6 +36,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from app.errors import BudgetExceeded, CallRefused, QuotaExhausted
+from app.llm.prompts import PromptRef
 from app.llm.registry import ModelRegistry, Tier
 
 log = logging.getLogger(__name__)
@@ -105,10 +106,27 @@ from counted
 """
 
 _INSERT_SQL = """
-insert into public.llm_calls (org_id, run_id, agent_id, model, tier, route_reason, outcome)
-values (%s, %s, %s, %s, %s, %s, %s)
+insert into public.llm_calls
+  (org_id, run_id, agent_id, model, tier, prompt_id, prompt_version, route_reason, outcome)
+values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 returning id
 """
+
+
+def _row(
+    ctx: CallContext, model: str, tier: Tier, prompt: PromptRef, reason: str, outcome: str
+) -> tuple[object, ...]:
+    return (
+        ctx.org_id,
+        ctx.run_id,
+        ctx.agent_id,
+        model,
+        tier.value,
+        prompt.prompt_id,
+        prompt.prompt_version,
+        reason,
+        outcome,
+    )
 
 
 class CallLedger:
@@ -142,7 +160,12 @@ class CallLedger:
         )
 
     async def admit(
-        self, ctx: CallContext, tier: Tier, route_reason: str, estimated_cost_usd: float
+        self,
+        ctx: CallContext,
+        tier: Tier,
+        prompt: PromptRef,
+        route_reason: str,
+        estimated_cost_usd: float,
     ) -> Admission:
         model = self._registry.model(tier)
         refusal: CallRefused | None = None
@@ -175,8 +198,7 @@ class CallLedger:
             reason = str(refusal) if refusal else route_reason
             outcome = "refused" if refusal else "pending"
             cur = await conn.execute(
-                _INSERT_SQL,
-                (ctx.org_id, ctx.run_id, ctx.agent_id, model.id, tier.value, reason, outcome),
+                _INSERT_SQL, _row(ctx, model.id, tier, prompt, reason, outcome)
             )
             row = await cur.fetchone()
         if refusal is not None:
@@ -186,14 +208,11 @@ class CallLedger:
             raise RuntimeError("insert returned no id")
         return Admission(call_id=int(row[0]))
 
-    async def refuse(self, ctx: CallContext, tier: Tier, reason: str) -> None:
+    async def refuse(self, ctx: CallContext, tier: Tier, prompt: PromptRef, reason: str) -> None:
         """Record a refusal decided outside admission (e.g. an RPM wait over its cap)."""
         model = self._registry.model(tier)
         async with self._pool.connection() as conn, conn.transaction():
-            await conn.execute(
-                _INSERT_SQL,
-                (ctx.org_id, ctx.run_id, ctx.agent_id, model.id, tier.value, reason, "refused"),
-            )
+            await conn.execute(_INSERT_SQL, _row(ctx, model.id, tier, prompt, reason, "refused"))
 
     async def finish(
         self,

@@ -8,9 +8,17 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import REPO_ROOT, get_settings
-from app.llm.gateway import LLMGateway, Prompt
+from app.llm.gateway import LLMGateway
 from app.llm.registry import Tier, load_registry
-from tests.llm_fakes import FakeCompletion, FakeLedger, ctx, make_registry, reply
+from tests.llm_fakes import (
+    FakeCompletion,
+    FakeLedger,
+    ctx,
+    judge,
+    make_registry,
+    prompt_library,
+    reply,
+)
 
 MODELS_YAML = get_settings().models_config_path
 
@@ -57,6 +65,7 @@ async def test_switching_a_tiers_model_is_a_one_line_config_change(tmp_path: Pat
     gateway = LLMGateway(
         registry,
         FakeLedger(),  # type: ignore[arg-type]
+        prompt_library(),
         api_key="test",
         timeout_s=5,
         max_rate_limit_waits=0,
@@ -64,7 +73,7 @@ async def test_switching_a_tiers_model_is_a_one_line_config_change(tmp_path: Pat
         completion=completion,
     )
     await gateway.structured(
-        Answer, tier=Tier.CHEAP, prompt=Prompt("s", "u"), ctx=ctx(), route_reason="test"
+        Answer, tier=Tier.CHEAP, prompt=judge(), ctx=ctx(), route_reason="test"
     )
     assert completion.calls[0]["model"] == "gemini/gemini-switched-test-model"
     # The other tiers are untouched.

@@ -1,10 +1,13 @@
 """The LLM gateway: the only path to a model (Rules.md P6). Every call goes through LiteLLM
 (app/llm/_litellm.py), is admitted by the ledger before it is made, and is logged to llm_calls.
 
-`structured()` returns an instance of the requested Pydantic schema — never a raw string
-(Rules.md §3.1). An output that does not validate (prose, broken JSON, a schema mismatch) is
-repaired ONCE with a different prompt that quotes the validation errors; if the repair fails too,
-StructuredOutputInvalid is raised. That is at most two calls per request, within Rules.md C8.
+`structured()` takes a RenderedPrompt — a versioned template with its variables filled in
+(app/llm/prompts.py), never an inline string — and returns an instance of the requested Pydantic
+schema, never a raw string (Rules.md §3.1). Each llm_calls row records the template's id and
+version. An output that does not validate (prose, broken JSON, a schema mismatch) is repaired ONCE
+with a different prompt, the `structured_repair` template, which quotes the validation errors; if
+the repair fails too, StructuredOutputInvalid is raised. That is at most two calls per request,
+within Rules.md C8.
 
 The strong tier (20 requests/day, shared with the evaluation) is refused unless the gateway is
 built with `allow_strong_tier=True` (Settings.llm_allow_strong_tier, false by default): no
@@ -39,26 +42,16 @@ from app.errors import (
 )
 from app.llm import _litellm
 from app.llm.ledger import CallContext, CallLedger
+from app.llm.prompts import PromptLibrary, PromptRef, RenderedPrompt
 from app.llm.registry import ModelRegistry, Tier
 
 log = logging.getLogger(__name__)
 
 Completion = Callable[..., Awaitable[Any]]
 
-# Versioned with the code that relies on it; prompt templates proper arrive in chunk B.
-REPAIR_PROMPT_VERSION = "repair-v1"
-REPAIR_PROMPT = (
-    "Your previous reply could not be used: it must be a single JSON object matching the "
-    "required schema, with no other text. The validator reported:\n{errors}\n"
-    "Reply again with only the corrected JSON object."
-)
+# The repair template, pinned by version like any other prompt (config/prompts/).
+REPAIR_PROMPT = ("structured_repair", "v1")
 _RETRY_DELAY = re.compile(r'"?retryDelay"?\s*[:=]\s*"?(\d+(?:\.\d+)?)s')
-
-
-@dataclass(frozen=True, slots=True)
-class Prompt:
-    system: str
-    user: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +91,7 @@ class LLMGateway:
         self,
         registry: ModelRegistry,
         ledger: CallLedger,
+        prompts: PromptLibrary,
         *,
         api_key: str | None,
         timeout_s: float,
@@ -111,6 +105,7 @@ class LLMGateway:
     ) -> None:
         self._registry = registry
         self._ledger = ledger
+        self._repair = prompts.get(*REPAIR_PROMPT)  # fails at start-up, not at the first repair
         self._api_key = api_key
         self._timeout_s = timeout_s
         self._max_waits = max_rate_limit_waits
@@ -126,16 +121,16 @@ class LLMGateway:
         schema: type[M],
         *,
         tier: Tier,
-        prompt: Prompt,
+        prompt: RenderedPrompt,
         ctx: CallContext,
         route_reason: str,
         max_output_tokens: int = 1024,
     ) -> M:
-        messages = [
-            {"role": "system", "content": prompt.system},
-            {"role": "user", "content": prompt.user},
-        ]
-        first = await self._attempt(schema, messages, tier, ctx, route_reason, max_output_tokens)
+        messages = [{"role": "system", "content": prompt.system}] if prompt.system else []
+        messages.append({"role": "user", "content": prompt.user})
+        first = await self._attempt(
+            schema, messages, tier, prompt.ref, ctx, route_reason, max_output_tokens
+        )
         parsed, errors = _parse(schema, first.content)
         await self._finish(first, "ok" if parsed is not None else "invalid_output")
         if parsed is not None:
@@ -145,16 +140,18 @@ class LLMGateway:
             "structured output invalid; one repair",
             extra={"schema": schema.__name__, "tier": tier.value, "errors": errors},
         )
+        repair_prompt = self._repair.render(errors=errors)
         repair = messages + [
             {"role": "assistant", "content": first.content},
-            {"role": "user", "content": REPAIR_PROMPT.format(errors=errors)},
+            {"role": "user", "content": repair_prompt.user},
         ]
         second = await self._attempt(
             schema,
             repair,
             tier,
+            repair_prompt.ref,
             ctx,
-            f"{REPAIR_PROMPT_VERSION} after invalid output: {route_reason}",
+            f"{repair_prompt.ref} after invalid output of {prompt.ref}: {route_reason}",
             max_output_tokens,
         )
         parsed, errors = _parse(schema, second.content)
@@ -183,6 +180,7 @@ class LLMGateway:
         schema: type[BaseModel],
         messages: list[dict[str, str]],
         tier: Tier,
+        prompt: PromptRef,
         ctx: CallContext,
         route_reason: str,
         max_output_tokens: int,
@@ -194,24 +192,24 @@ class LLMGateway:
                 f"refused: strong tier ({model.id}, {model.rate_limits.rpd}/day) is disabled; "
                 "set llm_allow_strong_tier only for evaluation runs"
             )
-            await self._ledger.refuse(ctx, tier, reason)
+            await self._ledger.refuse(ctx, tier, prompt, reason)
             raise StrongTierDisabled(reason)
         estimate = model.cost_usd(estimate_tokens(messages), max_output_tokens, self._today())
         waited_s = 0.0
 
         # 1. Admission: may refuse (raises), or ask to wait for the model's RPM window.
-        admission = await self._ledger.admit(ctx, tier, route_reason, estimate)
+        admission = await self._ledger.admit(ctx, tier, prompt, route_reason, estimate)
         while admission.call_id is None:
             if waited_s + admission.wait_s > self._max_wait_s:
                 reason = (
                     f"refused: pacing {model.id} to {model.rate_limits.rpm}/min would wait "
                     f"over {self._max_wait_s:.0f} s (Rules.md C10)"
                 )
-                await self._ledger.refuse(ctx, tier, reason)
+                await self._ledger.refuse(ctx, tier, prompt, reason)
                 raise LLMRateLimited(reason)
             await self._sleep(admission.wait_s)
             waited_s += admission.wait_s
-            admission = await self._ledger.admit(ctx, tier, route_reason, estimate)
+            admission = await self._ledger.admit(ctx, tier, prompt, route_reason, estimate)
         call_id = admission.call_id
 
         # 2. The call. A 429 is waited out and the same request re-sent, within the caps.
