@@ -65,13 +65,16 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
 **Exit criteria**
-- [ ] Sign up → create brand → create product works end to end — *not yet ticked (2026-10-17).*
-  Demonstrated on the live Supabase project by `frontend/e2e/auth-and-setup.spec.ts`: sign in →
-  create the organisation (`app.create_organisation`, 0012) → create a brand → create a product →
-  reload → delete, as fixed E2E users; and the sign-up form up to "check your email" against the
-  Auth stand-in in CI. **Missing:** one sign-up on the live project completed by clicking the
-  real confirmation email (email confirmation is on; Supabase's default mailer only delivers to
-  the project team's addresses). Tick after that is done once.
+- [x] Sign up → create brand → create product works end to end — ticked 2026-10-17.
+  On the live Supabase project the project owner signed up through the sign-up form with their
+  own address, confirmed it through the real confirmation email, signed in, created an
+  organisation (`app.create_organisation`, 0012), a brand and a product. Checked in the database
+  the same day: one organisation outside the E2E ones, created 2026-10-17, owned by a confirmed
+  non-E2E user; it held 0 brands and 0 products at the time of the check (consistent with their
+  deletion through the UI; brand and product creation rest on the owner's report and on
+  `frontend/e2e/auth-and-setup.spec.ts`, which creates, reloads and deletes both on the live
+  project). The sign-up form up to "check your email" is also tested in CI against the Auth
+  stand-in.
 - [x] Cross-tenant access test written and green — `backend/tests/db/test_rls.py` (every tenant
   table) and `backend/tests/db/test_api.py` (a member of org A cannot stream, read or write
   org B's runs, brands or products; signed-out requests are refused), merge-blocking in CI.

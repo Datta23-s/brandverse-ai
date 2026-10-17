@@ -1275,10 +1275,22 @@ are re-compared after any restore or upgrade.
 | `USAGE` on `public` and `auth` | All three API roles | All three API roles | None |
 | `auth.users` | 35 columns | `id` only | Seeding only; no policy reads `auth.users` |
 | Login role for the API | `authenticator` (member of the three API roles) | none; tests use `set local role` | None: PostgREST also switches roles with `SET ROLE` |
+| Migration role's rights over objects it creates (added 2026-10-17) | `postgres` is not a superuser: once it hands a function to another owner it can no longer revoke that function's grants, and Supabase grants EXECUTE on new functions to the API roles | Superuser: it can revoke anything, from any owner | **Not modelled.** EXECUTE grants on new `app.*` functions can differ between CI and the project — see the lesson below |
 
 Conclusion: in everything the RLS policies depend on — the two auth functions, the API roles'
 RLS-relevant attributes and the default grants — the stub matches the platform, so the CI
 database suite's policy results transfer. A separate suite against the live project was not built.
+
+**Lesson (2026-10-16, migration 0012): the stub does not model function EXECUTE grants.** The
+comparison above (2026-10-14) covered the auth functions, the roles' attributes and the default
+grants — not who may EXECUTE a new `app.*` function. A rolled-back dry run of 0012 on the live
+project found that **anon and service_role could still execute `app.create_organisation`**: the
+migration revoked EXECUTE after handing the function to its new owner, and Supabase's `postgres`,
+no longer owner, revoked nothing (silently). CI applies migrations as a superuser, which can
+revoke anything, so the merge-blocking suite passed. The migration was corrected before it was
+applied. **Rule: every migration that creates or changes an `app.*` function gets a rolled-back
+dry run against the live project before it is applied** (below), because the stub cannot catch
+this surface.
 
 ### Applying migrations — Supabase CLI (adopted 2026-10-14)
 
@@ -1294,6 +1306,16 @@ npx supabase@2.120.0 db push --db-url "$DATABASE_URL"
 `supabase_migrations.schema_migrations` on the project is the record of what has been applied;
 `migration list` must show local and remote identical after every push. The full database suite
 passes on CI's pgvector image before a push, never after.
+
+**Before pushing a migration that creates or changes an `app.*` function** (the lesson above):
+run the migration file against the project inside a transaction that is always rolled back
+(`psycopg`: `async with conn.transaction(force_rollback=True)`), and inside it read, for every
+such function, its owner, `prosecdef`, `proconfig` and
+`has_function_privilege(<role>, <function>, 'EXECUTE')` for `anon`, `authenticated` and
+`service_role`. They must match what `backend/tests/db/test_table_posture.py` states. Then
+confirm nothing persisted (for example, a role the migration creates does not exist after the
+rollback). DDL, `CREATE ROLE` included, is transactional, so the dry run leaves no trace. Done for
+0012 on 2026-10-16; after the push, the live posture was read again and matched.
 
 ### Database connections from the laptop — session pooler only
 
@@ -1343,6 +1365,14 @@ npm run test:e2e -w frontend            # Playwright against the live project (E
   `Last-Event-ID`, stop quietly on `204`, stop with an error on `404`/`403`. Every event is
   validated against the contract before it reaches the view. The API allows CORS from
   `http://localhost:3000` and `http://127.0.0.1:3000` only (`cors_origins`).
+- **Dependencies — how `Rules.md` §1.2 is read (decided 2026-10-16/17).** Packages the documents
+  name are the specified stack, not new decisions: fastapi, uvicorn, arq, pydantic-settings, httpx
+  and psycopg (`Rules.md` §3.1, this document); Next.js, React, TanStack Query, react-hook-form,
+  zod, Tailwind, Vitest and Playwright (`Rules.md` §3.2, §6). **`@supabase/supabase-js` is the
+  official client for Supabase Auth, which §2 names, so it falls under the specified stack**
+  (confirmed by the project owner 2026-10-17). §1.2's "stop and ask" applies to dependencies the
+  documents do not call for; each such approval is recorded in the commit that adds it —
+  `cryptography` (ES256 verification), approved 2026-10-16, is the first.
 - **Shared contracts.** `backend/scripts/export_contracts.py` writes the run contracts (the 15
   steps and the JSON Schemas of the request, response and events) to
   `frontend/src/contracts/run-contracts.json`. A backend test fails if that file is stale; a
