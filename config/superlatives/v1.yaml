@@ -1,0 +1,36 @@
+# Superlatives and "first" claims that need a cited source (Rules.md T3), for the risk gate
+# (backend/app/core/gates.py). Proposed 2026-10-17 for the project owner's review.
+#
+# A phrase matches as whole words, case- and punctuation-insensitively (app/core/text_match.py).
+# A match blocks the copy unless the statement containing it cites an active verified claim whose
+# own text contains the same phrase — the manufacturer's sourced spec says it, so the copy may.
+#
+# Conservative on purpose: a match blocks, so words that are superlatives only sometimes are left
+# out rather than block ordinary copy — "leading" ("leading to"), "the only", "ultimate".
+#
+# Released versions are immutable: versions.lock holds this file's hash, and a change is a new
+# version file (v2.yaml), recorded in every gate report that uses it (Rules.md A5).
+version: v1
+phrases:
+  - best
+  - finest
+  - greatest
+  - fastest
+  - strongest
+  - cheapest
+  - number one
+  - first ever
+  - world's first
+  - india's first
+  - most advanced
+  - most powerful
+  - most effective
+  - unbeatable
+  - unmatched
+  - unrivalled
+  - unrivaled
+  - unparalleled
+  - market leading
+  - industry leading
+  - top rated
+  - best selling

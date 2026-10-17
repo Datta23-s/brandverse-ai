@@ -1,0 +1,3 @@
+# Released superlative lists: <version> sha256:<hash of the file, LF line endings>.
+# Append-only. A released version is never edited or removed (app/core/gates.py).
+v1 sha256:69f94150e37ad9b1d5143dc6b906ca9387fe8a1bff1e720ec3e951a75216864b
