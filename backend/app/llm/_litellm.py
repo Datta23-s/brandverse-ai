@@ -14,6 +14,6 @@ import litellm  # noqa: E402 — must follow the environment switch above
 litellm.suppress_debug_info = True
 
 acompletion = litellm.acompletion
-from litellm.exceptions import RateLimitError  # noqa: E402
+from litellm.exceptions import APIConnectionError, RateLimitError  # noqa: E402
 
-__all__ = ["RateLimitError", "acompletion"]
+__all__ = ["APIConnectionError", "RateLimitError", "acompletion"]

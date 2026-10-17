@@ -18,6 +18,18 @@ This is the budget behaviour the Phase 6 LangGraph pipeline inherits (Phases.md 
 criterion); the graph will call `run_steps`' parts, not reimplement them. An exhausted daily
 quota (QuotaExhausted) is not a budget breach: it is meant to downgrade or defer (Rules.md C9),
 which is not built yet, so here it fails the run.
+
+**Memory write-back is staged, then committed at termination (2026-10-17).** Whether an attempt
+is the primary result is known only when it ends (docs/evaluation-plan.md §2: the first attempt
+that terminates without infrastructure failure), and memory_items rows can never be deleted
+(0010, 0011) — so nothing may reach memory_items before the end. Steps never write memory
+themselves: they append to the run's `MemoryStage`, which exists only in this process. The stage
+is inserted in **the same transaction** that writes the run's terminal status, and only when the
+run ends `completed` (and, for an experiment run, when the Phase 10 primacy check passes inside
+that transaction). Every other ending — `partial`, `failed`, an infrastructure failure
+(app/core/infrastructure.py), cancellation — discards it. A process that dies takes the stage with
+it: it was never anywhere durable. What is eligible to be staged at all (human approval, the claim
+gate, Memory.md §6.1) is the write-back step's business (Phase 4), not this executor's.
 """
 
 import asyncio
@@ -31,6 +43,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
+from app.core.infrastructure import classify_infrastructure_failure
 from app.errors import BudgetExceeded
 
 log = logging.getLogger(__name__)
@@ -42,6 +55,35 @@ StepFn = Callable[[Mapping[str, BaseModel]], Awaitable[BaseModel]]
 class Step:
     name: str
     run: StepFn
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryWrite:
+    """One memory_items row a step wants written if, and only if, the run qualifies at its end."""
+
+    org_id: UUID
+    kind: str
+    content: str
+    provenance: str
+    brand_id: UUID | None = None
+    product_id: UUID | None = None
+    claim_id: UUID | None = None
+    source_url: str | None = None
+    confidence: float | None = None
+
+
+class MemoryStage:
+    """The run's staged memory writes: in this process only, committed by `end_run` or lost."""
+
+    def __init__(self) -> None:
+        self._items: list[MemoryWrite] = []
+
+    def stage(self, item: MemoryWrite) -> None:
+        self._items.append(item)
+
+    @property
+    def items(self) -> tuple[MemoryWrite, ...]:
+        return tuple(self._items)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,23 +106,55 @@ where r.id = %(run)s
 """
 
 
+_INSERT_MEMORY_SQL = """
+insert into public.memory_items
+  (org_id, brand_id, product_id, claim_id, kind, content, provenance, source_url, confidence)
+values (%(org_id)s, %(brand_id)s, %(product_id)s, %(claim_id)s, %(kind)s, %(content)s,
+        %(provenance)s, %(source_url)s, %(confidence)s)
+"""
+
+
 async def end_run(
     pool: AsyncConnectionPool[AsyncConnection],
     run_id: UUID,
     status: Literal["completed", "partial", "failed", "blocked"],
     *,
     budget_exhausted: bool,
+    memory: Sequence[MemoryWrite] = (),
 ) -> None:
+    """Write the run's terminal status — and, for a completed run only, its staged memory — in one
+    transaction: both land or neither does."""
+    if memory and status != "completed":
+        raise ValueError("staged memory is committed only for a completed run")
     async with pool.connection() as conn, conn.transaction():
         cur = await conn.execute(
             _END_RUN_SQL, {"status": status, "exhausted": budget_exhausted, "run": run_id}
         )
         if cur.rowcount != 1:
             raise RuntimeError(f"run {run_id} not found")
+        for item in memory:
+            await conn.execute(
+                _INSERT_MEMORY_SQL,
+                {
+                    "org_id": item.org_id,
+                    "brand_id": item.brand_id,
+                    "product_id": item.product_id,
+                    "claim_id": item.claim_id,
+                    "kind": item.kind,
+                    "content": item.content,
+                    "provenance": item.provenance,
+                    "source_url": item.source_url,
+                    "confidence": item.confidence,
+                },
+            )
 
 
 async def run_steps(
-    steps: Sequence[Step], *, pool: AsyncConnectionPool[AsyncConnection], run_id: UUID
+    steps: Sequence[Step],
+    *,
+    pool: AsyncConnectionPool[AsyncConnection],
+    run_id: UUID,
+    memory: MemoryStage | None = None,
 ) -> RunOutcome:
     if len({s.name for s in steps}) != len(steps):
         raise ValueError("step names must be unique")
@@ -95,11 +169,28 @@ async def run_steps(
                     "run budget exhausted; partial result",
                     extra={"run_id": str(run_id), "step": step.name, "reason": str(e)},
                 )
+                # A partial run is a result, but it never reached write-back: stage discarded.
                 await end_run(pool, run_id, "partial", budget_exhausted=True)
                 return RunOutcome("partial", outputs, not_run, True, str(e))
-    except BaseException:
-        # Cancellation included: mark the run failed, then propagate.
+        # Inside the try: if committing the status and the staged memory fails, the run ends
+        # 'failed' below rather than being left unterminated.
+        await end_run(
+            pool,
+            run_id,
+            "completed",
+            budget_exhausted=False,
+            memory=memory.items if memory else (),
+        )
+    except BaseException as e:
+        # Cancellation included: mark the run failed, discard staged memory, then propagate.
+        log.warning(
+            "run failed; staged memory discarded",
+            extra={
+                "run_id": str(run_id),
+                "infrastructure_failure": classify_infrastructure_failure(e),
+                "staged_memory": len(memory.items) if memory else 0,
+            },
+        )
         await asyncio.shield(end_run(pool, run_id, "failed", budget_exhausted=False))
         raise
-    await end_run(pool, run_id, "completed", budget_exhausted=False)
     return RunOutcome("completed", outputs, [], False, None)

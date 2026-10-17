@@ -87,10 +87,20 @@ lowest-numbered attempt with no infrastructure-failure reason; a pair whose atte
 infrastructure failure has no primary result and is reported as such, never dropped (A2).
 
 *Memory interaction (Proposed arm).* Later requests for a brand read memory that earlier approved
-campaigns wrote (`Memory.md` §6). Only the primary attempt may write back: write-back is the last
-step, after human approval, so an attempt that ends in infrastructure failure has written nothing,
-and once a pair has its primary attempt the harness disables write-back for any later attempt of
-that pair. The memory each later request sees therefore comes from primary attempts only.
+campaigns wrote (`Memory.md` §6). Only the primary attempt may write back. Primacy is known only
+when an attempt ends, and `memory_items` rows can never be deleted (0010, 0011), so the rule is
+enforced by the mechanism, not by timing: **memory writes are staged within the run and committed
+in one step at termination, only for an attempt that qualifies** (`backend/app/core/budgeted_run.py`,
+2026-10-17). Steps append to an in-process `MemoryStage`; it is inserted in the same transaction
+that writes the run's terminal status, and only when the run ends `completed` (for an experiment
+run, also only if the Phase 10 primacy check passes inside that transaction). Every other ending
+discards it; a process that dies takes it with it. Nothing reaches `memory_items` before that
+point. `backend/tests/db/test_memory_staging.py` stages a write and then ends the attempt with each
+of the four infrastructure failures — rate-limit rejection, daily-quota exhaustion, a network
+error, and a process crash (a cancelled attempt, and a worker process killed outright) — and
+asserts `memory_items` is unchanged each time; controls show a completed run commits, a
+budget-stopped run commits nothing, and status and memory land together or not at all. Once a pair
+has its primary attempt, the harness disables write-back for any later attempt of that pair.
 
 ## 3. Seed exclusion
 
