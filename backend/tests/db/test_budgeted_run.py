@@ -171,3 +171,40 @@ async def test_any_other_error_fails_the_run_and_propagates(
     with pytest.raises(LLMCallFailed):
         await run_steps(pipeline(pool, ctx, completion), pool=pool, run_id=ctx.run_id)
     assert run_row(db_url, ctx) == ("failed", False, 2, True)
+
+
+async def test_a_run_over_its_organisations_monthly_cap_ends_partial_and_flagged(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    """The org's month-to-date cap (Architecture.md §9) ends a run exactly as the run caps do."""
+    with psycopg.connect(db_url, autocommit=True) as c:
+        org = c.execute(
+            "insert into organisations (name, monthly_budget_cap_usd) values ('cap test', 0.01) "
+            "returning id"
+        ).fetchone()
+        assert org is not None
+        earlier, current = (
+            c.execute(
+                "insert into runs (org_id, request) values (%s, '{}') returning id", (org[0],)
+            ).fetchone()
+            for _ in range(2)
+        )
+        assert earlier is not None and current is not None
+        # $0.0075 already spent this month by an earlier run of the organisation.
+        c.execute(
+            "insert into llm_calls (org_id, run_id, model, tier, prompt_id, prompt_version, "
+            "route_reason, outcome, cost_usd) values (%s, %s, 'seeded-model', 'cheap', "
+            "'test_judge', 'v1', 'seeded', 'ok', 0.0075)",
+            (org[0], earlier[0]),
+        )
+    ctx = CallContext(org_id=org[0], run_id=current[0], agent_id="test")
+    # Before call 1: 0.0075 + 0.00154 = 0.00904 (admitted). Call 1 costs 0.00175. Before call 2:
+    # 0.00925 + 0.00154 = 0.01079, over the $0.01 cap (refused). The run's own caps never bind.
+    outcome = await run_steps(
+        pipeline(pool, ctx, replies(1, tokens=1000)), pool=pool, run_id=ctx.run_id
+    )
+    assert (outcome.status, outcome.budget_exhausted) == ("partial", True)
+    assert list(outcome.outputs) == STEPS[:1] and outcome.not_run == STEPS[1:]
+    assert outcome.reason is not None and "monthly cap" in outcome.reason
+    assert run_row(db_url, ctx) == ("partial", True, 1, True)
+    assert [o for o, _ in calls(db_url, ctx)] == ["ok", "refused"]

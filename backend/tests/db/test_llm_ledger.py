@@ -347,42 +347,59 @@ async def test_the_daily_report_counts_refusals_and_abandoned_calls(
     assert d.cost_usd == pytest.approx(4 * 0.01 + 3 * 0.001)
 
 
-async def test_locks_are_per_run_and_per_model_not_global(
-    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+def fresh_org(db_url: str, cap: float = 50.0) -> UUID:
+    """An organisation of its own, so its month-to-date spend starts at zero."""
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(
+            "insert into organisations (name, monthly_budget_cap_usd) values ('ledger test', %s) "
+            "returning id",
+            (cap,),
+        ).fetchone()
+    assert row is not None
+    return UUID(str(row[0]))
+
+
+def new_run(db_url: str, org_id: UUID) -> CallContext:
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(
+            "insert into runs (org_id, request) values (%s, '{}') returning id", (org_id,)
+        ).fetchone()
+    assert row is not None
+    return CallContext(org_id=org_id, run_id=row[0], agent_id="test")
+
+
+async def test_locks_are_per_org_run_and_model_not_global(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:
-    """Admissions for other runs on other models must not wait (Phase 6 fan-out)."""
+    """Admissions in other organisations on other models must not wait; the org's must."""
     registry = make_registry(rpm=1000)
     led = ledger(pool, registry, calls=1000, cost=1000)
-
-    def new_run() -> CallContext:
-        with psycopg.connect(db_url, autocommit=True) as c:
-            row = c.execute(
-                "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
-                (seed.org_a, seed.product_a),
-            ).fetchone()
-        assert row is not None
-        return CallContext(org_id=seed.org_a, run_id=row[0])
-
-    held_run, other_run = new_run(), new_run()
+    org, other_org = fresh_org(db_url), fresh_org(db_url)
+    held_run, same_org_run, other_org_run = (
+        new_run(db_url, org),
+        new_run(db_url, org),
+        new_run(db_url, other_org),
+    )
     holder = await psycopg.AsyncConnection.connect(db_url)
     try:
         async with holder.transaction():
-            # Hold one run's lock and the cheap model's lock, as an in-flight admission would.
-            await holder.execute(
-                "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                (f"llm:run:{held_run.run_id}",),
-            )
-            await holder.execute(
-                "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                (f"llm:model:{registry.model(Tier.CHEAP).id}",),
-            )
-            # Another run, another model: proceeds at once.
-            free = await asyncio.wait_for(led.admit(other_run, Tier.STANDARD, P, "x", 0.0), 2)
+            # Hold what an in-flight admission holds: its org, its run and the cheap model.
+            for key in (
+                f"llm:org:{org}",
+                f"llm:run:{held_run.run_id}",
+                f"llm:model:{registry.model(Tier.CHEAP).id}",
+            ):
+                await holder.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))", (key,)
+                )
+            # Another organisation, another model: proceeds at once.
+            free = await asyncio.wait_for(led.admit(other_org_run, Tier.STANDARD, P, "x", 0.0), 2)
             assert free.call_id is not None
-            # The held run (any model) and the held model (any run) must wait.
+            # The held org (any run, any model) and the held model (any org) must wait.
             for blocked in (
                 led.admit(held_run, Tier.STANDARD, P, "x", 0.0),
-                led.admit(other_run, Tier.CHEAP, P, "x", 0.0),
+                led.admit(same_org_run, Tier.STANDARD, P, "x", 0.0),
+                led.admit(other_org_run, Tier.CHEAP, P, "x", 0.0),
             ):
                 task = asyncio.create_task(blocked)
                 await asyncio.sleep(0.5)
@@ -391,6 +408,90 @@ async def test_locks_are_per_run_and_per_model_not_global(
                 await asyncio.gather(task, return_exceptions=True)
     finally:
         await holder.close()
+
+
+def insert_org_calls(
+    db_url: str, ctx: CallContext, cost: float, *, outcome: str = "ok", at: str = "now()"
+) -> None:
+    """One row of `cost` in ctx's run, at `at` ('now()' or 'month_start - 1 second')."""
+    when = {
+        "now()": "select now()",
+        "last month": "select date_trunc('month', now() at time zone 'UTC') at time zone 'UTC' "
+        "- interval '1 second'",
+        "abandoned": "select now() - interval '901 seconds'",
+    }[at]
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(when).fetchone()
+        assert row is not None
+        c.execute(
+            "insert into llm_calls (org_id, run_id, model, tier, prompt_id, prompt_version, "
+            "route_reason, outcome, cost_usd, created_at) values (%s, %s, 'seeded-model', "
+            "'cheap', 'test_judge', 'v1', 'seeded', %s, %s, %s)",
+            (ctx.org_id, ctx.run_id, outcome, cost, row[0]),
+        )
+
+
+async def test_the_monthly_cap_counts_the_whole_organisation_this_month(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    """Architecture.md §9: the estimate must fit the org's remaining month-to-date budget."""
+    org = fresh_org(db_url, cap=1.00)
+    insert_org_calls(db_url, new_run(db_url, org), 0.97)  # spent by an earlier run this month
+    led = ledger(pool, make_registry(), calls=1000, cost=1000)
+    run = new_run(db_url, org)
+    assert (await led.admit(run, Tier.CHEAP, P, "default tier", 0.02)).call_id is not None
+    # 0.97 + this call's estimate for the pending one + 0.02 = 1.01 > 1.00
+    with pytest.raises(BudgetExceeded, match=r"month-to-date cost would reach \$1\.0100 of its"):
+        await led.admit(run, Tier.CHEAP, P, "default tier", 0.02)
+    with psycopg.connect(db_url) as c:
+        log = c.execute(
+            "select outcome, route_reason from llm_calls where run_id = %s order by id",
+            (run.run_id,),
+        ).fetchall()
+    assert [o for o, _ in log] == ["pending", "refused"]
+    assert "organisations.monthly_budget_cap_usd" in log[1][1]
+
+
+async def test_the_monthly_cap_ignores_last_month_refusals_abandoned_and_other_orgs(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    org = fresh_org(db_url, cap=1.00)
+    earlier = new_run(db_url, org)
+    insert_org_calls(db_url, earlier, 5.00, at="last month")
+    insert_org_calls(db_url, earlier, 5.00, outcome="refused")
+    insert_org_calls(db_url, earlier, 5.00, outcome="pending", at="abandoned")
+    insert_org_calls(db_url, new_run(db_url, fresh_org(db_url, cap=1.00)), 5.00)  # another org
+    led = ledger(pool, make_registry(), calls=1000, cost=1000)
+    assert (await led.admit(new_run(db_url, org), Tier.CHEAP, P, "x", 0.99)).call_id is not None
+
+
+async def test_concurrent_runs_in_one_org_never_exceed_its_monthly_cap(db_url: str) -> None:
+    """Thirty runs admit at once at $0.10 each under a $1.00 cap: exactly ten may pass.
+
+    Spread over all three models and run on thirty connections, so neither the model locks nor
+    the pool serialise them: only the org lock does. Checked 2026-10-17 with the org lock
+    removed: 12 of 30 admitted in 2 of 3 tries, so a missing lock is usually caught, not always.
+    """
+    org = fresh_org(db_url, cap=1.00)
+    runs = [new_run(db_url, org) for _ in range(30)]
+    tiers = [Tier.CHEAP, Tier.STANDARD, Tier.STRONG] * 10
+    big: AsyncConnectionPool[AsyncConnection] = AsyncConnectionPool(
+        db_url, min_size=30, max_size=30, open=False
+    )
+    await big.open(wait=True)
+    try:
+        led = ledger(big, make_registry(rpm=1000), calls=1000, cost=1000)
+
+        async def attempt(ctx: CallContext, tier: Tier) -> bool:
+            try:
+                return (await led.admit(ctx, tier, P, "x", 0.10)).call_id is not None
+            except BudgetExceeded:
+                return False
+
+        admitted = await asyncio.gather(*(attempt(r, t) for r, t in zip(runs, tiers, strict=True)))
+    finally:
+        await big.close()
+    assert sum(admitted) == 10
 
 
 async def test_every_row_records_its_prompt_refusals_included(

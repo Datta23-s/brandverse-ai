@@ -1,12 +1,14 @@
 """The call ledger: llm_calls is the only record of model use, and every budget decision is a
 query of it (Rules.md A1: every reported number traces to a raw log; no shadow counter).
 
-Admission (before every call), in ONE short transaction holding two advisory locks — the run's,
-then the model's, always in that order (so no deadlock cycle can form). Admissions for different
-runs on different models never wait for each other; calls in one run serialise only their
-admission (a race-free per-run cap needs that), never the model call itself:
-1. read usage from llm_calls — the run's calls and list-price cost (Rules.md C3), the model's calls
-   since the last daily reset (C9) and in the last 60 seconds (its RPM, C10);
+Admission (before every call), in ONE short transaction holding three advisory locks — the
+organisation's, the run's, then the model's, always in that order (so no deadlock cycle can form).
+Admissions in different organisations on different models never wait for each other; admissions
+in one organisation serialise (a race-free monthly cap needs that), never the model calls:
+1. read usage from llm_calls — the run's calls and list-price cost (Rules.md C3), the
+   organisation's list-price cost this UTC calendar month against
+   organisations.monthly_budget_cap_usd (Architecture.md §9, "Organisation budget"), the
+   model's calls since the last daily reset (C9) and in the last 60 seconds (its RPM, C10);
 2. refuse — writing a 'refused' row with the reason (C9: "log the reason in route_reason") — or
    ask the caller to wait for the RPM window, or
 3. write the call's row as 'pending' — with its prompt's id and version (0014) — and return its id.
@@ -70,6 +72,9 @@ class Usage:
     model_calls_today: int
     model_calls_last_minute: int
     seconds_until_minute_slot: float
+    org_month_cost_usd: float
+    org_month_pending: int
+    org_monthly_cap_usd: float
 
 
 def reset_zone(registry: ModelRegistry) -> str:
@@ -81,27 +86,34 @@ def reset_zone(registry: ModelRegistry) -> str:
 
 
 _USAGE_SQL = """
-with counted as (
-  select run_id, model, cost_usd, outcome, created_at
-  from public.llm_calls
-  where outcome <> 'refused'
-    and not (outcome = 'pending' and created_at <= now() - %(expiry)s * interval '1 second')
-    and (run_id = %(run)s
-         or (model = %(model)s
-             and created_at >= (date_trunc('day', now() at time zone %(zone)s)
-                                at time zone %(zone)s)))
+with bounds as (
+  select date_trunc('day', now() at time zone %(zone)s) at time zone %(zone)s as day_start,
+         date_trunc('month', now() at time zone 'UTC') at time zone 'UTC' as month_start
+),
+counted as (
+  select c.org_id, c.run_id, c.model, c.cost_usd, c.outcome, c.created_at,
+         c.created_at >= b.day_start as today, c.created_at >= b.month_start as this_month
+  from public.llm_calls c, bounds b
+  where c.outcome <> 'refused'
+    and not (c.outcome = 'pending' and c.created_at <= now() - %(expiry)s * interval '1 second')
+    and (c.run_id = %(run)s
+         or (c.org_id = %(org)s and c.created_at >= b.month_start)
+         -- the RPM window can reach back past the daily reset
+         or (c.model = %(model)s
+             and c.created_at >= least(b.day_start, now() - interval '60 seconds')))
 )
 select
   count(*) filter (where run_id = %(run)s),
   coalesce(sum(cost_usd) filter (where run_id = %(run)s), 0)::float8,
   count(*) filter (where run_id = %(run)s and outcome = 'pending'),
-  count(*) filter (where model = %(model)s
-                   and created_at >= (date_trunc('day', now() at time zone %(zone)s)
-                                      at time zone %(zone)s)),
+  count(*) filter (where model = %(model)s and today),
   count(*) filter (where model = %(model)s and created_at > now() - interval '60 seconds'),
   coalesce(extract(epoch from (
     min(created_at) filter (where model = %(model)s and created_at > now() - interval '60 seconds')
-    + interval '60 seconds' - now())), 0)::float8
+    + interval '60 seconds' - now())), 0)::float8,
+  coalesce(sum(cost_usd) filter (where org_id = %(org)s and this_month), 0)::float8,
+  count(*) filter (where org_id = %(org)s and this_month and outcome = 'pending'),
+  (select monthly_budget_cap_usd::float8 from public.organisations where id = %(org)s)
 from counted
 """
 
@@ -150,13 +162,29 @@ class CallLedger:
         model = self._registry.model(tier)
         cur = await conn.execute(
             _USAGE_SQL,
-            {"run": ctx.run_id, "model": model.id, "zone": self._zone, "expiry": self._expiry_s},
+            {
+                "org": ctx.org_id,
+                "run": ctx.run_id,
+                "model": model.id,
+                "zone": self._zone,
+                "expiry": self._expiry_s,
+            },
         )
         row = await cur.fetchone()
         if row is None:  # an aggregate always returns a row
             raise RuntimeError("usage query returned nothing")
+        if row[8] is None:
+            raise RuntimeError(f"organisation {ctx.org_id} not found")
         return Usage(
-            int(row[0]), float(row[1]), int(row[2]), int(row[3]), int(row[4]), float(row[5])
+            int(row[0]),
+            float(row[1]),
+            int(row[2]),
+            int(row[3]),
+            int(row[4]),
+            float(row[5]),
+            float(row[6]),
+            int(row[7]),
+            float(row[8]),
         )
 
     async def admit(
@@ -170,12 +198,14 @@ class CallLedger:
         model = self._registry.model(tier)
         refusal: CallRefused | None = None
         async with self._pool.connection() as conn, conn.transaction():
-            # Run first, then model: one fixed order. Two statements, so the order is guaranteed.
+            # Org, run, model: one fixed order. Separate statements, so the order is guaranteed.
+            await conn.execute(_LOCK_SQL, (f"llm:org:{ctx.org_id}",))
             await conn.execute(_LOCK_SQL, (f"llm:run:{ctx.run_id}",))
             await conn.execute(_LOCK_SQL, (f"llm:model:{model.id}",))
             u = await self.usage(conn, ctx, tier)
-            # Pending calls in this run have no cost yet; count each at this call's estimate.
+            # Pending calls have no cost yet; count each at this call's estimate.
             projected = u.run_cost_usd + (u.run_pending + 1) * estimated_cost_usd
+            org_projected = u.org_month_cost_usd + (u.org_month_pending + 1) * estimated_cost_usd
             if u.run_calls >= self._max_calls:
                 refusal = BudgetExceeded(
                     f"refused: run has made {u.run_calls} of {self._max_calls} LLM calls "
@@ -185,6 +215,12 @@ class CallLedger:
                 refusal = BudgetExceeded(
                     f"refused: run cost would reach ${projected:.4f} of ${self._max_cost:.2f} "
                     "list-price cap (Rules.md C3)"
+                )
+            elif org_projected > u.org_monthly_cap_usd:
+                refusal = BudgetExceeded(
+                    f"refused: organisation month-to-date cost would reach ${org_projected:.4f} "
+                    f"of its ${u.org_monthly_cap_usd:.2f} monthly cap "
+                    "(organisations.monthly_budget_cap_usd, UTC calendar month)"
                 )
             elif u.model_calls_today >= model.rate_limits.rpd:
                 refusal = QuotaExhausted(

@@ -115,6 +115,8 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
   pre-flight (the mocked model is never asked), the run returns the first two steps' outputs and
   names the two not run, flagged `budget_exhausted` (`Rules.md` C4). The `runs` row reads
   `partial`, `budget_exhausted = true`, 2 calls; the refusal is in `llm_calls` with its reason.
+  The organisation's monthly cap ends a run the same way (added 2026-10-17: a $0.01 cap with
+  $0.0075 already spent this month refuses the second call; `partial`, flagged, 1 call).
   Mechanism: `app/core/budgeted_run.py`, which the Phase 6 pipeline must use.
 - [x] Cost per call appears in the database within one second — 20 mocked calls, reply to
   cost readable from a separate connection: min 9.5 ms, median 11.3 ms, max 19.4 ms (local
@@ -236,6 +238,7 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 | Parallel fan-out | Agents run concurrently with reducers on shared keys |
 | Human approval interrupt | Graph suspends and resumes from checkpoint |
 | Agent failure isolation | One failing agent does not abort the run |
+| Budget behaviour reused, not rebuilt | The graph's LLM steps run under `app/core/budgeted_run.py` (decided 2026-10-17, `Architecture.md` §4.4): a budget refusal ends the run `partial` with `budget_exhausted`, and the graph writes only the run statuses defined there. No second executor |
 
 **Exit criteria**
 - [ ] A real end-to-end campaign is produced and approved
@@ -253,6 +256,7 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 | Dynamic agent selection | 3–7 agents chosen with persisted rationale |
 | Model routing policy | Tier chosen per call with recorded reason |
 | Budget manager | Per-run caps enforced across the whole run (`Rules.md` C3), plus the per-day per-model RPD budget with downgrade or deferral and a logged reason (C9) |
+| **Close the C4/C9 daily-quota gap** (recorded 2026-10-17) | A call that would breach its model's daily quota is downgraded to a lower tier with the reason in `llm_calls.route_reason`; a T4-required strong-tier call is deferred until the quota resets; the run degrades instead of failing (`Rules.md` C4, C9). **Until this lands, a run that exhausts a daily quota fails** (`QuotaExhausted` → `runs.status = 'failed'`) — see `Architecture.md` §4.4, "Known divergence from C4 and C9" |
 | Rate-limit scheduler | Per-model RPM/TPM buckets; `429` waits logged and kept out of the C8 retry count (C10) |
 
 **Exit criteria**

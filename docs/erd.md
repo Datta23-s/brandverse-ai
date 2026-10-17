@@ -125,7 +125,7 @@ erDiagram
     uuid org_id FK
     uuid product_id FK
     text arm "baseline_a|baseline_b|proposed"
-    text status
+    text status "queued|completed|partial|failed (Architecture.md §4.4; no CHECK)"
     jsonb request
     text depth
     numeric research_score

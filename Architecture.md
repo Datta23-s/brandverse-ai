@@ -204,17 +204,27 @@ push the run past its latency budget ends the step as a partial result, never a 
   list-price cost, latency, `rate_limit_wait_ms` and outcome when the call returns (migration 0013).
 - **Stated limitations.** Google counts quota per Cloud project across every client of the key;
   the ledger sees only calls logged in its own database. Pending calls in a run count toward its
-  cost cap at the current call's estimate. Downgrade and defer on an exhausted daily quota
-  (§4.2, `Rules.md` C9) are not built yet: in chunk A an exhausted quota refuses the call.
-  Importing LiteLLM adds about 14 s to a Python process's start (measured 2026-10-17).
-- **Admission locks: per run and per model, nothing broader.** Two transaction-scoped advisory
-  locks, run then model (one fixed order, so no deadlock). They are held only for the admission
-  transaction — one aggregate query and one insert — never during the model call. Parallel agents
-  in one run serialise their admissions but call the model concurrently; runs on different models
-  never wait for each other (`test_locks_are_per_run_and_per_model_not_global`). The model lock has
-  no day component: only the current day is ever admitted, so it is the same lock in effect.
-  Accepted cost: admission throughput per model is bounded by that short transaction — far above
-  the free tier's 15 RPM.
+  cost cap at the current call's estimate. An exhausted daily quota fails the run instead of
+  degrading it — a divergence from `Rules.md` C4 and C9, stated below. Importing LiteLLM adds about 14 s to a Python process's start (measured 2026-10-17).
+- **Admission locks: per organisation, per run and per model, nothing broader.** Three
+  transaction-scoped advisory locks, org then run then model (one fixed order, so no deadlock).
+  They are held only for the admission transaction — one aggregate query and one insert — never
+  during the model call. Parallel agents in one run serialise their admissions but call the model
+  concurrently. Admissions in different organisations on different models never wait for each
+  other (`test_locks_are_per_org_run_and_model_not_global`). The org lock (added 2026-10-17 for the
+  monthly cap below) means admissions across runs of ONE organisation serialise too — every
+  organisation has a cap (`monthly_budget_cap_usd` is NOT NULL), so a race-free cap needs it. The
+  model lock has no day component: only the current day is ever admitted, so it is the same lock
+  in effect. Accepted cost: admission throughput per organisation and per model is bounded by that
+  short transaction — far above the free tier's 15 RPM.
+- **Organisation monthly cap — enforced at admission** (2026-10-17; it was documented in §9,
+  "Organisation budget and rate limits", but not built until then). The org's list-price cost this
+  UTC calendar month, from `llm_calls` (refusals and abandoned reservations excluded; pending calls
+  at this call's estimate), plus this call's estimate must fit `organisations.monthly_budget_cap_usd`.
+  A breach is `BudgetExceeded`, logged as a refusal, and ends the run `partial` with
+  `budget_exhausted` exactly as the run caps do. Tested in `test_llm_ledger.py` (whole org, current
+  month only, refusals/abandoned/other orgs ignored, 30 concurrent runs) and
+  `test_budgeted_run.py`.
 - **Abandoned reservations expire after 900 s** (`llm_pending_expiry_s`). A `pending` row older
   than that stops counting toward caps and quotas, so a crashed process cannot tighten a cap for
   ever; it stays in the log and is reported as abandoned. 900 s, not less: a live call can stay
@@ -274,15 +284,67 @@ constructs its gateway with the strong tier off whatever the settings say.
   (`differs_across_arms`). Refusals count: they show what the code would have sent.
   Tested in `tests/db/test_prompt_versions.py`.
 
-#### Budget breach — a partial run, flagged (Rules.md C4)
+#### Decision — the run executor and the run statuses (2026-10-17)
 
-`app/core/budgeted_run.py` runs a run's LLM steps in order; when the ledger refuses a call with
-`BudgetExceeded` (C3), the run stops there and returns the completed steps' outputs, the steps
-not run and the refusal's reason, flagged `budget_exhausted`. The `runs` row is set to
-`status = 'partial'`, `budget_exhausted = true`; `llm_call_count` and `total_cost_usd` are derived
-from `llm_calls` when the run ends. Statuses written: `completed`, `partial`, `failed`. The Phase 6
-pipeline inherits this behaviour. `QuotaExhausted` is not a budget breach (C9 downgrade/defer, not
-built yet) and fails the run. Tested with a mocked provider in `tests/db/test_budgeted_run.py`.
+**Context.** `Rules.md` C4 requires a budget breach to return a partial result flagged
+`budget_exhausted`, and the Phase 2 exit criterion needed a run to show it. No document defined
+how a run ends or what `runs.status` may hold (0005 declares it `text not null default 'queued'`,
+with no check). Both were decided in Phase 2 chunk B, by the implementation, not by the documents;
+they are recorded here so they are not reinvented.
+
+**Decision.**
+- **One executor: `app/core/budgeted_run.py`.** It runs a run's LLM steps in order, each seeing the
+  outputs before it. When the ledger refuses a call with `BudgetExceeded` — the run's call or cost
+  cap (C3) or the organisation's monthly cap — the run stops there and returns a `RunOutcome`: the
+  completed steps' outputs, the steps not run, the refusal's reason, `budget_exhausted = true`.
+  It is the only code that writes a run's end (`end_run`): `status`, `budget_exhausted`,
+  `completed_at`, and `llm_call_count` / `total_cost_usd` derived from `llm_calls` in the same
+  statement (never a counter, `Rules.md` A1; `total_cost_usd` is rounded to its 4 decimals, so
+  `llm_calls` stays the source).
+- **Statuses.** `queued` (the column default, written when the run row is created), then exactly
+  one of:
+
+  | Status | Meaning | `budget_exhausted` |
+  |---|---|---|
+  | `completed` | Every step ran | false |
+  | `partial` | Stopped by a budget refusal; the completed steps' output is kept and returned | true |
+  | `failed` | Any other error, cancellation included; re-raised to the caller | false |
+
+**Reasoning.** `partial` is separate from `completed` because C4 forbids a silent truncation and
+`Rules.md` A2 requires capped runs to be counted in the evaluation, not to vanish into
+"completed". It is separate from `failed` because a partial run has usable, validated output and a
+failed one has none; the evaluation reports them differently. `budget_exhausted` stays a column of
+its own (0005) beside the status: it says *why* a run is partial, and §4.3 already names a second
+way to be partial (a step ending at the latency budget), which will have to be told apart.
+`QuotaExhausted` is deliberately not a budget breach: C9 says it should downgrade or defer, which
+is not built (next section), so it fails the run rather than being disguised as `partial`.
+
+**Consequence — binding on Phase 6.** The LangGraph pipeline **must** run its LLM steps under this
+executor — as `Step`s, or by ending the run through `end_run` with a `RunOutcome` — and must not
+write `runs.status` itself or build a second executor (`Phases.md` Phase 6 deliverables). New
+statuses (for example a running state for the UI, or one for a latency-budget stop) are added
+here, in this table, before any code writes them. **Stated limitation:** `runs.status` has no
+database CHECK, so nothing but this rule stops another writer using another value; a CHECK on the
+four statuses is a one-line migration that should land before the evaluation's first run.
+
+Tested with a mocked provider in `tests/db/test_budgeted_run.py`: run call cap, run cost cap,
+organisation monthly cap (each `partial`, flagged), within budget (`completed`), another error
+(`failed`, re-raised).
+
+#### Known divergence from Rules.md C4 and C9 — an exhausted daily quota fails the run
+
+**`Rules.md` C9** (approved 2026-10-14): a call that would breach its model's daily quota (RPD) is
+downgraded to a lower tier with the reason logged in `llm_calls.route_reason`; only a strong-tier
+call that `Rules.md` T4 requires is deferred until the quota resets; the run degrades rather than
+fails. **`Rules.md` C4**: a breach returns a partial result, never a hard failure.
+
+**What the code does (Phase 2, 2026-10-17):** the ledger refuses the call (`QuotaExhausted`,
+logged as a refusal with its reason) and the executor **fails the run** (`runs.status =
+'failed'`). Neither downgrade nor deferral exists. Both need the routing policy — which tier is
+"lower" for a given call, and which calls T4 binds to the strong tier — and that is Phase 7
+(`Phases.md` Phase 7, "Close the C4/C9 daily-quota gap"). **Until Phase 7 lands, a run that
+exhausts a daily quota fails rather than degrading**, and nothing written about this project may
+claim otherwise.
 
 #### Cost visibility — measured (2026-10-17)
 
@@ -604,7 +666,7 @@ instead of it:
 
 | Limit | Column | Enforced |
 |---|---|---|
-| Monthly spend | `organisations.monthly_budget_cap_usd` | Pre-flight, before every LLM call: the estimated cost must fit within **both** the run's remaining budget and the organisation's remaining month-to-date budget (`sum(llm_calls.cost_usd)` for the org in the current UTC calendar month). A breach yields `budget_exhausted`, as for the run cap. |
+| Monthly spend | `organisations.monthly_budget_cap_usd` | Pre-flight, before every LLM call: the estimated cost must fit within **both** the run's remaining budget and the organisation's remaining month-to-date budget (`sum(llm_calls.cost_usd)` for the org in the current UTC calendar month). A breach yields `budget_exhausted`, as for the run cap. **Built 2026-10-17** in the ledger's admission (`app/llm/ledger.py`, §4.4); not enforced before that date. |
 | Run starts | `organisations.rate_limit_runs_per_hour` | At `POST /api/v1/runs`, Redis counter per org; over the limit → `429`. |
 | API requests | `organisations.rate_limit_requests_per_minute` | At the API gateway, Redis counter per org; over the limit → `429`. |
 
