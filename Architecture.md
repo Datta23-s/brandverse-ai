@@ -1932,6 +1932,48 @@ their CHECK constraints, no API role able to write any `llm_calls` column, and 0
 rollback left the table as it was. Pushed with the CLI 2026-10-17 11:27 UTC; `migration list`
 identical; the live posture read after the push matched.
 
+0015–0020 (Phase 3 chunk A; three new `app.*` trigger functions, one new role) had the same
+procedure, after CI passed all four jobs on `b694beb` (database suite included). The rolled-back
+dry run applied all six files in one transaction and read: the `runs_status_check`; the seven new
+`product_claims` CHECKs and four columns; the three triggers; each new function's owner,
+`prosecdef`, pinned `search_path` and EXECUTE for the three API roles
+(`audit_brand_sector`: security definer, owned by `app_audit_writer`); `app_audit_writer`'s
+attributes (no login, no superuser, no BYPASSRLS, no memberships) and privileges (INSERT on
+`audit_log`, nothing else); the `audit_writer_insert` and amended `org_creator_insert` policies;
+`product_claims` delete/truncate revoked for all three roles; `organisations.is_test` not
+updatable by `authenticated`; the nine seeded sectors. All matched `test_table_posture.py`. The
+rollback left nothing, the role included. Live rows before the push: 0 runs, 0 claims, 0 sectors,
+1 brand. Pushed with the CLI **2026-10-17 14:01 UTC**; `migration list` identical through 0020;
+the post-apply read matched the dry run, and a full read of every table's delete/truncate posture
+and every `app.*` function (50 checks) against `test_table_posture.py` found no mismatch.
+
+### Live project — permanent footprint
+
+What the live Supabase project holds that is not evaluation data, and why. Application roles
+cannot delete organisations, memberships, runs, LLM calls, memory, campaigns, approvals or audit
+rows (0010, 0011), nor claims (0017), so this list only grows; it is kept complete here so that
+what is in the database is written down, not reconstructed. Read on 2026-10-17 at about 14:05 UTC
+(read-only), after 0015–0020.
+
+| Rows | What | Why it is there | Excluded from evaluation by |
+|---|---|---|---|
+| 2 `auth.users` | `e2e-a@` and `e2e-b@brandverse-e2e.example.com`, confirmed | The fixed E2E users (B2): a new user per run would leave undeletable organisations behind | Their organisations' flag (below) |
+| 2 `organisations` + 2 `org_members` | `E2E Org A`, `E2E Org B`, each with its user as owner | One org per E2E user; created through `app.create_organisation` by `scripts/ensure_e2e_users.py` | `is_test = true` (0020), set by that script for organisations its own users own; every evaluation read filters it (`backend/tests/db/test_test_organisations.py`) |
+| 1 `auth.users`, 1 `organisations`, 1 `org_members` | The project owner's account and organisation `Datta` | Phase 1 exit criterion: the owner's own sign-up, through the real form and confirmation email | Not flagged. Not an evaluation organisation (D5 names ten of their own); harness reads take explicit evaluation org ids |
+| 1 `brands`, 1 `products` | `Capstone Project` (sector not yet chosen) and `SHampoo`, in `Datta` | The Phase 1 sign-up → brand → product evidence, kept in place (`Phases.md` Phase 1) | As the `Datta` organisation |
+| 9 `sectors` | The sector keys (0018) | Registry keys `brands.sector` references | Reference data, not evaluation data |
+| **Run fixture** (created by the first live E2E run after 0017): 1 `brands`, 1 `products`, 1 `product_claims` | In `E2E Org A`: brand `E2E run fixture` (sector `footwear`), product `E2E fixture shoe`, verified claim "Upper made of recycled mesh" with evidence `https://example.com/e2e-fixture-spec` | From Phase 3 a run needs a product with an active verified claim, so the run-view and tenancy specs need one. Kept and reused (`frontend/e2e/support.ts`, `ensureRunnableProduct`) rather than re-created per run. The claim cannot be deleted (0017). The brand and product have no runs, so the org owner *could* delete them, cascading the claim; the specs never do | `E2E Org A`'s `is_test` flag |
+| `audit_log`, about 3 rows per full live E2E run | `brand.sector_set` × 2 (the two setup specs create a brand with a sector), `run.blocked` × 1 (the no-verified-claim spec); the first run adds one more for the fixture brand | Every sector change and every gate block is audited (0019, admission); append-only | Not read by the evaluation; rows carry the E2E org's id |
+
+Every live E2E run also creates and then deletes two brands, two products and one claim (deleting
+a product with no runs cascades to its claims); none of these remain. Development and smoke LLM
+calls never go to the live project; they are logged to the local throwaway database
+(§4.4, tally). Live counts at the read above: `runs`, `llm_calls`,
+`memory_items`, `campaigns`, `approvals`, `product_claims`, `sector_constraints` and `audit_log`
+all 0.
+
+A new kind of lasting row added to the live project is added to this table in the same change.
+
 ### Database connections from the laptop — session pooler only
 
 The direct host (`db.<ref>.supabase.co`) is IPv6-only on the free tier, and the laptop has no
@@ -1963,8 +2005,10 @@ npm run test:e2e -w frontend            # Playwright against the live project (E
 
 - **End-to-end tests, two environments, same specs (B2, 2026-10-17).** On the laptop they run
   against the live Supabase project as two fixed, confirmed users (`.env.e2e`, git-ignored;
-  created once with the secret key by `scripts/ensure_e2e_users.py`). Permanent footprint: 2
-  users and 2 organisations; each run deletes the brand and product it creates. In CI, which
+  created once with the secret key by `scripts/ensure_e2e_users.py`, which also flags their
+  organisations `is_test`). Permanent footprint: see "Live project — permanent footprint" above —
+  the two users and organisations, the run fixture, and a few audit rows per run; each run deletes
+  the other brands and products it creates. In CI, which
   holds no live secrets, `scripts/e2e_fake_auth.py` plays Supabase Auth (ES256 tokens, a JWKS,
   sign-in, sign-up pending confirmation) against a database built from the migrations
   (`scripts/e2e_prepare_db.py`); the API verifies those tokens with the production verifier,
