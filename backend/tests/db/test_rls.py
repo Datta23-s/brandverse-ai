@@ -213,8 +213,9 @@ def test_only_owner_updates_org_budget(tx: Tx) -> None:
 
 
 def test_users_cannot_write_llm_calls(tx: Tx) -> None:
+    # Since 0013 the grant itself is revoked (stronger than the RLS refusal it met before).
     tx.as_user("owner_a")
-    _raises_rls(
+    _raises_permission(
         tx,
         "insert into llm_calls (org_id, run_id, model, tier, route_reason) "
         "values (%s, %s, 'm', 'cheap', 'r')",

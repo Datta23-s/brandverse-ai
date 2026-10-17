@@ -173,6 +173,85 @@ Each call records its rate-limit wait time separately from its latency, so the e
 report latency with and without free-tier waits (`docs/evaluation-plan.md` §4). A wait that would
 push the run past its latency budget ends the step as a partial result, never a crash.
 
+### 4.4 The call path as built (Phase 2 chunk A, 2026-10-17)
+
+- **One gateway** (`backend/app/llm/gateway.py`): the only code that calls a model
+  (`Rules.md` P6). LiteLLM is used **as a library** (`litellm.acompletion`, imported only through
+  `app/llm/_litellm.py`), not as the LiteLLM proxy: the proxy's per-key budgets would be a second
+  counter beside `llm_calls`, which the budget rule below forbids. `LITELLM_MASTER_KEY` (a proxy
+  setting, §11) is therefore unused. LiteLLM's import-time network fetch of its price map is
+  switched off; its prices are not used.
+- **Tiers, not models, in code.** Code names `cheap` / `standard` / `strong`; the registry
+  (`app/llm/registry.py`) reads `config/models.yaml` and derives LiteLLM's model string
+  (`<provider>/<id>`). Switching a tier's model is one edited line; `test_llm_registry.py` edits
+  exactly one line and checks the call goes to the new model, and fails if any model ID appears
+  in code. Cost is computed from the registry's list prices, including dated price changes.
+- **Structured output, always.** `structured(schema, ...)` returns a validated Pydantic instance,
+  never a string. Output that does not validate gets **one** repair call — a different prompt that
+  quotes the validator's errors (`repair-v1`) — then `StructuredOutputInvalid` is raised. At most
+  two calls per request (`Rules.md` C8).
+- **No hidden retries.** LiteLLM's and the HTTP client's retries are off on every call. A `429` is
+  waited out (Google's `retryDelay`, else exponential backoff with jitter) and the same request
+  re-sent, at most `llm_max_rate_limit_waits` times and `llm_max_rate_limit_wait_s` seconds in
+  total; then the call ends `rate_limited`. Any other provider error ends `error` and is not retried.
+- **Budgets are queries of `llm_calls`, never a counter** (`Rules.md` A1; `app/llm/ledger.py`).
+  Before each call, one short transaction under an advisory lock reads the run's calls and cost
+  (C3), the model's calls since the daily reset — midnight in the zone `models.yaml` names,
+  computed by Postgres — (C9) and in the last 60 s (RPM, C10), then refuses (writing a `refused`
+  row with the reason), asks the caller to wait for the RPM window, or writes the call's row as
+  `pending`. The pending row is the reservation, so concurrent calls cannot both pass a check that
+  only one should (`test_llm_ledger.py` fails without the lock). The row is completed with tokens,
+  list-price cost, latency, `rate_limit_wait_ms` and outcome when the call returns (migration 0013).
+- **Stated limitations.** Google counts quota per Cloud project across every client of the key;
+  the ledger sees only calls logged in its own database. Pending calls in a run count toward its
+  cost cap at the current call's estimate. Downgrade and defer on an exhausted daily quota
+  (§4.2, `Rules.md` C9) are not built yet: in chunk A an exhausted quota refuses the call.
+  Importing LiteLLM adds about 14 s to a Python process's start (measured 2026-10-17).
+- **Admission locks: per run and per model, nothing broader.** Two transaction-scoped advisory
+  locks, run then model (one fixed order, so no deadlock). They are held only for the admission
+  transaction — one aggregate query and one insert — never during the model call. Parallel agents
+  in one run serialise their admissions but call the model concurrently; runs on different models
+  never wait for each other (`test_locks_are_per_run_and_per_model_not_global`). The model lock has
+  no day component: only the current day is ever admitted, so it is the same lock in effect.
+  Accepted cost: admission throughput per model is bounded by that short transaction — far above
+  the free tier's 15 RPM.
+- **Abandoned reservations expire after 900 s** (`llm_pending_expiry_s`). A `pending` row older
+  than that stops counting toward caps and quotas, so a crashed process cannot tighten a cap for
+  ever; it stays in the log and is reported as abandoned. 900 s, not less: a live call can stay
+  pending at most (waits + 1) × timeout + total wait = (3 + 1) × 60 + 90 = 330 s at the defaults,
+  and `Settings` refuses an expiry at or below that bound, so an in-flight call is never miscounted
+  as abandoned. Not more: a crash then costs at most 15 minutes of one slot. Caveat: an abandoned
+  call may have reached Google, so excluding it can undercount real usage by one call per crash.
+
+#### Development and smoke calls — invisible to the live ledger
+
+Calls made while developing and smoke-testing are logged to a **throwaway local database**
+(`scripts/e2e_prepare_db.py`), never to the live project, whose `llm_calls` and `runs` rows can
+never be deleted (0010, 0011). The live ledger cannot see them, yet Google counts them against the
+same per-project quota (§4.3), so the live daily count can run below actual usage. They are
+therefore tallied here by hand, and every live-verification call is added to this table:
+
+| Date (UTC) | Script | Database | cheap | standard | strong |
+|---|---|---|---|---|---|
+| 2026-10-17 10:35 | `scripts/llm_smoke.py` (cap 2) | local `brandverse_e2e` | 1 | 0 | 0 |
+| **Total** | | | **1** | **0** | **0** |
+
+Counts are read from the throwaway database's `llm_calls`, not from the script. 2026-10-17: one
+`ok` row on `gemini-3.1-flash-lite`, valid on the first call (no repair); 19 input / 27 output
+tokens, $0.000045 list-price equivalent, latency 12,265 ms, no rate-limit wait; the row was
+completed 24 ms after the call returned.
+
+The key belongs to a dedicated Google Cloud project (`brandverse-ai`) that nothing else uses
+(stated by the user 2026-10-17), so the only calls the live ledger cannot see are the ones in this
+table. The same day the user re-read the free-tier limits for that project: 15/500 (cheap),
+15/500 (standard), 5/20 (strong), 100/1000 (embedding) RPM/RPD — identical to `config/models.yaml`.
+
+**No development, test or smoke call ever reaches the strong tier, on any database.** Enforced, not
+left to discipline: the gateway refuses the strong tier unless `llm_allow_strong_tier` is set
+(default false; set only for evaluation runs), before admission and before any provider call, and
+records the refusal (`test_the_strong_tier_is_refused_unless_explicitly_allowed`). The smoke script
+constructs its gateway with the strong tier off whatever the settings say.
+
 ---
 
 ## 5. Orchestration
@@ -1108,6 +1187,44 @@ grant create on schema app to app_org_creator;
 alter function app.create_organisation(text) owner to app_org_creator;
 revoke create on schema app from app_org_creator;
 revoke app_org_creator from current_user;
+
+-- ═══ supabase/migrations/0013_llm_call_waits_and_outcome.sql ═══
+-- 0013: llm_calls records rate-limit waits (Rules.md C10) and each call's outcome.
+--
+-- rate_limit_wait_ms: time spent waiting on rate limits — pacing to the model's RPM and waiting
+--   out 429s — kept apart from latency_ms, so the evaluation can report latency with and without
+--   free-tier waits (Architecture.md §4.3, docs/evaluation-plan.md §4). A wait is not a failure
+--   and never counts toward Rules.md C8's retry cap.
+-- outcome: budget and quota accounting derive from this table, never from a separate counter
+--   (Rules.md A1). A call's row is written BEFORE the call, as 'pending', in the same locked
+--   transaction that checks the caps, so concurrent calls cannot both pass a check one of them
+--   should fail; the row is completed after the call. 'refused' records a pre-flight refusal
+--   with its reason (Rules.md C9: "log the reason in llm_calls.route_reason") and is never counted
+--   as a call. Every other outcome reached, or may have reached, the provider and is counted.
+-- finished_at: when the row was completed (NULL while pending).
+--
+-- A 'pending' row older than llm_pending_expiry_s (900 s; app/core/config.py, which checks it
+-- exceeds the longest a live call can stay pending) is an abandoned reservation and is not
+-- counted. It stays in the log as it is, and is reported as abandoned.
+--
+-- The raw log is written only by the backend's own role. As 0010/0011 did for DELETE and
+-- TRUNCATE, INSERT and UPDATE are revoked from the API roles: before this, service_role (which
+-- bypasses RLS) could insert or rewrite rows the budget and the evaluation read (Rules.md A1).
+-- authenticated keeps SELECT through llm_calls_read (0005). Stated per column in
+-- backend/tests/db/test_table_posture.py.
+--
+-- llm_calls holds no rows on the project when this applies (checked before the push), so the
+-- column defaults rewrite nothing and no index is built; none is added here.
+-- Down: grant insert, update on llm_calls to anon, authenticated, service_role;
+--   alter table llm_calls drop column finished_at, drop column outcome,
+--   drop column rate_limit_wait_ms;
+alter table llm_calls
+  add column rate_limit_wait_ms int not null default 0 check (rate_limit_wait_ms >= 0),
+  add column outcome text not null default 'ok'
+    check (outcome in ('pending', 'ok', 'invalid_output', 'error', 'rate_limited', 'refused')),
+  add column finished_at timestamptz;
+
+revoke insert, update on llm_calls from public, anon, authenticated, service_role;
 ```
 
 ---
@@ -1316,6 +1433,12 @@ such function, its owner, `prosecdef`, `proconfig` and
 confirm nothing persisted (for example, a role the migration creates does not exist after the
 rollback). DDL, `CREATE ROLE` included, is transactional, so the dry run leaves no trace. Done for
 0012 on 2026-10-16; after the push, the live posture was read again and matched.
+
+0013 (no function, but it changes the grants on the raw log) had the same procedure: a rolled-back
+dry run on the live project read every `llm_calls` column's INSERT/UPDATE privilege for the three
+API roles (none), the table's SELECT/DELETE/TRUNCATE, both CHECK constraints and the row count
+(0); the rollback left the table as it was. Pushed with the CLI 2026-10-17 10:20 UTC; `migration
+list` identical; the live posture read after the push matched `test_table_posture.py`.
 
 ### Database connections from the laptop — session pooler only
 

@@ -85,3 +85,14 @@ def test_fake_runs_refused_in_production() -> None:
 def test_settings_are_loaded_once() -> None:
     assert get_settings() is get_settings()
     assert isinstance(get_settings(), Settings)
+
+
+def test_pending_expiry_must_exceed_the_longest_live_call() -> None:
+    # (3 waits + 1) x 60 s timeout + 90 s of waiting = 330 s at the defaults.
+    with pytest.raises(ValidationError, match="longest a call can stay pending"):
+        make_settings(llm_pending_expiry_s=330)
+    assert make_settings().llm_pending_expiry_s == 900
+
+
+def test_the_strong_tier_is_off_by_default() -> None:
+    assert make_settings().llm_allow_strong_tier is False

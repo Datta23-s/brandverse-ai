@@ -165,3 +165,48 @@ def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx:
         "join pg_roles r on r.oid = m.member where r.rolname = 'app_org_creator'"
     )
     assert memberships == []
+
+
+# ── llm_calls, column by column (migration 0013) ─────────────────────────────────────────────
+#
+# The raw log the budget and the evaluation read (Rules.md A1). Written only by the backend's own
+# role: no API role may insert a row or update any column (0013), and none may delete or truncate
+# (0010, 0011, above). Every column is listed by hand; a new column fails
+# `test_every_llm_calls_column_has_a_stated_posture` until it is added here deliberately.
+
+LLM_CALLS_COLUMNS = {
+    "id", "org_id", "run_id", "agent_id", "model", "tier", "route_reason",
+    "input_tokens", "output_tokens", "cost_usd", "latency_ms", "created_at",
+    # 0013
+    "rate_limit_wait_ms", "outcome", "finished_at",
+}  # fmt: skip
+
+
+def test_every_llm_calls_column_has_a_stated_posture(tx: Tx) -> None:
+    columns = {
+        r[0]
+        for r in tx.execute(
+            "select column_name from information_schema.columns "
+            "where table_schema = 'public' and table_name = 'llm_calls'"
+        )
+    }
+    assert columns == LLM_CALLS_COLUMNS, (
+        f"unstated: {sorted(columns - LLM_CALLS_COLUMNS)}; "
+        f"stale: {sorted(LLM_CALLS_COLUMNS - columns)}"
+    )
+
+
+@pytest.mark.parametrize("column", sorted(LLM_CALLS_COLUMNS))
+@pytest.mark.parametrize("role", ROLES)
+def test_no_api_role_can_write_an_llm_calls_column(tx: Tx, column: str, role: str) -> None:
+    rows = tx.execute(
+        "select has_column_privilege(%s, 'public.llm_calls', %s, 'INSERT'), "
+        "has_column_privilege(%s, 'public.llm_calls', %s, 'UPDATE')",
+        (role, column, role, column),
+    )
+    assert rows == [(False, False)], f"{role} can write llm_calls.{column}: {rows}"
+
+
+def test_signed_in_members_can_still_read_their_orgs_llm_calls(tx: Tx) -> None:
+    rows = tx.execute("select has_table_privilege('authenticated', 'public.llm_calls', 'SELECT')")
+    assert rows == [(True,)]

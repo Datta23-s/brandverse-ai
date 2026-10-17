@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         # `.env.example` ships `REDIS_URL=` etc.; an empty value means "use the default".
         env_ignore_empty=True,
-        # `.env` also holds keys for later phases (GOOGLE_API_KEY, ...); they are not ours yet.
+        # `.env` also holds keys for later phases; they are not ours yet.
         extra="ignore",
         frozen=True,
         # A validation error must never echo DATABASE_URL: it carries the database password.
@@ -92,6 +92,26 @@ class Settings(BaseSettings):
     # path and never in frontend code (Rules.md P2).
     supabase_secret_key: SecretStr | None = None
 
+    # ── LLM calls (Phase 2) ──────────────────────────────────────────────────────────────────
+    # The model registry: the only place a model ID appears (Rules.md P5).
+    models_config_path: Path = REPO_ROOT / "config" / "models.yaml"
+    google_api_key: SecretStr | None = None
+    # Per-run hard caps (Rules.md C3), enforced from llm_calls before every call.
+    max_llm_calls_per_run: int = Field(default=20, ge=1)
+    max_cost_per_run_usd: float = Field(default=2.50, gt=0)
+    llm_call_timeout_s: float = Field(default=60.0, gt=0)
+    # Rate-limit waits (Rules.md C10) are capped: no wait loop runs unbounded against a model.
+    llm_max_rate_limit_waits: int = Field(default=3, ge=0, le=10)
+    llm_max_rate_limit_wait_s: float = Field(default=90.0, gt=0, le=600)
+    # A 'pending' llm_calls row older than this is an abandoned reservation (its process died
+    # between admission and finish) and stops counting toward caps and quotas. It must exceed the
+    # longest a live call can stay pending — (waits + 1) x timeout + total wait = 330 s at the
+    # defaults — or an in-flight call would be miscounted as abandoned; checked below.
+    llm_pending_expiry_s: int = Field(default=900, ge=60)
+    # The strong tier (20 requests/day, shared with the evaluation) is REFUSED unless this is set.
+    # Development, tests and smoke calls never reach it; set it only for evaluation runs.
+    llm_allow_strong_tier: bool = False
+
     # Browser origins allowed to call the API: the local Next.js app (Phases.md Phase 1, amended).
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
@@ -128,6 +148,15 @@ class Settings(BaseSettings):
             )
         if self.environment == "production" and self.fake_runs_enabled:
             raise ValueError("fake_runs_enabled must be false in production")
+        longest_pending_s = (
+            self.llm_max_rate_limit_waits + 1
+        ) * self.llm_call_timeout_s + self.llm_max_rate_limit_wait_s
+        if self.llm_pending_expiry_s <= longest_pending_s:
+            raise ValueError(
+                f"llm_pending_expiry_s ({self.llm_pending_expiry_s}) must exceed the longest a "
+                f"call can stay pending ({longest_pending_s:.0f} s), or live calls would be "
+                "counted as abandoned"
+            )
         return self
 
 

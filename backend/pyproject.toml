@@ -8,9 +8,11 @@ dependencies = [
     "cryptography>=50.0.2",
     "fastapi>=0.143.3",
     "httpx>=0.28.1",
+    "litellm>=1.105.1",
     "psycopg[binary,pool]>=3.3.6",
     "pydantic-settings>=2.16.0",
     "pyjwt>=2.15.1",
+    "pyyaml>=6.0.3",
     "uvicorn>=0.54.0",
 ]
 
@@ -32,8 +34,14 @@ select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "T20"]
 python_version = "3.12"
 files = ["app"]
 
+# PyYAML ships no type information; the parsed document is validated by Pydantic
+# (app/llm/registry.py), so nothing typed flows from the untyped call.
 [[tool.mypy.overrides]]
-module = ["app.core.*", "app.agents.*", "app.evaluation.*", "app.api.*", "app.workers.*", "app.models.*"]
+module = ["yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.core.*", "app.agents.*", "app.evaluation.*", "app.api.*", "app.workers.*", "app.models.*", "app.llm.*"]
 strict = true
 
 [tool.pytest.ini_options]
