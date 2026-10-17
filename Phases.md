@@ -144,12 +144,30 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 | Sector constraint registry enforcement | Per-sector required disclaimers and prohibited phrasings enforced by rule in all three gates (`Architecture.md` §8) |
 
 **Exit criteria**
-- [ ] A product with no verified claims cannot start a run
+- [x] A product with no verified claims cannot start a run — **ticked 2026-10-17 on observed
+  evidence.** On the live project (migrations 0015–0020 applied 14:01 UTC), the live E2E spec
+  "a product with no verified claim cannot start a run…" created a product with no claims, started
+  a run through the form and was refused, nothing started (`409`, reason `no_verified_claims`);
+  read back from the database: `audit_log` rows `run.blocked`, actor `service`/`run_admission`,
+  reason `no_verified_claims`, at 15:16:46 and 15:23:05 UTC (two runs), and `runs` still holds 0
+  rows. Runs for the fixture product, which has an active verified claim, were admitted and
+  streamed (run-view specs, 13/13 live). Also in CI and locally against the real migrations:
+  `tests/db/test_api.py::test_a_freshly_bootstrapped_orgs_product_runs_only_once_it_has_a_verified_claim`
+  (an organisation 0012 created; a restricted claim alone does not admit). On the fake-run path:
+  Phase 6's `POST /api/v1/runs` must call the same `app/core/admission.py`.
 - [ ] An attempt to generate a restricted claim is blocked and logged
 - [ ] Every claim in a sample output resolves to a source
 - [ ] Output in a regulated sector missing a required disclaimer is blocked
 - [ ] Output containing a registry-prohibited phrasing is blocked
-- [ ] A regulated sector with no active registry entries blocks the run (fails closed)
+- [x] A regulated sector with no active registry entries blocks the run (fails closed) — **ticked
+  2026-10-17.** Evidence: `tests/db/test_api.py::test_admission_blocks_each_failing_check_and_logs_it`
+  (real migrations, real API, CI on `b694beb` and locally): a product with a verified claim under a
+  `health-supplements` brand, with no registry rows, is refused with `registry_coverage` and a
+  message naming the fail-closed rule, and audit-logged; a brand with no sector is refused the same
+  way; unit cases in `tests/test_admission.py` and `tests/test_sector_registry_fail_closed.py`
+  (retired-only rules, other sectors' rules). On the live project the precondition holds — the one
+  regulated sector has 0 `sector_constraints` rows (read 15:24 UTC) — but no live run in that sector
+  was attempted; this tick rests on the test evidence, stated as such.
 
 > **Human prerequisite — on the critical path to Phase 10 (recorded 2026-10-17).** The registry's
 > rules are written by a person from the regulation each one cites (`Architecture.md` §8.1,

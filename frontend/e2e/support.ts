@@ -69,16 +69,22 @@ export const FIXTURE_PRODUCT = "E2E fixture shoe";
  * than re-created on every run.
  */
 export async function ensureRunnableProduct(page: Page): Promise<void> {
+  // Every count below waits for its list to have loaded first: counting while a query is still in
+  // flight sees nothing, and creating then would leave a permanent duplicate on the live project
+  // (it did once, 2026-10-17; the two empty duplicates were deleted).
   await expect(page.getByRole("button", { name: "Add brand" })).toBeVisible({ timeout: 15_000 });
   const brands = page.getByRole("list", { name: "Brands" });
+  await expect(brands.or(page.getByText("No brands yet."))).toBeVisible();
   const brandButton = brands.getByRole("button", { name: FIXTURE_BRAND, exact: true });
   if ((await brandButton.count()) === 0) {
     await page.getByLabel("New brand").fill(FIXTURE_BRAND);
     await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
     await page.getByRole("button", { name: "Add brand" }).click();
   }
+  await expect(brandButton).toHaveCount(1); // a second fixture brand is a failure, never ignored
   await brandButton.click();
   const products = page.getByRole("list", { name: `Products of ${FIXTURE_BRAND}` });
+  await expect(products.getByRole("listitem").first().or(page.getByText("No products yet."))).toBeVisible();
   if ((await products.getByText(FIXTURE_PRODUCT, { exact: true }).count()) === 0) {
     await page.getByLabel("New product").fill(FIXTURE_PRODUCT);
     await page.getByRole("button", { name: "Add product" }).click();

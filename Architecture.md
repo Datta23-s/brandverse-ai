@@ -1952,25 +1952,26 @@ and every `app.*` function (50 checks) against `test_table_posture.py` found no 
 What the live Supabase project holds that is not evaluation data, and why. Application roles
 cannot delete organisations, memberships, runs, LLM calls, memory, campaigns, approvals or audit
 rows (0010, 0011), nor claims (0017), so this list only grows; it is kept complete here so that
-what is in the database is written down, not reconstructed. Read on 2026-10-17 at about 14:05 UTC
-(read-only), after 0015–0020.
+what is in the database is written down, not reconstructed. **Read on 2026-10-17 at 15:24 UTC**
+(read-only), after 0015–0020 and two live E2E runs.
 
 | Rows | What | Why it is there | Excluded from evaluation by |
 |---|---|---|---|
 | 2 `auth.users` | `e2e-a@` and `e2e-b@brandverse-e2e.example.com`, confirmed | The fixed E2E users (B2): a new user per run would leave undeletable organisations behind | Their organisations' flag (below) |
-| 2 `organisations` + 2 `org_members` | `E2E Org A`, `E2E Org B`, each with its user as owner | One org per E2E user; created through `app.create_organisation` by `scripts/ensure_e2e_users.py` | `is_test = true` (0020), set by that script for organisations its own users own; every evaluation read filters it (`backend/tests/db/test_test_organisations.py`) |
-| 1 `auth.users`, 1 `organisations`, 1 `org_members` | The project owner's account and organisation `Datta` | Phase 1 exit criterion: the owner's own sign-up, through the real form and confirmation email | Not flagged. Not an evaluation organisation (D5 names ten of their own); harness reads take explicit evaluation org ids |
-| 1 `brands`, 1 `products` | `Capstone Project` (sector not yet chosen) and `SHampoo`, in `Datta` | The Phase 1 sign-up → brand → product evidence, kept in place (`Phases.md` Phase 1) | As the `Datta` organisation |
+| 2 `organisations` + 2 `org_members` | `E2E Org A`, `E2E Org B`, each with its user as owner | One org per E2E user; created through `app.create_organisation` by `scripts/ensure_e2e_users.py` | `is_test = true` (0020), set 2026-10-17 by that script for organisations its own users own; every evaluation read filters it (`backend/tests/db/test_test_organisations.py`) |
+| 1 `auth.users`, 1 `organisations`, 1 `org_members` | The project owner's account and organisation `Datta` | Phase 1 exit criterion: the owner's own sign-up, through the real form and confirmation email. Kept as the owner's demo and exploration organisation: anything clicked through there is not evaluation data | `is_test = true`, set 2026-10-17 by `scripts/flag_test_organisation.py --owner-email <owner> --name Datta` — found through its owner **and** its name, exactly one match required, so an evaluation organisation the same person owns can never be flagged by it |
+| 1 `brands`, 1 `products` | `Capstone Project` (sector not yet chosen) and `SHampoo`, in `Datta` | The Phase 1 sign-up → brand → product evidence, kept in place (`Phases.md` Phase 1) | `Datta`'s `is_test` flag |
 | 9 `sectors` | The sector keys (0018) | Registry keys `brands.sector` references | Reference data, not evaluation data |
-| **Run fixture** (created by the first live E2E run after 0017): 1 `brands`, 1 `products`, 1 `product_claims` | In `E2E Org A`: brand `E2E run fixture` (sector `footwear`), product `E2E fixture shoe`, verified claim "Upper made of recycled mesh" with evidence `https://example.com/e2e-fixture-spec` | From Phase 3 a run needs a product with an active verified claim, so the run-view and tenancy specs need one. Kept and reused (`frontend/e2e/support.ts`, `ensureRunnableProduct`) rather than re-created per run. The claim cannot be deleted (0017). The brand and product have no runs, so the org owner *could* delete them, cascading the claim; the specs never do | `E2E Org A`'s `is_test` flag |
-| `audit_log`, about 3 rows per full live E2E run | `brand.sector_set` × 2 (the two setup specs create a brand with a sector), `run.blocked` × 1 (the no-verified-claim spec); the first run adds one more for the fixture brand | Every sector change and every gate block is audited (0019, admission); append-only | Not read by the evaluation; rows carry the E2E org's id |
+| **Run fixture**, 3 rows, created 2026-10-17 15:16 UTC by the first live E2E run after 0017 | In `E2E Org A`: brand `E2E run fixture` (`4bd4db13-97c6-4296-b923-598316c22cdd`, sector `footwear`); product `E2E fixture shoe` (`c1308e7b-0fcd-4d26-9269-e2a6572dbb52`); verified claim "Upper made of recycled mesh" (`deeb1b96-65b0-4b0f-8e30-4a547f813cd5`), evidence `https://example.com/e2e-fixture-spec`, `created_by = 'human'`, `entered_by` = the E2E A user (derived by the 0017 trigger) | From Phase 3 a run needs a product with an active verified claim, so the run-view and tenancy specs need one. Kept and reused (`frontend/e2e/support.ts`, `ensureRunnableProduct`) rather than re-created per run. The claim cannot be deleted (0017). The brand and product have no runs, so the org owner *could* delete them, cascading the claim; the specs never do. The ids are recorded here as a description of what exists, not as a filter | `E2E Org A`'s `is_test` flag |
+| 9 `audit_log` rows, then about 3 per full live E2E run | All in `E2E Org A`. First run (15:16–15:17 UTC): `brand.sector_set` × 2 (the two setup specs' brands), `run.blocked` × 1 (`no_verified_claims`), `brand.sector_set` × 3 for fixture brands. Second run (15:22–15:23 UTC): `brand.sector_set` × 2, `run.blocked` × 1 | Every sector change and every gate block is audited (0019, admission); append-only. **Two of the first run's fixture audits belong to duplicate fixture brands** a race in `ensureRunnableProduct` created (it counted brands before the list had loaded); the two empty duplicates were deleted by the backend role at 15:18 UTC, the helper was fixed to wait for each list, and their audit rows remain — the trail of the mistake, not removed | Not read by the evaluation; rows carry `E2E Org A`'s id |
 
 Every live E2E run also creates and then deletes two brands, two products and one claim (deleting
 a product with no runs cascades to its claims); none of these remain. Development and smoke LLM
-calls never go to the live project; they are logged to the local throwaway database
-(§4.4, tally). Live counts at the read above: `runs`, `llm_calls`,
-`memory_items`, `campaigns`, `approvals`, `product_claims`, `sector_constraints` and `audit_log`
-all 0.
+calls never go to the live project; they are logged to the local throwaway database (§4.4,
+tally). Live counts at the read above: `brands` 2, `products` 2, `product_claims` 1 (the
+fixture's), `audit_log` 9, `runs`, `llm_calls`, `memory_items`, `campaigns`, `approvals` and
+`sector_constraints` all 0. Every organisation on the project is `is_test = true`; none is an
+evaluation organisation yet.
 
 A new kind of lasting row added to the live project is added to this table in the same change.
 

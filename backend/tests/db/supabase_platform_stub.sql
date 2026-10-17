@@ -26,8 +26,9 @@ alter default privileges in schema public grant all on functions to anon, authen
 create schema if not exists auth;
 grant usage on schema auth to anon, authenticated, service_role;
 
--- Minimal auth.users: the migrations only reference users(id).
-create table if not exists auth.users (id uuid primary key);
+-- Minimal auth.users: the migrations only reference users(id); email (as on Supabase) is read by
+-- backend/scripts/flag_test_organisation.py, which finds an organisation through its owner.
+create table if not exists auth.users (id uuid primary key, email text);
 
 -- Verbatim from supabase/auth migrations/20220224000811_update_auth_functions.up.sql
 -- (template namespace = auth), the latest supabase/auth migration that defines uid(); checked
