@@ -65,16 +65,16 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
 **Exit criteria**
-- [x] Sign up → create brand → create product works end to end — ticked 2026-10-17.
-  On the live Supabase project the project owner signed up through the sign-up form with their
-  own address, confirmed it through the real confirmation email, signed in, created an
-  organisation (`app.create_organisation`, 0012), a brand and a product. Checked in the database
-  the same day: one organisation outside the E2E ones, created 2026-10-17, owned by a confirmed
-  non-E2E user; it held 0 brands and 0 products at the time of the check (consistent with their
-  deletion through the UI; brand and product creation rest on the owner's report and on
-  `frontend/e2e/auth-and-setup.spec.ts`, which creates, reloads and deletes both on the live
-  project). The sign-up form up to "check your email" is also tested in CI against the Auth
-  stand-in.
+- [ ] Sign up → create brand → create product works end to end — **un-ticked 2026-10-17:
+  not observed in full.** Observed on the live project: the owner's sign-up through the form,
+  email confirmed through the real confirmation email, sign-in, and organisation creation
+  (`POST /api/v1/organisations` → 201 at 05:09:05 UTC, via `app.create_organisation`); then a
+  fake run in that organisation. **Not observed:** a brand or a product. The live API's access log
+  from 05:04:17 UTC on holds no brand or product request from anyone, and the project holds 0
+  brands and 0 products (`pg_stat_user_tables` counts only the E2E runs' inserts and deletes).
+  The brand → product steps are covered on the live project by
+  `frontend/e2e/auth-and-setup.spec.ts` (fixed E2E users), but the criterion is ticked only
+  when the owner's own brand and product are seen in the database.
 - [x] Cross-tenant access test written and green — `backend/tests/db/test_rls.py` (every tenant
   table) and `backend/tests/db/test_api.py` (a member of org A cannot stream, read or write
   org B's runs, brands or products; signed-out requests are refused), merge-blocking in CI.
