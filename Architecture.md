@@ -579,10 +579,34 @@ paraphrase") is unchanged and correct: it tells the human approver what to look 
 can catch a paraphrase. It is not a claim about what the code detects; until the classifier
 (chunk C) is measured, the approver is what covers paraphrase.
 
-**Not built yet in Phase 3:** the output-side gates (claim, risk, brand-voice registry half) and
-the registry authoring path (chunk B); the claim classifier (chunk C). Registry content: the
-regulated sector runs against its illustrative synthetic rule set (§8.1, 0021); a real, cited
-rule set is a deployment step, not research work.
+### 8.3 Output gates and the authoring path — as built (Phase 3 chunk B, 2026-10-17)
+
+**The gates** (`backend/app/core/gates.py`) judge generated copy against the product's truth and
+the sector's active rules, deterministically:
+
+| Gate | Checks | Findings |
+|---|---|---|
+| Claim | Each factual statement (an exact quote from the copy, with what it cites) is labelled from its citation, never by a model | resolves to a source (verified); `deduced_labelled` (flag); `unsourced_claim`, `cites_unknown_claim`, `cites_retired_claim`, `cites_restricted_claim`, `deduced_unlabelled`, `statement_not_in_copy` (block) |
+| Risk | The whole copy | `restricted_claim_in_copy`, `prohibited_phrase`, `missing_disclaimer`, `unsupported_superlative` (Rules.md T3: a superlative is allowed only in a statement citing a verified claim whose own text states it), `registry_coverage`, `registry_rule_invalid`; the eight anti-patterns are mapped as blocks with no detector yet |
+| Brand voice, registry half | Required disclaimers | `altered_disclaimer` — present but with case or punctuation changed, distinct from `missing_disclaimer`; `voice_scoring_text` strips disclaimer text before Phase 6's similarity, which is not built here |
+
+`SEVERITY` is closed and immutable: every finding kind blocks except `deduced_labelled`, which
+flags; an exception anywhere is a `gate_error` block. A blocked report is appended to `audit_log`
+(`output.blocked`, actor `validation_engine`) and names the sector with its provenance and the
+superlative list version (`config/superlatives/`, hash-locked; v1 proposed 2026-10-17).
+
+**The authoring path** (`backend/scripts/apply_sector_constraints.py`, `config/sector_constraints/`):
+reviewed YAML files, dry run by default, committed files only (the commit recorded in every audit
+row), a named human author, append and retire only — an active rule missing from its file stops the
+run — cited rules only, parameterised inserts, every change in `audit_log`.
+
+**Write-back is staged** (`backend/app/core/budgeted_run.py`): steps append memory writes to an
+in-process stage; it is committed in the transaction that writes the terminal status, only for a
+completed run, and discarded otherwise — so no write reaches the undeletable `memory_items` before
+the attempt's primacy is known (`docs/evaluation-plan.md` §2).
+
+**Not built yet in Phase 3:** the claim classifier that extracts statements from free copy
+(chunk C). Until then the gates take statements as given; chunk C supplies them.
 
 ---
 

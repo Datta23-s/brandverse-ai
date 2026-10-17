@@ -157,8 +157,18 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
   Phase 6's `POST /api/v1/runs` must call the same `app/core/admission.py`.
 - [ ] An attempt to generate a restricted claim is blocked and logged
 - [ ] Every claim in a sample output resolves to a source
-- [ ] Output in a regulated sector missing a required disclaimer is blocked
-- [ ] Output containing a registry-prohibited phrasing is blocked
+- [x] Output in a regulated sector missing a required disclaimer is blocked — **ticked 2026-10-17
+  on test evidence.** `tests/db/test_gates_db.py::test_criterion_4_regulated_output_missing_a_required_disclaimer_is_blocked`:
+  the gates (`app/core/gates.py`) loaded the stored health-supplements rules through
+  `load_product_truth` — the same four rows as on the live project (0021, applied 16:04 UTC) — and
+  copy mentioning protein without the triggered disclaimer was blocked (`missing_disclaimer`); a
+  reworded disclaimer is a distinct `altered_disclaimer` block (`tests/test_gates.py`); compliant copy
+  passes. No generator exists yet, so no live output was checked; the rules are illustrative.
+- [x] Output containing a registry-prohibited phrasing is blocked — **ticked 2026-10-17 on test
+  evidence.** `tests/db/test_gates_db.py::test_criterion_5_output_with_a_registry_prohibited_phrasing_is_blocked`:
+  copy with "miracle cure" and "Guaranteed results" was blocked by both stored prohibited rules (a
+  phrase and a regex), and the block was appended to `audit_log` (`output.blocked`,
+  `test_a_block_is_written_to_audit_log`). As for criterion 4: the stored rules, no live output.
 - [x] A regulated sector with no active registry entries blocks the run (fails closed) — **ticked
   2026-10-17.** Evidence: `tests/db/test_api.py::test_admission_blocks_each_failing_check_and_logs_it`
   (real migrations, real API, CI on `b694beb` and locally): a product with a verified claim under a
@@ -183,7 +193,10 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 > outside the research contribution** — not a Phase 10 prerequisite.
 
 **Phase 3 progress.** Chunk A (truth store, run admission, sector keys; 2026-10-17):
-`Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Paraphrase of a restricted claim is not caught by deterministic matching —
+`Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Chunk B (output
+gates, superlative list v1, registry authoring path, staged write-back; 2026-10-17): §8.3. The
+brand-voice gate's registry half is built; its similarity score is Phase 6. Chunk C (the claim
+classifier) remains. Paraphrase of a restricted claim is not caught by deterministic matching —
 threat V2 in `docs/evaluation-plan.md`.
 
 ---
