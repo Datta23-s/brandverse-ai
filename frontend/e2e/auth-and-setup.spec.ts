@@ -66,7 +66,7 @@ test("signed in: create a brand, then a product, then remove both", async ({ pag
   const brand = `E2E brand ${Date.now()}`;
   const brandButton = page.getByRole("list", { name: "Brands" }).getByRole("button", { name: brand, exact: true });
   await page.getByLabel("New brand").fill(brand);
-  await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
+  await page.getByLabel("Sector", { exact: true }).selectOption("footwear");
   await page.getByRole("button", { name: "Add brand" }).click();
   await expect(brandButton).toBeVisible();
   await expect(page.getByLabel(`Sector of ${brand}`)).toHaveValue("footwear");
@@ -107,7 +107,7 @@ test("a product with no verified claim cannot start a run; a claim is entered wi
 
   const brand = `E2E brand ${Date.now()}`;
   await page.getByLabel("New brand").fill(brand);
-  await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
+  await page.getByLabel("Sector", { exact: true }).selectOption("footwear");
   await page.getByRole("button", { name: "Add brand" }).click();
   await page.getByRole("list", { name: "Brands" }).getByRole("button", { name: brand, exact: true }).click();
   await page.getByLabel("New product").fill("Claimless runner");

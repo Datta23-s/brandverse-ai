@@ -1088,7 +1088,7 @@
     },
     "Sector": {
       "additionalProperties": false,
-      "description": "A registry key (Architecture.md \u00a78.1). `regulated` sectors need active registry rules.",
+      "description": "A registry key (Architecture.md \u00a78.1). `regulated` sectors need active registry rules.\n`rules_provenance` is shown wherever the sector is named (migration 0021): 'illustrative'\nrules are synthetic, not derived from any regulation.",
       "properties": {
         "id": {
           "title": "Id",
@@ -1101,12 +1101,21 @@
         "regulated": {
           "title": "Regulated",
           "type": "boolean"
+        },
+        "rules_provenance": {
+          "enum": [
+            "authoritative",
+            "illustrative"
+          ],
+          "title": "Rules Provenance",
+          "type": "string"
         }
       },
       "required": [
         "id",
         "label",
-        "regulated"
+        "regulated",
+        "rules_provenance"
       ],
       "title": "Sector",
       "type": "object"

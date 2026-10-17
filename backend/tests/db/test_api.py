@@ -581,16 +581,29 @@ def _audit_rows(db_url: str, action: str, entity: str) -> list[tuple[Any, ...]]:
         ).fetchall()
 
 
+SEEDED_SECTORS = {
+    "consumer-electronics",
+    "travel-goods",
+    "footwear",
+    "personal-care",
+    "food-and-beverage",
+    "health-supplements",
+    "kitchenware",
+    "home-furnishing",
+    "home-appliances",
+}
+
+
 async def test_sectors_are_listed_for_any_signed_in_member(
     settings: Settings, issuer: TestIssuer, seed: Seed
 ) -> None:
     async with api(settings, issuer) as client:
         r = await client.get("/api/v1/sectors", headers=bearer(issuer, seed.users["viewer_a"]))
     assert r.status_code == 200
-    sectors = {s["id"]: s["regulated"] for s in r.json()}
-    assert sectors["health-supplements"] is True
-    assert sectors["footwear"] is False
-    assert len(sectors) == 9
+    sectors = {s["id"]: (s["regulated"], s["rules_provenance"]) for s in r.json()}
+    assert sectors["health-supplements"] == (True, "illustrative")
+    assert sectors["footwear"] == (False, "illustrative")  # no sector has authoritative rules
+    assert len(set(sectors) & SEEDED_SECTORS) == 9
 
 
 async def test_a_brands_sector_is_set_changed_and_every_change_audited(
@@ -737,15 +750,27 @@ async def test_a_freshly_bootstrapped_orgs_product_runs_only_once_it_has_a_verif
     assert details["reasons"][0]["code"] == "no_verified_claims"
 
 
+REGULATED_WITHOUT_RULES = "test-regulated-without-rules"
+
+
 async def test_admission_blocks_each_failing_check_and_logs_it(
     settings: Settings, issuer: TestIssuer, db_url: str, new_user: Callable[[], UUID]
 ) -> None:
     """No sector; a regulated sector with no registry rules (fail closed); a brief asking for a
-    restricted claim. Each is refused with its reason and appended to audit_log."""
+    restricted claim. Each is refused with its reason and appended to audit_log.
+
+    The regulated sector here is test-only: health-supplements has its illustrative rule set
+    (0021), so it no longer exercises the fail-closed path."""
+    with psycopg.connect(db_url, autocommit=True) as c:
+        c.execute(
+            "insert into sectors (id, label, regulated) values (%s, 'Test only', true) "
+            "on conflict do nothing",
+            (REGULATED_WITHOUT_RULES,),
+        )
     async with api(settings, issuer) as client:
         _, owner, a = await _fresh_org(client, issuer, new_user)
         no_sector = await _product(client, owner, a, await _brand(client, owner, a, None))
-        supplements = await _brand(client, owner, a, "health-supplements")
+        supplements = await _brand(client, owner, a, REGULATED_WITHOUT_RULES)
         regulated = await _product(client, owner, a, supplements)
         restricted_brief = await _product(
             client, owner, a, await _brand(client, owner, a, "footwear")
@@ -778,3 +803,23 @@ async def test_admission_blocks_each_failing_check_and_logs_it(
     assert unknown.status_code == 404
     for product in (no_sector, regulated, restricted_brief):
         assert len(_audit_rows(db_url, "run.blocked", product)) == 1
+
+
+async def test_the_illustrative_rule_set_admits_and_blocks_a_real_regulated_brand(
+    settings: Settings, issuer: TestIssuer, new_user: Callable[[], UUID]
+) -> None:
+    """health-supplements runs against its synthetic rules (0021): covered, so admitted; a brief
+    using a seeded prohibited phrasing is blocked, and the message says the rules are illustrative.
+    """
+    async with api(settings, issuer) as client:
+        _, owner, a = await _fresh_org(client, issuer, new_user)
+        product = await _product(
+            client, owner, a, await _brand(client, owner, a, "health-supplements")
+        )
+        assert (await _claim(client, owner, a, product)).status_code == 201
+        admitted = await _start(client, owner, a, product, brief="Lead with the protein content")
+        banned = await _start(client, owner, a, product, brief="Call it a miracle cure")
+    assert admitted.status_code == 202, admitted.text
+    assert _codes(banned) == ["prohibited_phrase_requested"]
+    message = banned.json()["detail"]["reasons"][0]["message"]
+    assert "illustrative rules: synthetic, not derived from any regulation" in message

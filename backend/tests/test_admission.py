@@ -138,3 +138,20 @@ def test_every_failing_check_is_reported_not_only_the_first() -> None:
 def test_no_brief_means_nothing_to_scan(brief: str | None) -> None:
     restricted = (RestrictedClaim("c9", "clinically proven"),)
     assert codes(_inputs(restricted=restricted), brief) == []
+
+
+def test_every_message_naming_a_sector_states_its_rules_provenance() -> None:
+    illustrative = Sector("health-supplements", regulated=True)
+    authoritative = Sector("x", regulated=True, rules_provenance="authoritative")
+    assert (
+        "illustrative rules: synthetic, not derived from any regulation" in illustrative.describe()
+    )
+    assert "authoritative rules" in authoritative.describe()
+    coverage = decide_admission(_inputs(sector=illustrative), None, TODAY).reasons[0].message
+    assert "illustrative rules" in coverage
+    banned = (
+        decide_admission(_inputs(sector=illustrative, rules=(_rule(),)), "it cures fatigue", TODAY)
+        .reasons[0]
+        .message
+    )
+    assert "illustrative rules" in banned

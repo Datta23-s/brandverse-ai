@@ -98,7 +98,9 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "campaigns_active_approver": (False, "migration", ALL_API),
     "product_claims_provenance": (False, "migration", ALL_API),  # 0017
     "runs_initial_state": (False, "migration", ALL_API),  # 0016
+    "sector_constraints_synthetic_sector": (False, "migration", ALL_API),  # 0021
     "sector_constraints_versioned": (False, "migration", ALL_API),
+    "sectors_provenance_consistent": (False, "migration", ALL_API),  # 0021
     # 0019: a security definer TRIGGER function (cannot be called directly), owned by the minimal
     # role below; it appends one kind of audit row when a brand's sector really changes.
     "audit_brand_sector": (True, "app_audit_writer", ALL_API),

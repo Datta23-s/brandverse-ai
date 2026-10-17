@@ -524,6 +524,17 @@ prohibited phrasings (`Phases.md` §6.1; `Rules.md` T4). Table: `sector_constrai
 | Fail closed | A brand whose sector is marked `regulated` but has no active registry rows **blocks the run**. Missing rules are never read as "no constraints". |
 | Sector keys | `brands.sector` references a `sectors` table, so a misspelled sector cannot silently bypass the registry. |
 | Change control | Rows are versioned by `effective_from` / `retired_at`, never edited in place (trigger); every change is written to `audit_log`. Binds the application roles, not the table owner (§9, stated limitation). |
+| Provenance (0021, 2026-10-17) | Every sector states where its rules come from: `sectors.rules_provenance` is `authoritative` (cited from regulation) or `illustrative` (synthetic). Default `illustrative`, backend-settable only. A synthetic rule is marked by its source alone — `source_url` null and `source_note` exactly "Synthetic rule, not derived from any regulation. Illustrative only." — nothing citation-like; a cited rule needs a URL and a human author and may not use that sentence. A synthetic rule can only belong to an illustrative sector, and a sector with active synthetic rules cannot be marked authoritative (triggers). **Every report that names a sector prints its provenance** (`Sector.describe()`, the API's `Sector.rules_provenance`, the UI label), so an illustrative rule is never mistaken for a regulatory one. |
+
+**What the research claims about the registry — and what it does not.** The claim is that the
+mechanism enforces whatever rules it is given: deterministically, fail-closed, verbatim for
+disclaimers. It is **not** that the rules shipped are legally correct. The one regulated sector,
+health supplements, ships with **four synthetic rules** (0021: two prohibited phrasings, a phrase
+and a regex; two required disclaimers, one on all output and one triggered by "protein"), written
+to exercise every path of the mechanism — never derived from FSSAI, ASCI or any other source.
+Substituting a real, cited rule set is a **deployment step, outside the research contribution**:
+retire the synthetic rows, enter cited ones through the authoring path, then mark the sector
+`authoritative` (the trigger refuses this while synthetic rules are active).
 
 The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming.
 
@@ -569,10 +580,9 @@ can catch a paraphrase. It is not a claim about what the code detects; until the
 (chunk C) is measured, the approver is what covers paraphrase.
 
 **Not built yet in Phase 3:** the output-side gates (claim, risk, brand-voice registry half) and
-the registry authoring path (chunk B); the claim classifier (chunk C). Registry *content* is
-human work: no `sector_constraints` rows exist, so a brand in the one regulated sector
-(health supplements) cannot start a run until a person enters rules citing the regulation
-(`Phases.md`, Phase 10 prerequisite).
+the registry authoring path (chunk B); the claim classifier (chunk C). Registry content: the
+regulated sector runs against its illustrative synthetic rule set (§8.1, 0021); a real, cited
+rule set is a deployment step, not research work.
 
 ---
 
@@ -672,7 +682,7 @@ including it:
 |---|---|
 | `experiments` | One row per experiment: name, the frozen definition (arms, request set and its file hash, prompt versions lock hash, model registry hash, approver, attempt rule as pre-registered in `docs/evaluation-plan.md` §2), created by the harness role. **Immutable once any run references it**: a trigger refuses update and delete of an experiment row while a `runs` row points at it, so its definition cannot change mid-evaluation and runs cannot be silently re-pointed — the append-only reasoning of `approvals`. |
 | `runs.experiment_id`, `runs.arm`, `runs.request_ref`, `runs.attempt` | **Set together by the harness's own database role, or not at all** (a CHECK: all four null, or all four non-null). `arm` becomes nullable for this — null means "not an experiment run"; today it is `not null default 'proposed'`, which would label every stray run as Proposed. A run inserted by an API role gets all four forced to null by the 0016 trigger's successor, as status already is: a user can neither enter a run into the experiment nor relabel its arm, which would corrupt the comparison more quietly than an extra run. No API role can update them (no update policy on `runs`, 0005); the harness role cannot change them after insert either (trigger: the four are written once). |
-| Uniqueness | `unique (experiment_id, request_ref, arm, attempt)`; `attempt` starts at 1 and is assigned by the harness in start order. Re-runs are explicit rows, never replacements. Which attempt is the primary result is pre-registered: attempt 1, whatever its outcome (`docs/evaluation-plan.md` §2). Only attempt 1 may write back to memory. |
+| Uniqueness and the primary attempt | `unique (experiment_id, request_ref, arm, attempt)`; `attempt` starts at 1 and is assigned by the harness in start order. Re-runs are explicit rows, never replacements. `runs.infrastructure_failure` (null, or one of `rate_limited`, `network_error`, `process_crash`, `quota_exhausted`) is set by the harness role from the exception that ended the attempt, never by a person, and written once. The primary result is pre-registered (`docs/evaluation-plan.md` §2, fixed 2026-10-17): the first attempt that terminated without infrastructure failure — a `blocked`, `partial` or poor result is a result. Only the primary attempt may write back to memory. |
 | Second defence | A marked run in an `is_test` or `is_practice` organisation is refused (trigger), and every read keeps both exclusion filters. |
 | Reads | Every evaluation read (`backend/app/evaluation/`) selects by `experiment_id`, never by an organisation list; the structural test that every `*_SQL` read carries the exclusion filters is extended to require the experiment filter. |
 
@@ -1725,6 +1735,98 @@ create trigger brands_audit_sector after insert or update of sector on brands
 --   alter table organisations drop column is_test;
 alter table organisations add column is_test boolean not null default false;
 alter policy org_creator_insert on organisations with check (not is_practice and not is_test);
+
+-- ═══ supabase/migrations/0021_sector_rules_provenance.sql ═══
+-- 0021: every sector states the provenance of its registry rules, and the regulated sector gets an
+-- illustrative, synthetic rule set (decided by the project owner 2026-10-17).
+--
+-- The research claim is that the mechanism enforces whatever rules it is given — not that the
+-- rules shipped are legally correct. Substituting a real, cited rule set is a deployment step,
+-- outside the research contribution (Architecture.md §8.1). Until then health-supplements runs
+-- against synthetic rules, so its status must be unmissable:
+--
+-- 1. sectors.rules_provenance: 'authoritative' (rules cited from regulation) or 'illustrative'.
+--    The default is 'illustrative': a sector is never presented as authoritative unless the
+--    backend says so; and today no sector has authoritative rules (the eight unregulated sectors
+--    have none at all). Backend-settable only: API roles hold no write grant on sectors (0002).
+--    Every report that names a sector prints this (app/core/sector_registry.py, describe()).
+-- 2. A synthetic rule is marked by its source, and nothing citation-like: source_url is null and
+--    source_note is exactly 'Synthetic rule, not derived from any regulation. Illustrative only.'
+--    A rule with any other source must carry a source_url and a human author (created_by), as
+--    before, and may not use that sentence. Synthetic rules need no human author: a migration
+--    seeded them, and created_by does not pretend otherwise.
+-- 3. A synthetic rule can only belong to an illustrative sector, and a sector cannot be marked
+--    authoritative while it has an active synthetic rule (two triggers), so the label never lies.
+-- 4. Four synthetic rules for health-supplements: two prohibited phrasings (a phrase and a regex)
+--    and two required disclaimers (one on all output, one triggered), so disclaimer_text and the
+--    declared "verbatim" rule are exercised by real rows, not only by tests. The disclaimer texts
+--    say they are illustrative in the copy itself.
+-- The project held no sector_constraints rows when this was written.
+-- Down: delete is blocked by app.sector_constraints_versioned (rows are retired, never deleted);
+--   as the table owner: alter table sector_constraints disable trigger sector_constraints_versioned;
+--   delete from sector_constraints where source_url is null; enable it again; then
+--   drop trigger sector_constraints_synthetic_sector on sector_constraints;
+--   drop trigger sectors_provenance_consistent on sectors;
+--   drop function app.sector_constraints_synthetic_sector(); drop function app.sectors_provenance_consistent();
+--   alter table sector_constraints drop constraint sector_constraints_source,
+--     alter column source_url set not null, alter column created_by set not null;
+--   alter table sectors drop column rules_provenance;
+alter table sectors
+  add column rules_provenance text not null default 'illustrative'
+    check (rules_provenance in ('authoritative', 'illustrative'));
+
+alter table sector_constraints
+  alter column source_url drop not null,
+  alter column created_by drop not null,
+  add constraint sector_constraints_source check (
+    (source_url is null
+       and source_note = 'Synthetic rule, not derived from any regulation. Illustrative only.')
+    or (source_url is not null and created_by is not null
+        and source_note is distinct from
+            'Synthetic rule, not derived from any regulation. Illustrative only.')
+  );
+
+create function app.sector_constraints_synthetic_sector() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.source_url is null
+     and not exists (select 1 from public.sectors s
+                     where s.id = new.sector_id and s.rules_provenance = 'illustrative') then
+    raise exception 'a synthetic rule can only belong to an illustrative sector';
+  end if;
+  return new;
+end $$;
+create trigger sector_constraints_synthetic_sector before insert on sector_constraints
+  for each row execute function app.sector_constraints_synthetic_sector();
+
+create function app.sectors_provenance_consistent() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if new.rules_provenance = 'authoritative'
+     and exists (select 1 from public.sector_constraints c
+                 where c.sector_id = new.id and c.source_url is null
+                   and (c.retired_at is null or c.retired_at > current_date)) then
+    raise exception 'sector % has active synthetic rules; retire them before marking it authoritative', new.id;
+  end if;
+  return new;
+end $$;
+create trigger sectors_provenance_consistent before insert or update of rules_provenance on sectors
+  for each row execute function app.sectors_provenance_consistent();
+
+insert into sector_constraints
+  (sector_id, jurisdiction, kind, match_type, pattern, disclaimer_text, source_url, source_note,
+   effective_from, created_by)
+values
+  ('health-supplements', 'IN', 'prohibited_phrase', 'phrase', 'miracle cure', null, null,
+   'Synthetic rule, not derived from any regulation. Illustrative only.', '2026-10-17', null),
+  ('health-supplements', 'IN', 'prohibited_phrase', 'regex', '\bguaranteed\s+results?\b', null,
+   null, 'Synthetic rule, not derived from any regulation. Illustrative only.', '2026-10-17', null),
+  ('health-supplements', 'IN', 'required_disclaimer', 'phrase', null,
+   'Illustrative disclaimer (synthetic rule): consult a qualified professional before use.',
+   null, 'Synthetic rule, not derived from any regulation. Illustrative only.', '2026-10-17', null),
+  ('health-supplements', 'IN', 'required_disclaimer', 'phrase', 'protein',
+   'Illustrative disclaimer (synthetic rule): protein content varies by serving size.',
+   null, 'Synthetic rule, not derived from any regulation. Illustrative only.', '2026-10-17', null);
 ```
 
 ---

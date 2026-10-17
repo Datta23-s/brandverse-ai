@@ -51,31 +51,46 @@ run, a run in an organisation created by accident — is excluded by default. Th
 (`is_practice`, `is_test`) stay as a second defence. Forgetting a marker removes data; it can never
 add data.
 
-**Attempts.** Each request is run once per arm (above), and a capped run is recorded, not retried
-(§1). A further attempt for the same request–arm pair is made only when an attempt could not
-produce a result at all, and it never replaces the first. Every attempt has its own runs row and
-number (1, 2, …), assigned by the harness at insertion, in the order the attempts were started.
+**The attempt rule (verbatim, as fixed by the project owner on 2026-10-17):**
 
-**The rule.** *All attempts are reported* (`Rules.md` A2): every attempt, with its status
-(`completed`, `partial`, `failed`, `blocked`), appears in the raw per-run logs and in the run
-outcome tables. **The primary result for each request–arm pair is attempt 1, whatever its
-outcome.** A failed, partial or blocked attempt 1 is the primary result for that pair, counted as
-such in every metric that counts outcomes.
+> All attempts are reported. For each request-arm pair, the primary result is the FIRST attempt
+> that terminated without infrastructure failure. Infrastructure failure is defined in advance and
+> narrowly: rate-limit rejection, network error, process crash, daily-quota exhaustion. Nothing
+> else qualifies.
+>
+> A run that completed and produced poor, blocked, or empty output is a RESULT, not a failure. It
+> counts as the primary attempt and is reported as-is. A method that blocks its own run is data
+> about the method.
+>
+> Re-running after an infrastructure failure is permitted and the superseded attempt stays in the
+> table with its failure reason. Re-running for any other reason is permitted only if every attempt
+> is reported and the primary remains the first qualifying one.
 
-*Reason.* Attempt 1 is the only choice that does not depend on how any attempt turned out. "Best
-attempt", "last attempt" and "first completed attempt" all select on the outcome, and an arm that
-fails more often would be flattered by every one of them: re-run until it works, report the run
-that worked. Fixing attempt 1 also makes the number of attempts irrelevant to the comparison,
-which removes any incentive to re-run.
+**This rule was fixed on 2026-10-17, before any evaluation run existed** (the live project held 0
+runs; no evaluation organisation or experiment existed). *Record of the same day:* an earlier draft
+written into this file on 2026-10-17 (commit `1c29426`) made attempt 1 the primary result whatever
+its outcome; the project owner replaced it the same day, still before any run existed, with the
+rule above, which treats an attempt that ended in a listed infrastructure failure as not yet a
+result while keeping every outcome of the method itself — `blocked`, `partial`, empty or poor
+output — as the result.
 
-*Secondary, labelled as such.* A sensitivity table reports the same metrics on "first completed
-attempt" per pair, so a reader can see how much infrastructure failures moved the result. It is
-never presented as the primary result.
+*How the rule is applied mechanically, so no attempt is classified by judgement after the fact.*
+Every attempt has its own runs row and number (1, 2, …), assigned by the harness at insertion in
+start order. When an attempt ends in one of the four listed failures, the harness records which
+one on the runs row from the exception that ended it — rate-limit rejection (`LLMRateLimited`),
+network error (a transport error reaching a provider or the database), process crash (the worker
+died: the run never reached a terminal status and its job was lost), daily-quota exhaustion
+(`QuotaExhausted`) — set by the backend, never by a person (`Architecture.md` §9, "Experiment
+membership"). Any other ending — `completed`, `partial` (budget cap, `Rules.md` C4), `blocked` by a
+gate, `failed` for any other reason — is a result. The primary attempt for a pair is the
+lowest-numbered attempt with no infrastructure-failure reason; a pair whose attempts all ended in
+infrastructure failure has no primary result and is reported as such, never dropped (A2).
 
 *Memory interaction (Proposed arm).* Later requests for a brand read memory that earlier approved
-campaigns wrote (`Memory.md` §6). Only attempt 1 may write back: the harness disables write-back
-for every attempt above 1, so the memory each later request sees comes from primary attempts only,
-and a re-run cannot change the inputs of the requests after it.
+campaigns wrote (`Memory.md` §6). Only the primary attempt may write back: write-back is the last
+step, after human approval, so an attempt that ends in infrastructure failure has written nothing,
+and once a pair has its primary attempt the harness disables write-back for any later attempt of
+that pair. The memory each later request sees therefore comes from primary attempts only.
 
 ## 3. Seed exclusion
 
@@ -104,6 +119,15 @@ in `backend/app/evaluation/` carries both filters.
 ## 4. Metrics
 
 Computed per run from `runs` / `llm_calls`, then aggregated. Baseline is Baseline B unless stated.
+
+**Sector provenance in every table (decided 2026-10-17).** Any run report, table or figure that
+names a sector also prints its rules' provenance — `authoritative` or `illustrative`
+(`sectors.rules_provenance`, migration 0021). The regulated sector, health supplements, runs
+against four **synthetic** rules ("Synthetic rule, not derived from any regulation. Illustrative
+only."), so its rows read e.g. "health supplements (regulated; illustrative rules)". A reader must
+never be able to mistake an illustrative rule for a regulatory one. What the regulated-sector
+results support is the claim that the mechanism enforces the rules it is given; they say nothing
+about whether those rules match any regulation (`Rules.md` A6).
 
 | Metric | Formula |
 |---|---|

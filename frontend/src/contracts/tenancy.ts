@@ -28,7 +28,13 @@ export const meSchema = z.strictObject({
 export type Me = z.infer<typeof meSchema>;
 
 /** A registry key (migration 0018). A regulated sector needs active registry rules to run. */
-export const sectorSchema = z.strictObject({ id: z.string(), label: z.string(), regulated: z.boolean() });
+export const sectorSchema = z.strictObject({
+  id: z.string(),
+  label: z.string(),
+  regulated: z.boolean(),
+  /** Shown wherever the sector is named: illustrative rules are synthetic, not regulatory (0021). */
+  rules_provenance: z.enum(["authoritative", "illustrative"]),
+});
 export type Sector = z.infer<typeof sectorSchema>;
 
 const sectorId = z.string().regex(/^[a-z][a-z0-9-]{1,62}$/, "Choose a sector.");

@@ -44,7 +44,7 @@ async def load_product_truth(
 ) -> ProductTruth | None:
     """The product's truth, or None if the organisation has no such product."""
     cur = await conn.execute(
-        "select b.sector, s.regulated from products p "
+        "select b.sector, s.regulated, s.rules_provenance from products p "
         "join brands b on b.id = p.brand_id and b.org_id = p.org_id "
         "left join sectors s on s.id = b.sector "
         "where p.id = %s and p.org_id = %s",
@@ -53,8 +53,8 @@ async def load_product_truth(
     row = await cur.fetchone()
     if row is None:
         return None
-    sector_id, regulated = row
-    sector = None if sector_id is None else Sector(sector_id, bool(regulated))
+    sector_id, regulated, provenance = row
+    sector = None if sector_id is None else Sector(sector_id, bool(regulated), provenance)
 
     cur = await conn.execute(
         "select id, claim, claim_type, evidence_url, retired_at is not null from product_claims "

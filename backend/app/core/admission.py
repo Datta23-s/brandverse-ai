@@ -131,7 +131,8 @@ def _prohibited_in_brief(inputs: AdmissionInputs, brief: str, on: date) -> list[
         out.append(
             BlockReason(
                 "prohibited_phrase_requested",
-                f"the brief uses wording the registry prohibits in sector '{inputs.sector.id}'",
+                "the brief uses wording the registry prohibits in sector "
+                + inputs.sector.describe(),
                 tuple(hits),
             )
         )

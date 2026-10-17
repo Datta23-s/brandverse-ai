@@ -421,9 +421,9 @@ def test_users_cannot_write_registry(tx: Tx) -> None:
 
 
 def test_registry_readable_by_members(tx: Tx) -> None:
-    _rule(tx)
+    rule = _rule(tx)
     tx.as_user("viewer_a")
-    assert len(tx.execute("select id from sector_constraints")) == 1
+    assert (rule,) in tx.execute("select id from sector_constraints")
 
 
 def test_registry_rule_text_cannot_change(tx: Tx) -> None:

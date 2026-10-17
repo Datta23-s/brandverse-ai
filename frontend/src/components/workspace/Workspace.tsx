@@ -120,7 +120,11 @@ const brandForm = brandCreateSchema.omit({ org_id: true }).extend({
   sector: z.preprocess((v) => (v === "" ? null : v), brandCreateSchema.shape.sector),
 });
 
-const sectorLabel = (s: Sector) => (s.regulated ? `${s.label} (regulated)` : s.label);
+/** Every sector label states its rules' provenance: illustrative rules must never pass for regulatory ones. */
+const sectorLabel = (s: Sector) =>
+  `${s.label} (${s.regulated ? "regulated" : "not regulated"}; ${
+    s.rules_provenance === "authoritative" ? "authoritative rules" : "illustrative rules"
+  })`;
 
 function SectorSelect({
   sectors,
@@ -259,7 +263,9 @@ function BrandSector({ org, brand, sectors }: { org: Organisation; brand: Brand;
         {brand.sector === null
           ? "Choose a sector before this brand's products can run."
           : current?.regulated
-            ? "Regulated: runs need active registry rules, entered by a person from the regulation they cite."
+            ? current.rules_provenance === "authoritative"
+              ? "Regulated: runs are checked against registry rules cited from regulation."
+              : "Regulated, with illustrative rules: synthetic, not derived from any regulation. They show the checks work; they are not legal guidance."
             : "Every change of sector is recorded."}
       </p>
       {set.error && <Alert>{set.error.message}</Alert>}

@@ -33,11 +33,14 @@ class Me(Contract):
 
 
 class Sector(Contract):
-    """A registry key (Architecture.md §8.1). `regulated` sectors need active registry rules."""
+    """A registry key (Architecture.md §8.1). `regulated` sectors need active registry rules.
+    `rules_provenance` is shown wherever the sector is named (migration 0021): 'illustrative'
+    rules are synthetic, not derived from any regulation."""
 
     id: str
     label: str
     regulated: bool
+    rules_provenance: Literal["authoritative", "illustrative"]
 
 
 class BrandCreate(Contract):

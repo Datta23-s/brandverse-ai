@@ -78,7 +78,7 @@ export async function ensureRunnableProduct(page: Page): Promise<void> {
   const brandButton = brands.getByRole("button", { name: FIXTURE_BRAND, exact: true });
   if ((await brandButton.count()) === 0) {
     await page.getByLabel("New brand").fill(FIXTURE_BRAND);
-    await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
+    await page.getByLabel("Sector", { exact: true }).selectOption("footwear");
     await page.getByRole("button", { name: "Add brand" }).click();
   }
   await expect(brandButton).toHaveCount(1); // a second fixture brand is a failure, never ignored

@@ -37,12 +37,28 @@ def verbatim_form(text: str) -> str:
 
 
 ConstraintKind = Literal["required_disclaimer", "prohibited_phrase"]
+# Where a sector's rules come from (migration 0021). 'illustrative' rules are synthetic, written to
+# exercise the mechanism; they are not derived from any regulation.
+RulesProvenance = Literal["authoritative", "illustrative"]
 
 
 @dataclass(frozen=True)
 class Sector:
     id: str
     regulated: bool
+    # Defaults to the safe reading: nothing is presented as authoritative unless the row says so.
+    rules_provenance: RulesProvenance = "illustrative"
+
+    def describe(self) -> str:
+        """The sector as every report must name it: with its rules' provenance, so an illustrative
+        rule can never be mistaken for a regulatory one."""
+        kind = "regulated" if self.regulated else "not regulated"
+        rules = (
+            "authoritative rules"
+            if self.rules_provenance == "authoritative"
+            else "illustrative rules: synthetic, not derived from any regulation"
+        )
+        return f"'{self.id}' ({kind}; {rules})"
 
 
 @dataclass(frozen=True)
@@ -80,6 +96,8 @@ def check_registry_coverage(
     active = tuple(r.id for r in rules if r.sector_id == sector.id and r.is_active(on))
     if sector.regulated and not active:
         return CoverageDecision(
-            True, f"regulated sector '{sector.id}' has no active registry rules (fail closed)", ()
+            True,
+            f"regulated sector {sector.describe()} has no active registry rules (fail closed)",
+            (),
         )
     return CoverageDecision(False, "registry coverage satisfied", active)

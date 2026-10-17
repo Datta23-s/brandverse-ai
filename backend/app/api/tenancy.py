@@ -99,7 +99,9 @@ async def create_organisation(
 async def list_sectors(resources: ResourcesDep, identity: IdentityDep) -> list[Sector]:
     """The registry's sector keys (platform reference data, readable by every signed-in user)."""
     async with as_user(require_db(resources), identity) as conn:
-        rows = await _rows(conn, "select id, label, regulated from sectors order by label", ())
+        rows = await _rows(
+            conn, "select id, label, regulated, rules_provenance from sectors order by label", ()
+        )
     return [Sector.model_validate(r) for r in rows]
 
 

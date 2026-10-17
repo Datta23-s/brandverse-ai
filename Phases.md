@@ -162,25 +162,28 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 - [x] A regulated sector with no active registry entries blocks the run (fails closed) — **ticked
   2026-10-17.** Evidence: `tests/db/test_api.py::test_admission_blocks_each_failing_check_and_logs_it`
   (real migrations, real API, CI on `b694beb` and locally): a product with a verified claim under a
-  `health-supplements` brand, with no registry rows, is refused with `registry_coverage` and a
+  brand in a regulated sector with no registry rows is refused with `registry_coverage` and a
   message naming the fail-closed rule, and audit-logged; a brand with no sector is refused the same
   way; unit cases in `tests/test_admission.py` and `tests/test_sector_registry_fail_closed.py`
-  (retired-only rules, other sectors' rules). On the live project the precondition holds — the one
-  regulated sector has 0 `sector_constraints` rows (read 15:24 UTC) — but no live run in that sector
-  was attempted; this tick rests on the test evidence, stated as such.
+  (retired-only rules, other sectors' rules). When ticked, `health-supplements` had no rules; since
+  0021 it has its illustrative rule set, so the test uses a test-only regulated sector with none.
+  No live run in a rule-less regulated sector was attempted; this tick rests on the test evidence,
+  stated as such.
 
-> **Human prerequisite — on the critical path to Phase 10 (recorded 2026-10-17).** The registry's
-> rules are written by a person from the regulation each one cites (`Architecture.md` §8.1,
-> Authorship); they are never seeded and never generated. Migration 0018 seeds only the sector
-> keys, with `health-supplements` the one regulated sector, and **no `sector_constraints` rows
-> exist**. Because the registry fails closed, **every run for the evaluation's regulated brand
-> (B07, requests R19–R21) and the tuning set's regulated brand (T07) is blocked until its rules
-> exist.** Owner: the project owner. Must be done, reviewed and applied to the live project before
-> Phase 10's runs begin, and before calibration if a calibration brand is regulated. Phase 3 chunk
-> B builds the authoring path; the content is not code work.
+> **Regulated-sector rules — resolved for the research with an illustrative rule set (decided by
+> the project owner 2026-10-17; migration 0021).** Recorded earlier the same day as a human
+> prerequisite: with no registry rows, the registry fails closed and every run for the evaluation's
+> regulated brand (B07, R19–R21) and the tuning set's (T07) would be blocked. Instead of
+> researching FSSAI or ASCI rules, `health-supplements` ships four **synthetic** rules (two
+> prohibited phrasings, two required disclaimers), each with the source "Synthetic rule, not
+> derived from any regulation. Illustrative only.", and the sector is marked
+> `rules_provenance = 'illustrative'`, which every report naming it prints. The research claim is
+> that the mechanism enforces whatever rules it is given, not that the shipped rules are legally
+> correct (`Architecture.md` §8.1). **Substituting a real, cited rule set is a deployment step,
+> outside the research contribution** — not a Phase 10 prerequisite.
 
 **Phase 3 progress.** Chunk A (truth store, run admission, sector keys; 2026-10-17):
-`Architecture.md` §8.2. Paraphrase of a restricted claim is not caught by deterministic matching —
+`Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Paraphrase of a restricted claim is not caught by deterministic matching —
 threat V2 in `docs/evaluation-plan.md`.
 
 ---
@@ -344,11 +347,11 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | Quality rubric scoring | ≥ 2 human raters on ≥ 30 campaigns, Cohen's κ reported |
 | Weight tuning | `R` and `M` weights tuned; defaults and tuned values both reported |
 | Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
-| **Opt-in experiment membership** | Built as designed in `Architecture.md` §9, "Experiment membership" (approved 2026-10-17): `experiments` immutable once referenced; `experiment_id`, `arm`, `request_ref`, `attempt` set together by the harness role or forced null; every evaluation read selects by experiment. Attempt rule pre-registered 2026-10-17 in `docs/evaluation-plan.md` §2 — attempt 1 is the primary result |
+| **Opt-in experiment membership** | Built as designed in `Architecture.md` §9, "Experiment membership" (approved 2026-10-17): `experiments` immutable once referenced; `experiment_id`, `arm`, `request_ref`, `attempt` set together by the harness role or forced null; every evaluation read selects by experiment. Attempt rule pre-registered 2026-10-17 in `docs/evaluation-plan.md` §2 — the primary result is the first attempt that terminated without a listed infrastructure failure, recorded mechanically in `runs.infrastructure_failure` |
 | **Hash chain on `approvals` and `audit_log`** | Built and verified **before calibration begins** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on — detection, not prevention |
 
-**Prerequisite (human):** the regulated sector's registry rules are entered and applied — see
-Phase 3, "Human prerequisite". Without them every regulated-brand run is blocked (fail closed).
+**Regulated sector:** runs against the illustrative synthetic rule set (Phase 3, 0021). Every
+table or figure that names a sector prints its rules' provenance (`docs/evaluation-plan.md` §4).
 
 **Exit criteria**
 - [ ] Every reported number traces to a committed raw log
