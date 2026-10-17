@@ -65,16 +65,19 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
 **Exit criteria**
-- [ ] Sign up → create brand → create product works end to end — **un-ticked 2026-10-17:
-  not observed in full.** Observed on the live project: the owner's sign-up through the form,
-  email confirmed through the real confirmation email, sign-in, and organisation creation
-  (`POST /api/v1/organisations` → 201 at 05:09:05 UTC, via `app.create_organisation`); then a
-  fake run in that organisation. **Not observed:** a brand or a product. The live API's access log
-  from 05:04:17 UTC on holds no brand or product request from anyone, and the project holds 0
-  brands and 0 products (`pg_stat_user_tables` counts only the E2E runs' inserts and deletes).
-  The brand → product steps are covered on the live project by
-  `frontend/e2e/auth-and-setup.spec.ts` (fixed E2E users), but the criterion is ticked only
-  when the owner's own brand and product are seen in the database.
+- [x] Sign up → create brand → create product works end to end — **ticked 2026-10-17 on
+  observed evidence** (un-ticked earlier the same day, at 05:20 UTC, when no brand or product
+  had been seen). Observed on the live project, all as the owner in an organisation bootstrapped
+  by `app.create_organisation` (0012), not as the fixed E2E users: sign-up through the form,
+  email confirmed through the real confirmation email, sign-in, organisation created
+  (`POST /api/v1/organisations` → 201 at 05:09:05 UTC); then, in the live API's access log,
+  `POST /api/v1/brands` → 201 at 05:21:58 UTC and `POST /api/v1/products` → 201 at 05:22:15 UTC,
+  and later list requests for that brand's products → 200. Read back from the database (read-only
+  transaction, 2026-10-17, about 12:50 UTC): one brand (`created_at` 05:21:58.416) and one product under
+  it (`created_at` 05:22:15.780), both in the owner's organisation, whose only member is the
+  owner; they are the project's only brand and product rows. Each row's `created_at` is about
+  0.22 s after its request's log line, the same offset as the organisation row (database clock vs
+  laptop clock), so every 201 has its row: no create returned success without persisting.
 - [x] Cross-tenant access test written and green — `backend/tests/db/test_rls.py` (every tenant
   table) and `backend/tests/db/test_api.py` (a member of org A cannot stream, read or write
   org B's runs, brands or products; signed-out requests are refused), merge-blocking in CI.
