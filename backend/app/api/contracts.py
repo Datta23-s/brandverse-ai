@@ -11,15 +11,18 @@ from typing import Any
 
 from app.core.config import REPO_ROOT
 from app.core.pipeline import PIPELINE_STEPS
-from app.models.runs import FakeRunRequest, RunAccepted, run_event_adapter
+from app.models.claims import ClaimRetire, ProductClaim, ProductClaimCreate
+from app.models.runs import FakeRunRequest, RunAccepted, RunBlocked, run_event_adapter
 from app.models.tenancy import (
     Brand,
     BrandCreate,
+    BrandSectorUpdate,
     Me,
     Organisation,
     OrganisationCreate,
     Product,
     ProductCreate,
+    Sector,
 )
 
 CONTRACTS_PATH: Path = REPO_ROOT / "frontend" / "src" / "contracts" / "api-contracts.json"
@@ -39,14 +42,20 @@ def build_contracts() -> dict[str, Any]:
             # Requests are validated on the way in, responses and events serialised on the way out.
             "FakeRunRequest": FakeRunRequest.model_json_schema(mode="validation"),
             "RunAccepted": RunAccepted.model_json_schema(mode="serialization"),
+            "RunBlocked": RunBlocked.model_json_schema(mode="serialization"),
             "RunEvent": run_event_adapter.json_schema(mode="serialization"),
             "OrganisationCreate": OrganisationCreate.model_json_schema(mode="validation"),
             "Organisation": Organisation.model_json_schema(mode="serialization"),
             "Me": Me.model_json_schema(mode="serialization"),
+            "Sector": Sector.model_json_schema(mode="serialization"),
             "BrandCreate": BrandCreate.model_json_schema(mode="validation"),
+            "BrandSectorUpdate": BrandSectorUpdate.model_json_schema(mode="validation"),
             "Brand": Brand.model_json_schema(mode="serialization"),
             "ProductCreate": ProductCreate.model_json_schema(mode="validation"),
             "Product": Product.model_json_schema(mode="serialization"),
+            "ProductClaimCreate": ProductClaimCreate.model_json_schema(mode="validation"),
+            "ClaimRetire": ClaimRetire.model_json_schema(mode="validation"),
+            "ProductClaim": ProductClaim.model_json_schema(mode="serialization"),
         },
     }
 

@@ -26,6 +26,9 @@ class SectorConstraint:
     kind: ConstraintKind
     effective_from: date
     retired_at: date | None = None
+    match_type: Literal["phrase", "regex"] = "phrase"
+    # prohibited_phrase: wording that must not appear; required_disclaimer: trigger (None = always).
+    pattern: str | None = None
 
     def is_active(self, on: date) -> bool:
         """Active from effective_from (inclusive) until retired_at (exclusive)."""

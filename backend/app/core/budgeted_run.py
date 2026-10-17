@@ -8,7 +8,9 @@ did not run are named, and the runs row is marked `status = 'partial'`, `budget_
 true`. The refusal itself is already in llm_calls with its reason (app/llm/ledger.py).
 
 Run statuses written here: 'completed', 'partial' (stopped by the budget, with output),
-'failed' (any other error; re-raised). `llm_call_count` and `total_cost_usd` on the runs row are
+'failed' (any other error; re-raised). `end_run` also writes 'blocked', for a run a truth or safety
+gate stopped (migration 0015; app/core/admission.py) — reported per arm as a result in its own
+right (app/evaluation/run_outcomes.py). `llm_call_count` and `total_cost_usd` on the runs row are
 derived from llm_calls when the run ends — one query, never a counter kept alongside (Rules.md
 A1); `total_cost_usd` is rounded to the column's 4 decimals, so the raw log stays the source.
 
@@ -65,7 +67,7 @@ where r.id = %(run)s
 async def end_run(
     pool: AsyncConnectionPool[AsyncConnection],
     run_id: UUID,
-    status: Literal["completed", "partial", "failed"],
+    status: Literal["completed", "partial", "failed", "blocked"],
     *,
     budget_exhausted: bool,
 ) -> None:

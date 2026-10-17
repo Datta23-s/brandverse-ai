@@ -58,3 +58,42 @@ export async function ensureOrganisation(page: Page, who: Who): Promise<void> {
   }
   await expect(roles).toContainText("owner");
 }
+
+export const FIXTURE_BRAND = "E2E run fixture";
+export const FIXTURE_PRODUCT = "E2E fixture shoe";
+
+/**
+ * Signed in at "/": a product that can start a run exists — a brand with a non-regulated sector,
+ * and a product with an active verified claim (Phase 3 admission). Created through the UI the
+ * first time and kept: claims are never deleted (migration 0017), so the fixture is reused rather
+ * than re-created on every run.
+ */
+export async function ensureRunnableProduct(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: "Add brand" })).toBeVisible({ timeout: 15_000 });
+  const brands = page.getByRole("list", { name: "Brands" });
+  const brandButton = brands.getByRole("button", { name: FIXTURE_BRAND, exact: true });
+  if ((await brandButton.count()) === 0) {
+    await page.getByLabel("New brand").fill(FIXTURE_BRAND);
+    await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
+    await page.getByRole("button", { name: "Add brand" }).click();
+  }
+  await brandButton.click();
+  const products = page.getByRole("list", { name: `Products of ${FIXTURE_BRAND}` });
+  if ((await products.getByText(FIXTURE_PRODUCT, { exact: true }).count()) === 0) {
+    await page.getByLabel("New product").fill(FIXTURE_PRODUCT);
+    await page.getByRole("button", { name: "Add product" }).click();
+    await expect(products.getByText(FIXTURE_PRODUCT, { exact: true })).toBeVisible();
+  }
+  await page.getByRole("button", { name: `Claims of product ${FIXTURE_PRODUCT}` }).click();
+  const claims = page.getByRole("region", { name: `Claims of ${FIXTURE_PRODUCT}` });
+  await expect(claims).toBeVisible();
+  const verified = claims.locator('li[data-claim-type="verified"][data-retired="false"]');
+  // Loaded: either the empty message or the list (counting before then would see nothing).
+  await expect(claims.getByText(/^No claims yet/).or(claims.getByRole("list"))).toBeVisible();
+  if ((await verified.count()) === 0) {
+    await claims.getByLabel("Claim", { exact: true }).fill("Upper made of recycled mesh");
+    await claims.getByLabel("Evidence link").fill("https://example.com/e2e-fixture-spec");
+    await claims.getByRole("button", { name: "Add claim" }).click();
+    await expect(verified.first()).toBeVisible();
+  }
+}

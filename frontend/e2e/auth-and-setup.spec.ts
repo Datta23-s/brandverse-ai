@@ -66,8 +66,10 @@ test("signed in: create a brand, then a product, then remove both", async ({ pag
   const brand = `E2E brand ${Date.now()}`;
   const brandButton = page.getByRole("list", { name: "Brands" }).getByRole("button", { name: brand, exact: true });
   await page.getByLabel("New brand").fill(brand);
+  await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
   await page.getByRole("button", { name: "Add brand" }).click();
   await expect(brandButton).toBeVisible();
+  await expect(page.getByLabel(`Sector of ${brand}`)).toHaveValue("footwear");
 
   await page.getByLabel("New product").fill("Trail runner");
   await page.getByLabel("Category (optional)").fill("shoes");
@@ -95,4 +97,52 @@ test("signing out ends the session", async ({ page }) => {
   await page.waitForURL(/\/sign-in/);
   await page.goto("/");
   await page.waitForURL(/\/sign-in\?next=/);
+});
+
+test("a product with no verified claim cannot start a run; a claim is entered with evidence, then retired", async ({ page }) => {
+  // Phases.md Phase 3 exit criterion 1, in the browser.
+  await signIn(page, "A");
+  await ensureOrganisation(page, "A");
+  await expect(page.getByRole("button", { name: "Add brand" })).toBeVisible();
+
+  const brand = `E2E brand ${Date.now()}`;
+  await page.getByLabel("New brand").fill(brand);
+  await page.getByLabel("Sector", { exact: true }).selectOption({ label: "Footwear" });
+  await page.getByRole("button", { name: "Add brand" }).click();
+  await page.getByRole("list", { name: "Brands" }).getByRole("button", { name: brand, exact: true }).click();
+  await page.getByLabel("New product").fill("Claimless runner");
+  await page.getByRole("button", { name: "Add product" }).click();
+  await expect(page.getByRole("list", { name: `Products of ${brand}` })).toContainText("Claimless runner");
+
+  // Refused, with the reason, and nothing started.
+  await page.getByLabel("Product", { exact: true }).selectOption({ label: "Claimless runner" });
+  await page.getByRole("button", { name: "Start fake run" }).click();
+  const refusal = page.getByRole("main").getByRole("alert").filter({ hasText: "Run blocked" });
+  await expect(refusal).toContainText("Nothing was started.");
+  await expect(refusal.locator('[data-reason="no_verified_claims"]')).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/");
+
+  // A verified claim needs its evidence link.
+  await page.getByRole("button", { name: "Claims of product Claimless runner" }).click();
+  const claims = page.getByRole("region", { name: "Claims of Claimless runner" });
+  await claims.getByLabel("Claim", { exact: true }).fill("Weighs 240 g");
+  await claims.getByRole("button", { name: "Add claim" }).click();
+  await expect(claims.getByText("A verified claim needs its evidence link.")).toBeVisible();
+  await claims.getByLabel("Evidence link").fill("https://example.com/e2e-spec");
+  await claims.getByRole("button", { name: "Add claim" }).click();
+  const row = claims.locator('li[data-claim-type="verified"]');
+  await expect(row).toContainText("Weighs 240 g");
+  await expect(row).toContainText("Verified");
+
+  // Retired with a reason; it stays on record.
+  await row.getByRole("button", { name: "Retire claim Weighs 240 g" }).click();
+  await row.getByLabel("Why retire it").fill("spec sheet withdrawn");
+  await row.getByRole("button", { name: "Retire claim", exact: true }).click();
+  await expect(row).toHaveAttribute("data-retired", "true");
+  await expect(row).toContainText("Retired: spec sheet withdrawn");
+
+  // Clean up: the product has no runs, so deleting it removes its claims too (0017).
+  await page.getByRole("button", { name: "Delete product Claimless runner" }).click();
+  await page.getByRole("button", { name: `Delete brand ${brand}` }).click();
+  await expect(page.getByRole("list", { name: "Brands" }).getByRole("button", { name: brand, exact: true })).toHaveCount(0);
 });

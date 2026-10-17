@@ -4,18 +4,21 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
-import { ensureOrganisation, signIn } from "./support";
+import { FIXTURE_PRODUCT, ensureOrganisation, ensureRunnableProduct, signIn } from "./support";
 
 const SHOTS = process.env.E2E_SCREENSHOT_DIR;
 
 // Runs belong to an organisation and need a signed-in owner or editor (B2).
+// From Phase 3 a run is for a product with an active verified claim (the fixture).
 test.beforeEach(async ({ page }) => {
   await signIn(page, "A");
   await ensureOrganisation(page, "A");
+  await ensureRunnableProduct(page);
 });
 
 async function startRun(page: Page, opts: { depth?: "D0" | "D1" | "D2"; delayMs: number; failAt?: number }) {
   await page.goto("/");
+  await page.getByLabel("Product", { exact: true }).selectOption({ label: FIXTURE_PRODUCT });
   if (opts.depth) await page.getByLabel(new RegExp(`^${opts.depth} ·`)).check();
   await page.getByLabel("Time per step (ms)").fill(String(opts.delayMs));
   if (opts.failAt !== undefined) {

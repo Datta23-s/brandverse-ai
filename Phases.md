@@ -151,6 +151,20 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 - [ ] Output containing a registry-prohibited phrasing is blocked
 - [ ] A regulated sector with no active registry entries blocks the run (fails closed)
 
+> **Human prerequisite — on the critical path to Phase 10 (recorded 2026-10-17).** The registry's
+> rules are written by a person from the regulation each one cites (`Architecture.md` §8.1,
+> Authorship); they are never seeded and never generated. Migration 0018 seeds only the sector
+> keys, with `health-supplements` the one regulated sector, and **no `sector_constraints` rows
+> exist**. Because the registry fails closed, **every run for the evaluation's regulated brand
+> (B07, requests R19–R21) and the tuning set's regulated brand (T07) is blocked until its rules
+> exist.** Owner: the project owner. Must be done, reviewed and applied to the live project before
+> Phase 10's runs begin, and before calibration if a calibration brand is regulated. Phase 3 chunk
+> B builds the authoring path; the content is not code work.
+
+**Phase 3 progress.** Chunk A (truth store, run admission, sector keys; 2026-10-17):
+`Architecture.md` §8.2. Paraphrase of a restricted claim is not caught by deterministic matching —
+threat V2 in `docs/evaluation-plan.md`.
+
 ---
 
 ## Phase 4 — Marketing Memory
@@ -314,9 +328,13 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
 | **Hash chain on `approvals` and `audit_log`** | Built and verified **before calibration begins** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on — detection, not prevention |
 
+**Prerequisite (human):** the regulated sector's registry rules are entered and applied — see
+Phase 3, "Human prerequisite". Without them every regulated-brand run is blocked (fail closed).
+
 **Exit criteria**
 - [ ] Every reported number traces to a committed raw log
-- [ ] Failed and capped runs included in the report
+- [ ] Failed and capped runs included in the report, and gate-blocked runs counted per arm as a
+  result in their own right (`runs.status = 'blocked'`, `backend/app/evaluation/run_outcomes.py`)
 - [ ] Seed memory provably excluded
 - [ ] Inter-rater agreement reported, not just a mean score
 

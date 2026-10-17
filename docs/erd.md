@@ -117,15 +117,19 @@ erDiagram
     text evidence_url
     text evidence_note
     numeric confidence
-    text created_by
+    text created_by "human (from the JWT) | agent id"
+    uuid entered_by FK "auth.uid() when human (0017)"
     timestamptz created_at
+    timestamptz retired_at
+    uuid retired_by FK
+    text retired_reason
   }
   runs {
     uuid id PK
     uuid org_id FK
     uuid product_id FK
     text arm "baseline_a|baseline_b|proposed"
-    text status "queued|completed|partial|failed (Architecture.md §4.4; no CHECK)"
+    text status "queued|completed|partial|failed|blocked (CHECK, 0015)"
     jsonb request
     text depth
     numeric research_score
@@ -233,6 +237,7 @@ IDs are the ones assigned when this list was first drafted.
 | E16 | A new user had no way to a first organisation | `organisations` has no insert policy and adding a member needs an existing owner, so sign-up could not lead anywhere | Migration 0012: `app.create_organisation(name)` — name only (the owner is the caller, read from the JWT claims with `auth.uid()`'s exact expression, which the migration checks); security definer owned by `app_org_creator`, a NOLOGIN role with INSERT on `organisations` and `org_members` only, bound by two insert policies; executable by `authenticated` only. Stated in `test_table_posture.py` (functions and the role), tested in `test_create_organisation.py`. No cap on organisations per user (accepted) | **Accepted 2026-10-16** |
 | E17 | Budget enforcement and the audit log could disagree; waits were not recorded | Rules.md A1 requires every reported number to trace to a raw log, so caps (C3), daily quota (C9) and RPM pacing (C10) must be queries of `llm_calls`, not a counter; concurrent calls must not both pass a check one should fail; C10 waits must be kept apart from latency | Migration 0013: `rate_limit_wait_ms`; `outcome` (`pending` reservation written in the admission transaction under an advisory lock, then `ok` / `invalid_output` / `error` / `rate_limited`; `refused` records a pre-flight refusal and is never counted); `finished_at`. Tested in `test_llm_ledger.py` (incl. a concurrency test that fails without the lock) | **Accepted 2026-10-17** |
 | E18 | No record of which prompt produced a call | Without it the evaluation cannot show that every run in an arm used the same prompts; a prompt edited mid-evaluation would silently invalidate the comparison (Rules.md A5, A6) | Migration 0014: `prompt_id`, `prompt_version` on `llm_calls`, NOT NULL, format-checked; versions are immutable files locked by hash (`config/prompts/versions.lock`). Detection is a query: `app/evaluation/prompt_versions.py` flags more than one version per prompt within an arm, or different versions across arms. Tested in `test_prompt_versions.py`, `test_llm_ledger.py`, `test_llm_prompts.py` | **Accepted 2026-10-17** |
+| E19 | Product truth constraints were labels only, and provenance was caller-supplied | `claim_type` was checked, but nothing tied `verified` to evidence or to a human; members can insert `product_claims` through the REST API, so `created_by = 'human'` was forgeable; claims could be edited or deleted after a campaign cited them; a user could insert a run already `blocked` or costed | Migrations 0015–0019 (Phase 3 chunk A): `runs.status` CHECK incl. `blocked`; user-inserted runs forced to the initial state; per-type CHECKs on `product_claims` (verified = human + http(s) URL; deduced = confidence + basis; restricted = reason); `entered_by`, `retired_at`, `retired_by`, `retired_reason`, set by a trigger from `auth.uid()`; claims retired, never edited or deleted; sector keys seeded; brand sector changes audited by a security-definer trigger owned by `app_audit_writer`. General rule: `Architecture.md` §9, "Trust-deciding columns" | **Accepted 2026-10-17** |
 
 `campaigns.approved_by` is additionally constrained (E8 + T6): FK on
 `(org_id, approved_by, approver_role)` → `org_members (org_id, user_id, role)` with
@@ -287,8 +292,9 @@ the roles granted there (E12).
 |---|---|---|---|---|---|
 | `organisations` | read | read | read | read, update (not `is_practice`) | all but delete/truncate (0010) |
 | `org_members` | read | read | read | read, add, revoke | all but delete/truncate (0010) |
-| `brands`, `products`, `product_claims` | read | read | read, insert, update | + delete¹ | all |
-| `runs` | read | read | read, start | read, start | status updates |
+| `brands`, `products` | read | read | read, insert, update | + delete¹ | all |
+| `product_claims` | read | read | read, enter, retire (who and when from the JWT, 0017) | same; never edit or delete | agent claims (never `verified`), no edit, no delete |
+| `runs` | read | read | read, start (status, counts, cost forced to the initial state, 0016) | same | status updates |
 | `llm_calls` | read | read | read | read | insert |
 | `memory_items` | read | read | read, **revoke only** | read, **revoke only** | insert (after approval, `Rules.md` P8) |
 | `campaigns` | read | read | read | read | write; approval must name an active approver (FK + trigger) |

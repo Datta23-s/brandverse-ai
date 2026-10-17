@@ -12,6 +12,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, TypeAdapter, model_validator
 
+from app.core.admission import BlockCode
 from app.core.pipeline import PIPELINE_STEPS, TOTAL_STEPS
 from app.models.base import Contract
 
@@ -33,6 +34,17 @@ class FakeRunRequest(Contract):
     org_id: UUID = Field(
         description="The organisation the run belongs to; the caller must be its owner or editor."
     )
+    product_id: UUID = Field(
+        description=(
+            "The product the run is for. It must have an active verified claim, and its brand a "
+            "sector the registry covers (app/core/admission.py)."
+        )
+    )
+    brief: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="What the campaign should say. A brief asking for a restricted claim blocks.",
+    )
     depth: ResearchDepth = Field(
         default="D1", description="Research depth to simulate; D0 skips step 6."
     )
@@ -50,6 +62,19 @@ class FakeRunRequest(Contract):
 class RunAccepted(Contract):
     run_id: UUID
     stream_url: str
+
+
+class BlockReasonOut(Contract):
+    code: BlockCode
+    message: str
+    refs: list[str]
+
+
+class RunBlocked(Contract):
+    """The 409 body when admission refuses a run (blocked and logged; Rules.md T5)."""
+
+    message: str
+    reasons: list[BlockReasonOut]
 
 
 class FakeRunJob(Contract):

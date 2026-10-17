@@ -10,6 +10,7 @@ import {
   PIPELINE_STEPS,
   fakeRunRequestSchema,
   runAcceptedSchema,
+  runBlockedSchema,
   runCompletedSchema,
   runFailedSchema,
   runQueuedSchema,
@@ -27,7 +28,13 @@ describe("contract: zod agrees with the backend", () => {
     const backend = schemas.FakeRunRequest!;
     const { ours, theirs } = shapes(fakeRunRequestSchema, backend, {}, { ignoreRequired: true });
     expect(ours).toEqual(theirs);
-    expect(backend.required).toEqual(["org_id"]); // the one field without a default
+    expect(backend.required).toEqual(["org_id", "product_id"]); // the fields without a default
+  });
+
+  it("RunBlocked", () => {
+    const backend = schemas.RunBlocked!;
+    const { ours, theirs } = shapes(runBlockedSchema, backend, backend.$defs ?? {});
+    expect(ours).toEqual(theirs);
   });
 
   it("RunAccepted", () => {

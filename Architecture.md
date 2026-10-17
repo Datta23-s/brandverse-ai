@@ -527,6 +527,52 @@ prohibited phrasings (`Phases.md` §6.1; `Rules.md` T4). Table: `sector_constrai
 
 The anti-pattern blacklist (from AMAD-MS gap G6): false scarcity, fabricated social proof, undisclosed paid endorsement, vulnerability targeting, dark-pattern consent, unsubstantiated health claims, price anchoring on fictional prices, confirmshaming.
 
+### 8.2 Product truth store and run admission — as built (Phase 3 chunk A, 2026-10-17)
+
+**What the three claim types mean, as constraints a test asserts** (migration 0017;
+`backend/tests/db/test_product_claims.py`). Stated at the database because members can write
+`product_claims` through the REST API directly:
+
+| Type | Database rule | Meaning |
+|---|---|---|
+| `verified` | `created_by = 'human'` (so `entered_by` is a user) **and** `evidence_url ~ '^https?://\S+$'` | A fact a person entered with a source a reader can open. No agent row is ever verified. |
+| `deduced` | `confidence is not null` **and** (an evidence URL **or** a non-blank note) | An inference with its confidence and what it rests on. Shown as a deduction, never as fact (`Rules.md` P9). |
+| `restricted` | a non-blank `evidence_note` (the reason) | Must never reach generated copy (`Rules.md` T2). May carry the URL that states it: a manufacturer saying it does not make it sayable. |
+
+Who entered a claim, and who retired it and when, are written by the trigger from the JWT, never
+from the request (§9, "Trust-deciding columns"). Claims are never edited or deleted: a wrong claim
+is retired, once, with a reason, so a campaign that cited it keeps a true source trail.
+
+**Memory eligibility (`Memory.md` §6.1, condition 2).** A claim may back a memory item only if it
+is `verified`, or `deduced` with a *scored* source. Source scoring arrives in Phase 5, so until then
+no deduced claim is eligible — the gate fails closed, it does not treat "no score" as a pass.
+
+**Run admission (steps 2–3; `backend/app/core/admission.py`).** A run is admitted only if the
+product has an active verified claim, the brand's sector is covered by the registry (no sector
+blocks; a regulated sector with no active rules blocks — fail closed), and the brief asks for no
+restricted claim of the product and uses no wording a registry rule for the sector prohibits.
+Every failing check is reported together. **How it fails: blocked, never warned** (`Rules.md` T2,
+T5): the API answers `409` with every reason, nothing is queued, and an `audit_log` row
+(`action = 'run.blocked'`, actor `service`/`run_admission`, the requesting user and the reasons in
+`details`) is appended by the backend's own role. A failure to write that row is logged as an error
+and the run stays blocked. Wired into the fake-run endpoint from Phase 3; Phase 6's
+`POST /api/v1/runs` must insert the runs row first, call the same functions, and end a refused run
+with status `blocked` (0015), so every gate-blocked run is counted per arm
+(`backend/app/evaluation/run_outcomes.py`).
+
+**Matching is deterministic and literal** (`backend/app/core/text_match.py`): case- and
+punctuation-insensitive whole-word phrase match, or a stored regex; never an LLM judgement. **It
+cannot catch a paraphrase of a restricted claim.** That gap is threat V2
+(`docs/evaluation-plan.md`); `docs/approval-rubric.md` T1.3 ("in any form, including
+paraphrase") currently promises more than this code delivers, and the human approver is what
+covers paraphrase until the classifier (chunk C) is measured.
+
+**Not built yet in Phase 3:** the output-side gates (claim, risk, brand-voice registry half) and
+the registry authoring path (chunk B); the claim classifier (chunk C). Registry *content* is
+human work: no `sector_constraints` rows exist, so a brand in the one regulated sector
+(health supplements) cannot start a run until a person enters rules citing the regulation
+(`Phases.md`, Phase 10 prerequisite).
+
 ---
 
 ## 9. Data model
@@ -583,6 +629,37 @@ approval in a practice org without `is_calibration = true`, so an unflagged prac
 exist. The harness additionally excludes practice orgs, so it could not leak even if the trigger
 were bypassed.
 
+**Trust-deciding columns — the general rule (adopted 2026-10-17).** *Any column that decides a
+trust level or a reported result is derived from the authenticated identity or by the server,
+never supplied by the caller.* The API is not the boundary: members reach every table the RLS
+policies open to them through Supabase's REST API directly, with whatever column values they
+choose, so a check that lives only in our API is decorative. The rule has come up three times,
+each time with the same fix:
+
+| Instance | Caller-supplied value that would have decided trust | Derived instead from |
+|---|---|---|
+| E12 — the organisation in the JWT | an `org_id` claim chose which tenant's rows a user saw | `org_members`, keyed on `auth.uid()` |
+| The run's organisation (Phase 1, B2) | a fake run's org taken from the request | the `run.queued` event the API writes after checking membership |
+| `product_claims` provenance (0017) | `created_by = 'human'` made a claim eligible to be `verified` | `auth.uid()`, in a trigger: `created_by`, `entered_by`, `created_at`, `retired_by`, `retired_at` are overwritten for the API roles; the backend may not write `'human'` at all |
+
+Applied in the same change to the other places it held: **`runs`** (0016) — an owner or editor may
+insert a run, but its status, counts, cost and timestamps are forced to the server's initial
+values, so a run cannot arrive already `blocked`, `completed` or costed and be counted in Phase 10;
+**`brands.sector`** (0019) — the sector decides which registry rules bind a brand, but only the
+brand's owner knows it, so it cannot be derived; the caller supplies it and every set or change is
+written to `audit_log` by a security-definer trigger, with the actor read from the JWT.
+
+Known remaining instances, not fixed in Phase 3 (scope, `Rules.md` §1.3):
+- `memory_items.revoked_at` is supplied by the revoking user (the `memory_revoke` policy checks
+  `revoked_by = auth.uid()`, not the time) — Phase 4, with the rest of write-back and revocation.
+- `memory_items.claim_id` is `on delete set null`, and a product with no runs can be deleted; a
+  claim-backed memory item would then lose its claim. No memory items exist yet — Phase 4.
+- `runs.arm` is chosen by whoever inserts the run. The harness counts only evaluation
+  organisations, whose members are the team (`docs/evaluation-plan.md` D5).
+
+A new table or column is checked against this rule when it is added: if its value changes what
+the system trusts or reports, it is derived, or its setting is audited with a derived actor.
+
 **Audit log.** Append-only **for the application roles only**: `update`, `delete` and `truncate`
 are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejects them.
 
@@ -607,6 +684,8 @@ are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejec
 > | `org_members` | roles revoked, never deleted | Yes (0010) | No |
 > | `sector_constraints` | never edited in place or deleted | Yes: `update`/`delete` blocked by trigger, `delete`/`truncate` revoked (0011) | No |
 > | `llm_calls`, `runs` | raw logs, retained (`Rules.md` A1) | Yes (0010, 0011) | No |
+> | `product_claims` | never edited or deleted; retired once, by a signed-in user (added 2026-10-17) | Yes: trigger allows only retirement, `delete` revoked (0017); deleting a product with no runs still cascades | No |
+> | `runs.status` | set by the backend only (added 2026-10-17) | Yes: no update policy (0005), user inserts forced to `queued` (0016) | No |
 >
 > **No application role holds `TRUNCATE` on any table** (0011); `TRUNCATE` ignores row-level
 > security, and Supabase's default privileges grant it on every new table, so a new table must
@@ -1352,6 +1431,268 @@ alter table llm_calls
     check (prompt_id ~ '^[a-z][a-z0-9_]{0,62}$'),
   add column prompt_version text not null
     check (prompt_version ~ '^v[1-9][0-9]{0,5}$');
+
+-- ═══ supabase/migrations/0015_runs_status_check.sql ═══
+-- 0015: the run statuses a runs row may hold, as a CHECK (suggested in Phase 2, landed in Phase 3).
+-- 'queued' (the default), 'completed', 'partial' (stopped by the budget, flagged budget_exhausted,
+-- Rules.md C4) and 'failed' are written by backend/app/core/budgeted_run.py. 'blocked' is new: a
+-- run a truth or safety gate stopped (Phases.md Phase 3) — a result in its own right, reported per
+-- arm in Phase 10 (backend/app/evaluation/run_outcomes.py), never folded into 'failed'. Later
+-- statuses (Phase 6's awaiting approval) are added by a new migration. The project held no runs
+-- rows when this was written.
+-- Down: alter table runs drop constraint runs_status_check;
+alter table runs add constraint runs_status_check
+  check (status in ('queued', 'completed', 'partial', 'failed', 'blocked'));
+
+-- ═══ supabase/migrations/0016_runs_initial_state_from_server.sql ═══
+-- 0016: a run inserted by a signed-in user starts in the server's initial state, whatever the
+-- caller sent. runs_insert (0005) lets an owner or editor insert a runs row through the REST API,
+-- and before this the caller chose every column — a row could arrive already 'completed' or
+-- 'blocked', with invented counts and cost, and be counted as a result (Rules.md A1).
+-- Architecture.md §9, "Trust-deciding columns": any column that decides a trust level or a reported
+-- result is derived by the server, never supplied by the caller. The API roles keep what is theirs
+-- to choose (org_id, product_id, arm, request: the composite foreign keys and runs_insert check
+-- them); the outcome columns are forced to their initial values. Updates need no trigger: no API
+-- role has an update policy on runs (0005), so only the backend's own role moves a run on
+-- (backend/app/core/budgeted_run.py). The backend's role is not touched by this trigger.
+-- Down: drop trigger runs_initial_state on runs; drop function app.runs_initial_state();
+create function app.runs_initial_state() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('authenticated', 'anon') then
+    new.status := 'queued';
+    new.depth := null;
+    new.research_score := null;
+    new.selected_agents := null;
+    new.memory_hit_count := 0;
+    new.search_count := 0;
+    new.llm_call_count := 0;
+    new.total_cost_usd := 0;
+    new.latency_ms := null;
+    new.budget_exhausted := false;
+    new.created_at := pg_catalog.now();
+    new.completed_at := null;
+  end if;
+  return new;
+end $$;
+create trigger runs_initial_state before insert on runs
+  for each row execute function app.runs_initial_state();
+
+-- ═══ supabase/migrations/0017_product_claims_truth.sql ═══
+-- 0017: the product truth store's definitions become constraints, and its provenance is derived by
+-- the server (Phases.md Phase 3; Rules.md T1, T2, P9).
+--
+-- 1. What each claim_type means, as CHECKs a test can assert (Architecture.md §8.2):
+--    verified   — entered by a signed-in human, with an http(s) evidence URL. No agent row is ever
+--                 verified.
+--    deduced    — carries a confidence and a basis: an evidence URL or a written note.
+--    restricted — carries the reason it is restricted (evidence_note). A property of the statement,
+--                 not of its evidence: a manufacturer saying "unbeatable" does not make it sayable.
+-- 2. Provenance from the authenticated identity, never from the caller (Architecture.md §9,
+--    "Trust-deciding columns"). Members can insert product_claims through the REST API directly
+--    (claims_insert, 0004), so a caller-supplied created_by = 'human' would forge a verified claim
+--    past every API check. The trigger overwrites created_by, entered_by and created_at for the API
+--    roles: created_by = 'human', entered_by = auth.uid(). The backend's own role (agents) may not
+--    write 'human' at all.
+-- 3. Claims are immutable: never edited, never deleted; a wrong claim is retired, with who, when
+--    and why recorded in the row (retired_by = auth.uid() and retired_at = now(), both set by the
+--    trigger; retired_reason from the caller, required). A claim a campaign cited cannot change
+--    under it, so the campaign's source trail stays true — the reasoning of append-only approvals
+--    (0009) and Memory.md §6.4's provenance chain. Deleting the product still cascades to its claims
+--    (a foreign-key action, not a grant); a product with runs cannot be deleted (0005).
+--    Binds the application roles, not the table owner (§9, stated limitation).
+-- The project held no product_claims rows when this was written.
+-- Down: drop trigger product_claims_provenance on product_claims;
+--   drop function app.product_claims_provenance();
+--   alter table product_claims drop constraint product_claims_claim_text,
+--     drop constraint product_claims_human_is_a_user, drop constraint product_claims_evidence_url,
+--     drop constraint product_claims_verified, drop constraint product_claims_deduced,
+--     drop constraint product_claims_restricted, drop constraint product_claims_retirement,
+--     drop column entered_by, drop column retired_at, drop column retired_by,
+--     drop column retired_reason;
+--   create policy claims_delete on product_claims for delete to authenticated
+--     using (app.has_role(org_id, array['owner']));
+--   grant delete on product_claims to anon, authenticated, service_role;
+alter table product_claims
+  add column entered_by uuid references auth.users(id),
+  add column retired_at timestamptz,
+  add column retired_by uuid references auth.users(id),
+  add column retired_reason text,
+  add constraint product_claims_claim_text
+    check (length(btrim(claim)) between 1 and 500),
+  add constraint product_claims_human_is_a_user
+    check ((created_by = 'human') = (entered_by is not null)),
+  add constraint product_claims_evidence_url
+    check (evidence_url is null or evidence_url ~ '^https?://[^[:space:]]+$'),
+  add constraint product_claims_verified
+    check (claim_type <> 'verified' or (created_by = 'human' and evidence_url is not null)),
+  add constraint product_claims_deduced
+    check (claim_type <> 'deduced'
+           or (confidence is not null
+               and (evidence_url is not null or nullif(btrim(evidence_note), '') is not null))),
+  add constraint product_claims_restricted
+    check (claim_type <> 'restricted' or nullif(btrim(evidence_note), '') is not null),
+  add constraint product_claims_retirement
+    check ((retired_at is null) = (retired_by is null)
+           and (retired_at is null) = (retired_reason is null)
+           and (retired_reason is null or btrim(retired_reason) <> ''));
+
+create function app.product_claims_provenance() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  uid uuid;
+  retirement constant text[] := array['retired_at', 'retired_by', 'retired_reason'];
+begin
+  if tg_op = 'INSERT' then
+    if current_user in ('authenticated', 'anon') then
+      uid := (select auth.uid());
+      if uid is null then
+        raise exception 'product_claims: a claim is entered by a signed-in user';
+      end if;
+      new.created_by := 'human';
+      new.entered_by := uid;
+    elsif new.created_by = 'human' or new.entered_by is not null then
+      raise exception 'product_claims: only a signed-in user enters a human claim';
+    end if;
+    if new.retired_at is not null or new.retired_by is not null or new.retired_reason is not null then
+      raise exception 'product_claims: a claim is entered active and retired afterwards';
+    end if;
+    new.created_at := pg_catalog.now();
+    return new;
+  end if;
+
+  -- UPDATE: retirement, once, by a signed-in user. Nothing else ever changes.
+  if old.retired_at is not null then
+    raise exception 'product_claims: a retired claim cannot change';
+  end if;
+  if (pg_catalog.to_jsonb(new) - retirement) is distinct from (pg_catalog.to_jsonb(old) - retirement) then
+    raise exception 'product_claims: claims are never edited; retire it and enter a new claim';
+  end if;
+  if new.retired_at is null and new.retired_by is null and new.retired_reason is null then
+    return new;
+  end if;
+  if current_user <> 'authenticated' then
+    raise exception 'product_claims: a claim is retired by a signed-in user';
+  end if;
+  uid := (select auth.uid());
+  if uid is null then
+    raise exception 'product_claims: a claim is retired by a signed-in user';
+  end if;
+  new.retired_at := pg_catalog.now();
+  new.retired_by := uid;
+  return new;
+end $$;
+create trigger product_claims_provenance before insert or update on product_claims
+  for each row execute function app.product_claims_provenance();
+
+drop policy claims_delete on product_claims;
+revoke delete on product_claims from public, anon, authenticated, service_role;
+
+-- ═══ supabase/migrations/0018_seed_sectors.sql ═══
+-- 0018: the sector keys brands.sector references (Architecture.md §8.1), seeded from the sectors
+-- the evaluation and tuning sets use (evaluation/test_set.yaml, evaluation/tuning_brands.yaml).
+-- `regulated` is copied from those files: health supplements is the one regulated sector (Rules.md
+-- T4). Keys only — no sector_constraints rows. Registry rules are written by a human from the
+-- regulation they cite (§8.1, Authorship), never seeded here and never generated; until a regulated
+-- sector has active rules, every run for a brand in it is blocked (fail closed). Phases.md records
+-- that as a human prerequisite of Phase 10. The project's sectors table was empty when this was
+-- written.
+-- Down: delete from sectors where id in ('consumer-electronics', 'travel-goods', 'footwear',
+--   'personal-care', 'food-and-beverage', 'health-supplements', 'kitchenware', 'home-furnishing',
+--   'home-appliances');  -- only while no brand, memory item or registry row references them
+insert into sectors (id, label, regulated) values
+  ('consumer-electronics', 'Consumer electronics', false),
+  ('travel-goods',         'Travel goods',         false),
+  ('footwear',             'Footwear',             false),
+  ('personal-care',        'Personal care',        false),
+  ('food-and-beverage',    'Food and beverage',    false),
+  ('health-supplements',   'Health supplements',   true),
+  ('kitchenware',          'Kitchenware',          false),
+  ('home-furnishing',      'Home furnishing',      false),
+  ('home-appliances',      'Home appliances',      false);
+
+-- ═══ supabase/migrations/0019_audit_brand_sector.sql ═══
+-- 0019: every time a brand's sector is set or changed, audit_log records who, when, from what and
+-- to what (Architecture.md §8.1). The sector decides which registry rules bind a brand's output and
+-- whether the run must clear the regulated-sector gates, so it is a trust-deciding column. Unlike
+-- created_by on claims it cannot be derived — only the brand's owner knows its sector — so the
+-- caller supplies it and the server records the act, with the actor taken from the authenticated
+-- identity (Architecture.md §9, "Trust-deciding columns").
+--
+-- An AFTER trigger, so it covers the REST API as well as ours: members can update brands directly
+-- (brands_update, 0004). The trigger function is security definer, owned by app_audit_writer, a
+-- NOLOGIN role holding INSERT on audit_log and nothing else, bound by one insert policy that admits
+-- only this function's rows. API roles hold no INSERT on audit_log (0008) and are not members of
+-- the role. A trigger function cannot be called directly, so no caller can write an audit row
+-- through it except by really changing a sector.
+--
+-- The actor is read with auth.uid()'s exact expression, not auth.uid() itself: the owner role
+-- cannot be granted USAGE on schema auth on Supabase (0012, header). 0012 refuses to apply if the
+-- expression and auth.uid() differ, and the same check is repeated here.
+-- Down: drop trigger brands_audit_sector on brands; drop function app.audit_brand_sector();
+--   drop policy audit_writer_insert on audit_log; revoke insert on audit_log from app_audit_writer;
+--   revoke usage on schema public, app from app_audit_writer; drop role app_audit_writer;
+
+do $$
+begin
+  if pg_catalog.regexp_replace(
+       (select p.prosrc from pg_catalog.pg_proc p where p.oid = 'auth.uid()'::regprocedure),
+       '\s+', '', 'g')
+     <> 'selectcoalesce(nullif(current_setting(''request.jwt.claim.sub'',true),''''),(nullif(current_setting(''request.jwt.claims'',true),'''')::jsonb->>''sub''))::uuid'
+  then
+    raise exception '0019: auth.uid() no longer matches the claim expression app.audit_brand_sector mirrors; review before applying';
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'app_audit_writer') then
+    create role app_audit_writer nologin noinherit nosuperuser nocreatedb nocreaterole nobypassrls;
+  end if;
+end $$;
+
+grant usage on schema public, app to app_audit_writer;
+grant insert on audit_log to app_audit_writer;
+
+create policy audit_writer_insert on audit_log for insert to app_audit_writer
+  with check (action = 'brand.sector_set' and entity_type = 'brand');
+
+create function app.audit_brand_sector() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  -- auth.uid(), expression for expression (see the header and the check above).
+  v_user uuid := coalesce(
+    nullif(pg_catalog.current_setting('request.jwt.claim.sub', true), ''),
+    (nullif(pg_catalog.current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+  )::uuid;
+  v_old text := case when tg_op = 'UPDATE' then old.sector end;
+begin
+  if new.sector is not distinct from v_old then
+    return null;
+  end if;
+  insert into public.audit_log (org_id, actor_type, actor_id, action, entity_type, entity_id, details)
+  values (
+    new.org_id,
+    case when v_user is null then 'service' else 'user' end,
+    coalesce(v_user::text, session_user::text),
+    'brand.sector_set',
+    'brand',
+    new.id::text,
+    pg_catalog.jsonb_build_object('from', v_old, 'to', new.sector)
+  );
+  return null;
+end;
+$$;
+
+-- Hand the function to its minimal owner (as 0012: SET ROLE and CREATE for the change only).
+grant app_audit_writer to current_user;
+grant create on schema app to app_audit_writer;
+alter function app.audit_brand_sector() owner to app_audit_writer;
+revoke create on schema app from app_audit_writer;
+revoke app_audit_writer from current_user;
+
+create trigger brands_audit_sector after insert or update of sector on brands
+  for each row execute function app.audit_brand_sector();
 ```
 
 ---
@@ -1363,14 +1704,16 @@ alter table llm_calls
 | `POST` | `/api/v1/runs` | Start a campaign run → `202` + `run_id` |
 | `GET` | `/api/v1/runs/{id}` | Status, current step, budget consumed |
 | `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI. Signed-in members of the run's organisation only (`404` otherwise; §11, Authentication) |
-| `POST` | `/api/v1/runs/fake` | Phase 1: start a fake 15-step run (no LLM, no pipeline) → `202` + `run_id`; never mounted in production |
+| `POST` | `/api/v1/runs/fake` | Phase 1: start a fake 15-step run (no LLM, no pipeline) → `202` + `run_id`; never mounted in production. From Phase 3 it names a `product_id` and may carry a `brief`, and is admitted first (§8.2): refused → `409` with every reason, audit-logged |
 | `GET` | `/health`, `/health/ready` | Liveness (no dependencies); readiness (Redis and database, `503` if either fails) |
 | `POST` | `/api/v1/runs/{id}/approve` | Resume the interrupted graph |
 | `POST` | `/api/v1/runs/{id}/revise` | Request revision (bounded by `max_revision_rounds`) |
 | `GET` | `/api/v1/campaigns/{id}` | Final package with evidence |
 | `GET` | `/api/v1/me` | The signed-in caller and their organisations, with roles |
 | `POST` | `/api/v1/organisations` | Create an organisation; the caller becomes owner (`app.create_organisation`, 0012) |
-| `CRUD` | `/api/v1/brands`, `/products`, `/products/{id}/claims` | Setup. Built in Phase 1: list, create and delete brands and products, each with an explicit `org_id`; claims later |
+| `CRUD` | `/api/v1/brands`, `/products`, `/products/{id}/claims` | Setup. Built in Phase 1: list, create and delete brands and products, each with an explicit `org_id`. Phase 3 (2026-10-17): brands carry a `sector`; claims are listed (`GET`), entered (`POST`) and retired (`POST /products/{id}/claims/{claim_id}/retire`), never edited or deleted (§8.2) |
+| `GET` | `/api/v1/sectors` | The registry's sector keys, with `regulated` (Phase 3) |
+| `PATCH` | `/api/v1/brands/{id}/sector` | Set or change a brand's sector; every change audited (0019) (Phase 3) |
 | `GET` | `/api/v1/memory/search` | Debug and demo view of retrieval with `M` breakdown |
 | `POST` | `/api/v1/experiments/run` | Execute an evaluation arm |
 | `GET` | `/api/v1/experiments/report` | ARR, SRR, CR, LR |

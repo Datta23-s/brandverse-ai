@@ -9,6 +9,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -85,11 +86,11 @@ async def drain_queue(settings: Settings) -> None:
 
 
 async def start_fake_run(
-    client: httpx.AsyncClient, headers: dict[str, str], org: UUID, **body: object
+    client: httpx.AsyncClient, headers: dict[str, str], org: UUID, product: UUID, **body: object
 ) -> UUID:
     r = await client.post(
         "/api/v1/runs/fake",
-        json={"org_id": str(org), "step_delay_ms": 0, **body},
+        json={"org_id": str(org), "product_id": str(product), "step_delay_ms": 0, **body},
         headers=headers,
     )
     assert r.status_code == 202, r.text
@@ -120,7 +121,25 @@ SIGNED_IN_ONLY = [
     ("GET", f"/api/v1/brands?org_id={uuid4()}", None),
     ("POST", "/api/v1/brands", {"org_id": str(uuid4()), "name": "X"}),
     ("GET", f"/api/v1/products?org_id={uuid4()}", None),
-    ("POST", "/api/v1/runs/fake", {"org_id": str(uuid4())}),
+    ("GET", "/api/v1/sectors", None),
+    ("PATCH", f"/api/v1/brands/{uuid4()}/sector", {"org_id": str(uuid4()), "sector": "footwear"}),
+    ("GET", f"/api/v1/products/{uuid4()}/claims?org_id={uuid4()}", None),
+    (
+        "POST",
+        f"/api/v1/products/{uuid4()}/claims",
+        {
+            "org_id": str(uuid4()),
+            "claim": "x",
+            "claim_type": "verified",
+            "evidence_url": "https://x.y",
+        },
+    ),
+    (
+        "POST",
+        f"/api/v1/products/{uuid4()}/claims/{uuid4()}/retire",
+        {"org_id": str(uuid4()), "reason": "x"},
+    ),
+    ("POST", "/api/v1/runs/fake", {"org_id": str(uuid4()), "product_id": str(uuid4())}),
     ("GET", f"/api/v1/runs/{uuid4()}/stream", None),
 ]
 
@@ -140,7 +159,7 @@ async def test_a_signed_out_request_cannot_stream_a_real_run(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a)
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a)
         await drain_queue(settings)
         r, events = await read_stream(client, run_id, {})
     assert r.status_code == 401
@@ -173,7 +192,7 @@ async def test_a_member_of_org_a_cannot_stream_org_bs_run(
     owner_a = bearer(issuer, seed.users["owner_a"])
     member_b = bearer(issuer, seed.users["approver_b"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner_a, seed.org_a)
+        run_id = await start_fake_run(client, owner_a, seed.org_a, seed.product_a)
         await drain_queue(settings)
         own, full = await read_stream(client, run_id, owner_a)
         other, leaked = await read_stream(client, run_id, member_b)
@@ -193,11 +212,13 @@ async def test_a_user_with_no_organisation_cannot_stream_or_start_runs(
     owner_a = bearer(issuer, seed.users["owner_a"])
     outsider = bearer(issuer, seed.users["outsider"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner_a, seed.org_a)
+        run_id = await start_fake_run(client, owner_a, seed.org_a, seed.product_a)
         await drain_queue(settings)  # finished, so a wrongly opened stream returns, not hangs
         stream, _ = await read_stream(client, run_id, outsider)
         start = await client.post(
-            "/api/v1/runs/fake", json={"org_id": str(seed.org_a)}, headers=outsider
+            "/api/v1/runs/fake",
+            json={"org_id": str(seed.org_a), "product_id": str(seed.product_a)},
+            headers=outsider,
         )
     assert stream.status_code == 404
     assert start.status_code == 404
@@ -210,9 +231,11 @@ async def test_a_viewer_may_watch_but_not_start_a_run(
     viewer_a = bearer(issuer, seed.users["viewer_a"])
     async with api(settings, issuer) as client:
         start = await client.post(
-            "/api/v1/runs/fake", json={"org_id": str(seed.org_a)}, headers=viewer_a
+            "/api/v1/runs/fake",
+            json={"org_id": str(seed.org_a), "product_id": str(seed.product_a)},
+            headers=viewer_a,
         )
-        run_id = await start_fake_run(client, owner_a, seed.org_a)
+        run_id = await start_fake_run(client, owner_a, seed.org_a, seed.product_a)
         await drain_queue(settings)
         r, events = await read_stream(client, run_id, viewer_a)
     assert start.status_code == 403
@@ -225,10 +248,14 @@ async def test_a_member_of_two_orgs_starts_runs_only_where_their_role_allows(
     agency = bearer(issuer, seed.users["agency"])  # editor in A, viewer in B
     async with api(settings, issuer) as client:
         in_a = await client.post(
-            "/api/v1/runs/fake", json={"org_id": str(seed.org_a)}, headers=agency
+            "/api/v1/runs/fake",
+            json={"org_id": str(seed.org_a), "product_id": str(seed.product_a)},
+            headers=agency,
         )
         in_b = await client.post(
-            "/api/v1/runs/fake", json={"org_id": str(seed.org_b)}, headers=agency
+            "/api/v1/runs/fake",
+            json={"org_id": str(seed.org_b), "product_id": str(seed.product_a)},
+            headers=agency,
         )
     assert in_a.status_code == 202
     assert in_b.status_code == 403
@@ -242,7 +269,7 @@ async def test_fake_run_streams_all_fifteen_steps(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a)
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a)
         await drain_queue(settings)
         r, messages = await read_stream(client, run_id, owner)
 
@@ -269,7 +296,7 @@ async def test_simulated_failure_streams_run_failed(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a, fail_at_step=3)
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a, fail_at_step=3)
         await drain_queue(settings)
         _, messages = await read_stream(client, run_id, owner)
     assert [m.data.get("status") for m in messages[-2:]] == ["failed", None]
@@ -282,7 +309,7 @@ async def test_reconnect_resumes_after_last_event_id(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a, depth="D0")
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a, depth="D0")
         await drain_queue(settings)
         _, full = await read_stream(client, run_id, owner)
         _, resumed = await read_stream(client, run_id, owner, last_event_id=full[9].id)
@@ -297,7 +324,7 @@ async def test_reconnect_after_final_event_gets_204(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a)
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a)
         await drain_queue(settings)
         _, full = await read_stream(client, run_id, owner)
         r, _ = await read_stream(client, run_id, owner, last_event_id=full[-1].id)
@@ -310,7 +337,7 @@ async def test_malformed_last_event_id_replays_from_start(
 ) -> None:
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
-        run_id = await start_fake_run(client, owner, seed.org_a)
+        run_id = await start_fake_run(client, owner, seed.org_a, seed.product_a)
         await drain_queue(settings)
         _, full = await read_stream(client, run_id, owner)
         _, replay = await read_stream(client, run_id, owner, last_event_id="not-an-id")
@@ -329,7 +356,9 @@ async def test_invalid_fake_run_request_is_422(
     owner = bearer(issuer, seed.users["owner_a"])
     async with api(settings, issuer) as client:
         bad_step = await client.post(
-            "/api/v1/runs/fake", json={"org_id": str(seed.org_a), "fail_at_step": 16}, headers=owner
+            "/api/v1/runs/fake",
+            json={"org_id": str(seed.org_a), "product_id": str(seed.product_a), "fail_at_step": 16},
+            headers=owner,
         )
         no_org = await client.post("/api/v1/runs/fake", json={}, headers=owner)
     assert bad_step.status_code == 422
@@ -463,7 +492,9 @@ async def test_events_arrive_live_while_the_run_progresses(
             live_server(app) as base,
             httpx.AsyncClient(base_url=base, timeout=30) as client,
         ):
-            run_id = await start_fake_run(client, owner, seed.org_a, step_delay_ms=delay_ms)
+            run_id = await start_fake_run(
+                client, owner, seed.org_a, seed.product_a, step_delay_ms=delay_ms
+            )
             arrivals: list[tuple[float, SseMessage]] = []
             async with client.stream("GET", f"/api/v1/runs/{run_id}/stream", headers=owner) as resp:
                 assert resp.status_code == 200
@@ -486,3 +517,264 @@ async def test_events_arrive_live_while_the_run_progresses(
     completed = arrivals[-1][0]
     assert completed - first_step >= 15 * delay_ms / 1000 * 0.8
     assert len({round(t, 2) for t, m in arrivals if m.event == "step"}) >= 10
+
+
+# ── Phase 3: sectors, product claims, run admission ──────────────────────────────────────────
+
+
+async def _brand(
+    client: httpx.AsyncClient, headers: dict[str, str], org: str, sector: str | None
+) -> str:
+    r = await client.post(
+        "/api/v1/brands",
+        json={"org_id": org, "name": f"Brand {uuid4().hex[:6]}", "sector": sector},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["sector"] == sector
+    return str(r.json()["id"])
+
+
+async def _product(client: httpx.AsyncClient, headers: dict[str, str], org: str, brand: str) -> str:
+    r = await client.post(
+        "/api/v1/products",
+        json={"org_id": org, "brand_id": brand, "name": f"Product {uuid4().hex[:6]}"},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    return str(r.json()["id"])
+
+
+async def _claim(
+    client: httpx.AsyncClient, headers: dict[str, str], org: str, product: str, **fields: object
+) -> httpx.Response:
+    body: dict[str, object] = {"org_id": org, "claim": "Weighs 240 g", "claim_type": "verified"}
+    body |= {"evidence_url": "https://example.invalid/spec"} | fields
+    return await client.post(f"/api/v1/products/{product}/claims", json=body, headers=headers)
+
+
+async def _fresh_org(
+    client: httpx.AsyncClient, issuer: TestIssuer, new_user: Callable[[], UUID]
+) -> tuple[UUID, dict[str, str], str]:
+    """A new user and the organisation they create (0012): tests that write brands work here, so
+    the seed organisations other suites count stay as seeded."""
+    user = new_user()
+    headers = bearer(issuer, user)
+    r = await client.post("/api/v1/organisations", json={"name": "Phase 3"}, headers=headers)
+    assert r.status_code == 201, r.text
+    return user, headers, str(r.json()["id"])
+
+
+def _add_member(db_url: str, org: str, user: UUID, role: str) -> None:
+    with psycopg.connect(db_url, autocommit=True) as c:
+        c.execute(
+            "insert into org_members (org_id, user_id, role) values (%s, %s, %s)", (org, user, role)
+        )
+
+
+def _audit_rows(db_url: str, action: str, entity: str) -> list[tuple[Any, ...]]:
+    with psycopg.connect(db_url) as c:
+        return c.execute(
+            "select actor_type, actor_id, details from audit_log "
+            "where action = %s and entity_id = %s order by id",
+            (action, entity),
+        ).fetchall()
+
+
+async def test_sectors_are_listed_for_any_signed_in_member(
+    settings: Settings, issuer: TestIssuer, seed: Seed
+) -> None:
+    async with api(settings, issuer) as client:
+        r = await client.get("/api/v1/sectors", headers=bearer(issuer, seed.users["viewer_a"]))
+    assert r.status_code == 200
+    sectors = {s["id"]: s["regulated"] for s in r.json()}
+    assert sectors["health-supplements"] is True
+    assert sectors["footwear"] is False
+    assert len(sectors) == 9
+
+
+async def test_a_brands_sector_is_set_changed_and_every_change_audited(
+    settings: Settings, issuer: TestIssuer, seed: Seed, db_url: str, new_user: Callable[[], UUID]
+) -> None:
+
+    async def patch(sector: str, headers: dict[str, str]) -> httpx.Response:
+        return await client.patch(
+            f"/api/v1/brands/{brand}/sector", json={"org_id": a, "sector": sector}, headers=headers
+        )
+
+    async with api(settings, issuer) as client:
+        owner_id, owner, a = await _fresh_org(client, issuer, new_user)
+        viewer_id = new_user()
+        _add_member(db_url, a, viewer_id, "viewer")
+        brand = await _brand(client, owner, a, "footwear")
+        changed = await patch("kitchenware", owner)
+        unknown = await patch("no-such-sector", owner)
+        viewer = await patch("footwear", bearer(issuer, viewer_id))
+        outsider = await patch("footwear", bearer(issuer, seed.users["owner_a"]))
+    assert changed.status_code == 200 and changed.json()["sector"] == "kitchenware"
+    assert [unknown.status_code, viewer.status_code, outsider.status_code] == [422, 403, 404]
+    rows = _audit_rows(db_url, "brand.sector_set", brand)
+    assert [(t, actor, d["from"], d["to"]) for t, actor, d in rows] == [
+        ("user", str(owner_id), None, "footwear"),
+        ("user", str(owner_id), "footwear", "kitchenware"),
+    ]
+
+
+async def test_claims_are_entered_listed_and_retired_never_edited(
+    settings: Settings, issuer: TestIssuer, seed: Seed
+) -> None:
+    owner = bearer(issuer, seed.users["owner_a"])
+    editor = bearer(issuer, seed.users["editor_a"])
+    a = str(seed.org_a)
+    async with api(settings, issuer) as client:
+        product = await _product(client, owner, a, str(seed.brand_a))
+        entered = await _claim(client, editor, a, product)
+        forged = await _claim(client, editor, a, product, created_by="human")
+        unsourced = await _claim(client, editor, a, product, evidence_url=None)
+        restricted = await _claim(
+            client,
+            editor,
+            a,
+            product,
+            claim="Clinically proven",
+            claim_type="restricted",
+            evidence_url=None,
+            evidence_note="medical claim, no trial cited",
+        )
+        claim_id = entered.json()["id"]
+        retire = f"/api/v1/products/{product}/claims/{claim_id}/retire"
+        retired = await client.post(
+            retire, json={"org_id": a, "reason": "withdrawn"}, headers=owner
+        )
+        again = await client.post(retire, json={"org_id": a, "reason": "twice"}, headers=owner)
+        listed = await client.get(f"/api/v1/products/{product}/claims?org_id={a}", headers=owner)
+    assert entered.status_code == 201
+    assert (entered.json()["created_by"], entered.json()["entered_by"]) == (
+        "human",
+        str(seed.users["editor_a"]),
+    )
+    assert [forged.status_code, unsourced.status_code, restricted.status_code] == [422, 422, 201]
+    assert retired.status_code == 200
+    assert retired.json()["retired_by"] == str(seed.users["owner_a"])
+    assert retired.json()["retired_reason"] == "withdrawn"
+    assert again.status_code == 409
+    assert [(c["claim_type"], c["retired_at"] is not None) for c in listed.json()] == [
+        ("verified", True),
+        ("restricted", False),
+    ]
+
+
+async def test_claims_follow_the_org_and_role_rules(
+    settings: Settings, issuer: TestIssuer, seed: Seed
+) -> None:
+    a, p = str(seed.org_a), str(seed.product_a)
+    viewer = bearer(issuer, seed.users["viewer_a"])
+    outsider = bearer(issuer, seed.users["approver_b"])
+    async with api(settings, issuer) as client:
+        viewer_write = await _claim(client, viewer, a, p)
+        outsider_write = await _claim(client, outsider, a, p)
+        outsider_read = await client.get(
+            f"/api/v1/products/{p}/claims?org_id={a}", headers=outsider
+        )
+        unknown = await _claim(client, bearer(issuer, seed.users["owner_a"]), a, str(uuid4()))
+        viewer_read = await client.get(f"/api/v1/products/{p}/claims?org_id={a}", headers=viewer)
+    assert [viewer_write.status_code, outsider_write.status_code] == [403, 404]
+    assert [outsider_read.status_code, unknown.status_code] == [404, 404]
+    assert viewer_read.status_code == 200
+    assert str(seed.claim_a) in [c["id"] for c in viewer_read.json()]
+
+
+async def _start(
+    client: httpx.AsyncClient, headers: dict[str, str], org: str, product: str, **body: object
+) -> httpx.Response:
+    return await client.post(
+        "/api/v1/runs/fake",
+        json={"org_id": org, "product_id": product, "step_delay_ms": 0, **body},
+        headers=headers,
+    )
+
+
+def _codes(r: httpx.Response) -> list[str]:
+    assert r.status_code == 409, r.text
+    return [x["code"] for x in r.json()["detail"]["reasons"]]
+
+
+async def test_a_freshly_bootstrapped_orgs_product_runs_only_once_it_has_a_verified_claim(
+    settings: Settings, issuer: TestIssuer, new_user: Callable[[], UUID], db_url: str
+) -> None:
+    """Phases.md Phase 3 exit criterion 1, in an organisation 0012 created (not the seed's)."""
+    user = new_user()
+    me = bearer(issuer, user)
+    async with api(settings, issuer) as client:
+        org = (await client.post("/api/v1/organisations", json={"name": "New"}, headers=me)).json()
+        brand = await _brand(client, me, org["id"], "footwear")
+        product = await _product(client, me, org["id"], brand)
+        refused = await _start(client, me, org["id"], product)
+        restricted = await _claim(
+            client,
+            me,
+            org["id"],
+            product,
+            claim="Best shoe in India",
+            claim_type="restricted",
+            evidence_url=None,
+            evidence_note="superlative, no source",
+        )
+        still_refused = await _start(client, me, org["id"], product)
+        verified = await _claim(client, me, org["id"], product)
+        admitted = await _start(client, me, org["id"], product)
+    assert (restricted.status_code, verified.status_code) == (201, 201)
+    assert _codes(refused) == ["no_verified_claims"]
+    assert refused.json()["detail"]["message"].startswith("run blocked: ")
+    assert _codes(still_refused) == ["no_verified_claims"]
+    assert admitted.status_code == 202, admitted.text
+    blocks = _audit_rows(db_url, "run.blocked", product)
+    assert len(blocks) == 2
+    actor_type, actor_id, details = blocks[0]
+    assert (actor_type, actor_id) == ("service", "run_admission")
+    assert details["user_id"] == str(user)
+    assert details["mode"] == "fake"
+    assert details["reasons"][0]["code"] == "no_verified_claims"
+
+
+async def test_admission_blocks_each_failing_check_and_logs_it(
+    settings: Settings, issuer: TestIssuer, db_url: str, new_user: Callable[[], UUID]
+) -> None:
+    """No sector; a regulated sector with no registry rules (fail closed); a brief asking for a
+    restricted claim. Each is refused with its reason and appended to audit_log."""
+    async with api(settings, issuer) as client:
+        _, owner, a = await _fresh_org(client, issuer, new_user)
+        no_sector = await _product(client, owner, a, await _brand(client, owner, a, None))
+        supplements = await _brand(client, owner, a, "health-supplements")
+        regulated = await _product(client, owner, a, supplements)
+        restricted_brief = await _product(
+            client, owner, a, await _brand(client, owner, a, "footwear")
+        )
+        for product in (no_sector, regulated, restricted_brief):
+            assert (await _claim(client, owner, a, product)).status_code == 201
+        flagged = await _claim(
+            client,
+            owner,
+            a,
+            restricted_brief,
+            claim="Unbeatable grip",
+            claim_type="restricted",
+            evidence_url=None,
+            evidence_note="superlative, no source",
+        )
+        r1 = await _start(client, owner, a, no_sector)
+        r2 = await _start(client, owner, a, regulated)
+        r3 = await _start(client, owner, a, restricted_brief, brief="Lead with the unbeatable grip")
+        r4 = await _start(client, owner, a, restricted_brief, brief="Lead with the light upper")
+        unknown = await _start(client, owner, a, str(uuid4()))
+    assert [_codes(r1), _codes(r2), _codes(r3)] == [
+        ["registry_coverage"],
+        ["registry_coverage"],
+        ["restricted_claim_requested"],
+    ]
+    assert "fail closed" in r2.json()["detail"]["reasons"][0]["message"]
+    assert r3.json()["detail"]["reasons"][0]["refs"] == [flagged.json()["id"]]
+    assert r4.status_code == 202
+    assert unknown.status_code == 404
+    for product in (no_sector, regulated, restricted_brief):
+        assert len(_audit_rows(db_url, "run.blocked", product)) == 1

@@ -146,12 +146,24 @@
           "format": "uuid",
           "title": "Org Id",
           "type": "string"
+        },
+        "sector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sector"
         }
       },
       "required": [
         "id",
         "org_id",
         "name",
+        "sector",
         "created_at"
       ],
       "title": "Brand",
@@ -170,6 +182,19 @@
           "format": "uuid",
           "title": "Org Id",
           "type": "string"
+        },
+        "sector": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]{1,62}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sector"
         }
       },
       "required": [
@@ -179,10 +204,69 @@
       "title": "BrandCreate",
       "type": "object"
     },
+    "BrandSectorUpdate": {
+      "additionalProperties": false,
+      "description": "Set or change a brand's sector. Every change is written to audit_log (migration 0019).",
+      "properties": {
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "sector": {
+          "pattern": "^[a-z][a-z0-9-]{1,62}$",
+          "title": "Sector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "sector"
+      ],
+      "title": "BrandSectorUpdate",
+      "type": "object"
+    },
+    "ClaimRetire": {
+      "additionalProperties": false,
+      "description": "Retire a claim. Claims are never edited or deleted (migration 0017).",
+      "properties": {
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "reason"
+      ],
+      "title": "ClaimRetire",
+      "type": "object"
+    },
     "FakeRunRequest": {
       "additionalProperties": false,
       "description": "Parameters of a fake run. No LLM call and no pipeline work: timing and outcome only.",
       "properties": {
+        "brief": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the campaign should say. A brief asking for a restricted claim blocks.",
+          "title": "Brief"
+        },
         "depth": {
           "default": "D1",
           "description": "Research depth to simulate; D0 skips step 6.",
@@ -215,6 +299,12 @@
           "title": "Org Id",
           "type": "string"
         },
+        "product_id": {
+          "description": "The product the run is for. It must have an active verified claim, and its brand a sector the registry covers (app/core/admission.py).",
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
         "step_delay_ms": {
           "default": 400,
           "description": "Simulated duration of each step.",
@@ -225,7 +315,8 @@
         }
       },
       "required": [
-        "org_id"
+        "org_id",
+        "product_id"
       ],
       "title": "FakeRunRequest",
       "type": "object"
@@ -401,6 +492,221 @@
       "title": "Product",
       "type": "object"
     },
+    "ProductClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "claim": {
+          "title": "Claim",
+          "type": "string"
+        },
+        "claim_type": {
+          "enum": [
+            "verified",
+            "deduced",
+            "restricted"
+          ],
+          "title": "Claim Type",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confidence"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "created_by": {
+          "title": "Created By",
+          "type": "string"
+        },
+        "entered_by": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entered By"
+        },
+        "evidence_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Evidence Note"
+        },
+        "evidence_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Evidence Url"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "product_id": {
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "retired_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retired At"
+        },
+        "retired_by": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retired By"
+        },
+        "retired_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retired Reason"
+        }
+      },
+      "required": [
+        "id",
+        "org_id",
+        "product_id",
+        "claim",
+        "claim_type",
+        "evidence_url",
+        "evidence_note",
+        "confidence",
+        "created_by",
+        "entered_by",
+        "created_at",
+        "retired_at",
+        "retired_by",
+        "retired_reason"
+      ],
+      "title": "ProductClaim",
+      "type": "object"
+    },
+    "ProductClaimCreate": {
+      "additionalProperties": false,
+      "description": "A claim a signed-in owner or editor enters for a product (Phases.md Phase 3).\n\nverified   \u2014 needs an evidence URL (the source a reader can check).\ndeduced    \u2014 needs a confidence and a basis: an evidence URL or a note.\nrestricted \u2014 needs the reason it may not be claimed, in evidence_note.",
+      "properties": {
+        "claim": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Claim",
+          "type": "string"
+        },
+        "claim_type": {
+          "enum": [
+            "verified",
+            "deduced",
+            "restricted"
+          ],
+          "title": "Claim Type",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "evidence_note": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Note"
+        },
+        "evidence_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "pattern": "^https?://\\S+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Url"
+        },
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "claim",
+        "claim_type"
+      ],
+      "title": "ProductClaimCreate",
+      "type": "object"
+    },
     "ProductCreate": {
       "additionalProperties": false,
       "properties": {
@@ -461,6 +767,65 @@
         "stream_url"
       ],
       "title": "RunAccepted",
+      "type": "object"
+    },
+    "RunBlocked": {
+      "$defs": {
+        "BlockReasonOut": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "no_verified_claims",
+                "registry_coverage",
+                "registry_rule_invalid",
+                "restricted_claim_requested",
+                "prohibited_phrase_requested"
+              ],
+              "title": "Code",
+              "type": "string"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "refs": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Refs",
+              "type": "array"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "refs"
+          ],
+          "title": "BlockReasonOut",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The 409 body when admission refuses a run (blocked and logged; Rules.md T5).",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/BlockReasonOut"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "message",
+        "reasons"
+      ],
+      "title": "RunBlocked",
       "type": "object"
     },
     "RunEvent": {
@@ -720,6 +1085,31 @@
           "$ref": "#/$defs/RunFailed"
         }
       ]
+    },
+    "Sector": {
+      "additionalProperties": false,
+      "description": "A registry key (Architecture.md \u00a78.1). `regulated` sectors need active registry rules.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "regulated": {
+          "title": "Regulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "regulated"
+      ],
+      "title": "Sector",
+      "type": "object"
     }
   }
 }

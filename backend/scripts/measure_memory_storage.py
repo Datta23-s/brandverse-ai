@@ -71,7 +71,7 @@ def main() -> None:
         for migration in sorted(args.migrations.glob("*.sql")):
             c.execute(migration.read_text(encoding="utf-8").encode())
         c.execute("insert into organisations (id, name) values (%s, 'o')", (ORG,))
-        c.execute("insert into sectors (id, label) values ('footwear', 'Footwear')")
+        # 'footwear' is seeded by migration 0018.
         c.execute(
             "insert into brands (id, org_id, name, sector) values (%s, %s, 'b', 'footwear')",
             (BRAND, ORG),

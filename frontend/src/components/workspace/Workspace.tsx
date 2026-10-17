@@ -2,13 +2,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { type SelectHTMLAttributes, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import {
   type Brand,
   type Organisation,
+  type Sector,
   brandCreateSchema,
   canDelete,
   canWrite,
@@ -19,6 +20,7 @@ import { api } from "@/lib/api";
 
 import { StartFakeRunForm } from "../StartFakeRunForm";
 import { Alert, Button, Field, Panel } from "../ui";
+import { ProductClaims } from "./ProductClaims";
 
 /** The signed-in home: create the first organisation, then brands, products and runs. */
 export function Workspace() {
@@ -113,7 +115,29 @@ function FirstOrganisation() {
   );
 }
 
-const brandForm = brandCreateSchema.omit({ org_id: true });
+const brandForm = brandCreateSchema.omit({ org_id: true }).extend({
+  // "Choose later" is "" in the <select>: no sector yet (such a brand cannot run).
+  sector: z.preprocess((v) => (v === "" ? null : v), brandCreateSchema.shape.sector),
+});
+
+const sectorLabel = (s: Sector) => (s.regulated ? `${s.label} (regulated)` : s.label);
+
+function SectorSelect({
+  sectors,
+  allowNone,
+  ...select
+}: SelectHTMLAttributes<HTMLSelectElement> & { id: string; sectors: Sector[]; allowNone: boolean }) {
+  return (
+    <select className="min-h-11 w-full rounded-bv-sm border border-bv-border bg-bv-deep px-3 text-sm" {...select}>
+      {allowNone && <option value="">Choose later</option>}
+      {sectors.map((s) => (
+        <option key={s.id} value={s.id}>
+          {sectorLabel(s)}
+        </option>
+      ))}
+    </select>
+  );
+}
 const productForm = productCreateSchema.omit({ org_id: true, brand_id: true }).extend({
   // An empty text box means "no category".
   category: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), productCreateSchema.shape.category),
@@ -122,9 +146,11 @@ const productForm = productCreateSchema.omit({ org_id: true, brand_id: true }).e
 function BrandsAndProducts({ org }: { org: Organisation }) {
   const queryClient = useQueryClient();
   const brands = useQuery({ queryKey: ["brands", org.id], queryFn: () => api.brands(org.id) });
+  const sectors = useQuery({ queryKey: ["sectors"], queryFn: api.sectors, staleTime: Infinity });
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const brandFormState = useForm<z.input<typeof brandForm>, unknown, z.output<typeof brandForm>>({
     resolver: zodResolver(brandForm),
+    defaultValues: { name: "", sector: "" },
   });
   const createBrand = useMutation({
     mutationFn: (v: z.output<typeof brandForm>) => api.createBrand({ org_id: org.id, ...v }),
@@ -182,14 +208,62 @@ function BrandsAndProducts({ org }: { org: Organisation }) {
             id="brand-name"
             error={brandFormState.formState.errors.name?.message}
           />
+          <div className="min-w-0 flex-1">
+            <label htmlFor="brand-sector" className="mb-1.5 block text-sm font-medium text-bv-muted">
+              Sector
+            </label>
+            <SectorSelect id="brand-sector" sectors={sectors.data ?? []} allowNone {...brandFormState.register("sector")} />
+          </div>
           <Button type="submit" className="mt-7" disabled={createBrand.isPending}>
             Add brand
           </Button>
           {createBrand.error && <Alert>{createBrand.error.message}</Alert>}
         </form>
       )}
+      {brand && <BrandSector org={org} brand={brand} sectors={sectors.data ?? []} />}
       {brand && <Products org={org} brand={brand} />}
     </Panel>
+  );
+}
+
+/** The selected brand's sector: it decides which registry rules bind the brand's output. */
+function BrandSector({ org, brand, sectors }: { org: Organisation; brand: Brand; sectors: Sector[] }) {
+  const queryClient = useQueryClient();
+  const set = useMutation({
+    mutationFn: (sector: string) => api.setBrandSector(brand.id, { org_id: org.id, sector }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["brands", org.id] }),
+  });
+  const current = sectors.find((s) => s.id === brand.sector);
+  return (
+    <div className="mb-4 border-t border-bv-border pt-4" data-testid="brand-sector">
+      {canWrite(org.roles) ? (
+        <>
+          <label htmlFor="selected-brand-sector" className="mb-1.5 block text-sm font-medium text-bv-muted">
+            Sector of {brand.name}
+          </label>
+          <SectorSelect
+            id="selected-brand-sector"
+            sectors={sectors}
+            allowNone={brand.sector === null}
+            value={brand.sector ?? ""}
+            disabled={set.isPending}
+            onChange={(e) => {
+              if (e.target.value) set.mutate(e.target.value);
+            }}
+          />
+        </>
+      ) : (
+        <p className="text-sm text-bv-muted">Sector: {current ? sectorLabel(current) : "not chosen"}</p>
+      )}
+      <p className="mt-1 text-sm text-bv-faint">
+        {brand.sector === null
+          ? "Choose a sector before this brand's products can run."
+          : current?.regulated
+            ? "Regulated: runs need active registry rules, entered by a person from the regulation they cite."
+            : "Every change of sector is recorded."}
+      </p>
+      {set.error && <Alert>{set.error.message}</Alert>}
+    </div>
   );
 }
 
@@ -205,13 +279,15 @@ function Products({ org, brand }: { org: Organisation; brand: Brand }) {
       api.createProduct({ org_id: org.id, brand_id: brand.id, ...v }),
     onSuccess: () => {
       form.reset();
-      return queryClient.invalidateQueries({ queryKey: key });
+      // A prefix: this brand's list and the run form's list of all the organisation's products.
+      return queryClient.invalidateQueries({ queryKey: ["products", org.id] });
     },
   });
   const remove = useMutation({
     mutationFn: (productId: string) => api.deleteProduct(org.id, productId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products", org.id] }),
   });
+  const [openClaims, setOpenClaims] = useState<string | null>(null);
   const list = products.data ?? [];
 
   return (
@@ -221,16 +297,29 @@ function Products({ org, brand }: { org: Organisation; brand: Brand }) {
       {list.length === 0 && !products.isPending && <p className="mb-3 text-sm text-bv-faint">No products yet.</p>}
       <ul className="mb-4 grid gap-2" aria-label={`Products of ${brand.name}`}>
         {list.map((p) => (
-          <li key={p.id} className="flex items-center justify-between gap-2 rounded-bv-sm border border-bv-border px-3 py-2 text-sm">
-            <span>
-              {p.name}
-              {p.category && <span className="ml-2 font-mono text-[0.8125rem] text-bv-faint">{p.category}</span>}
-            </span>
-            {canDelete(org.roles) && (
-              <Button variant="danger" aria-label={`Delete product ${p.name}`} onClick={() => remove.mutate(p.id)}>
-                Delete
-              </Button>
-            )}
+          <li key={p.id} className="rounded-bv-sm border border-bv-border px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                {p.name}
+                {p.category && <span className="ml-2 font-mono text-[0.8125rem] text-bv-faint">{p.category}</span>}
+              </span>
+              <span className="flex gap-2">
+                <Button
+                  variant="quiet"
+                  aria-expanded={openClaims === p.id}
+                  aria-label={`Claims of product ${p.name}`}
+                  onClick={() => setOpenClaims(openClaims === p.id ? null : p.id)}
+                >
+                  Claims
+                </Button>
+                {canDelete(org.roles) && (
+                  <Button variant="danger" aria-label={`Delete product ${p.name}`} onClick={() => remove.mutate(p.id)}>
+                    Delete
+                  </Button>
+                )}
+              </span>
+            </div>
+            {openClaims === p.id && <ProductClaims org={org} product={p} />}
           </li>
         ))}
       </ul>

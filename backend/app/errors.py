@@ -21,6 +21,10 @@ class JobNotEnqueued(BrandverseError):
     """ARQ refused to enqueue a job (a job with the same ID already exists)."""
 
 
+class RegistryRuleInvalid(BrandverseError):
+    """A sector registry rule cannot be applied (bad regex, unknown match type). Gates block."""
+
+
 # ── LLM calls (Phase 2) ──────────────────────────────────────────────────────────────────────
 
 

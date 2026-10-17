@@ -1,5 +1,5 @@
 /**
- * Organisations, brands and products, mirroring backend/app/models/tenancy.py. `tenancy.test.ts`
+ * Organisations, sectors, brands and products, mirroring backend/app/models/tenancy.py. `tenancy.test.ts`
  * checks these against the exported contract (api-contracts.json).
  */
 import { z } from "zod";
@@ -27,13 +27,25 @@ export const meSchema = z.strictObject({
 });
 export type Me = z.infer<typeof meSchema>;
 
-export const brandCreateSchema = z.strictObject({ org_id: z.uuid(), name });
+/** A registry key (migration 0018). A regulated sector needs active registry rules to run. */
+export const sectorSchema = z.strictObject({ id: z.string(), label: z.string(), regulated: z.boolean() });
+export type Sector = z.infer<typeof sectorSchema>;
+
+const sectorId = z.string().regex(/^[a-z][a-z0-9-]{1,62}$/, "Choose a sector.");
+
+export const brandCreateSchema = z.strictObject({ org_id: z.uuid(), name, sector: sectorId.nullable() });
 export type BrandCreate = z.infer<typeof brandCreateSchema>;
+
+/** Every change is audited (migration 0019). */
+export const brandSectorUpdateSchema = z.strictObject({ org_id: z.uuid(), sector: sectorId });
+export type BrandSectorUpdate = z.infer<typeof brandSectorUpdateSchema>;
 
 export const brandSchema = z.strictObject({
   id: z.uuid(),
   org_id: z.uuid(),
   name: z.string(),
+  /** null: not chosen yet; such a brand cannot start a run (fail closed). */
+  sector: z.string().nullable(),
   created_at: z.iso.datetime({ offset: true }),
 });
 export type Brand = z.infer<typeof brandSchema>;

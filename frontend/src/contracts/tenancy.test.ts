@@ -6,11 +6,13 @@ import { shapes, type JsonSchema } from "./schema-compare";
 import {
   brandCreateSchema,
   brandSchema,
+  brandSectorUpdateSchema,
   meSchema,
   organisationCreateSchema,
   organisationSchema,
   productCreateSchema,
   productSchema,
+  sectorSchema,
 } from "./tenancy";
 
 const schemas = contracts.schemas as unknown as Record<string, JsonSchema>;
@@ -20,7 +22,10 @@ describe("contract: tenancy zod agrees with the backend", () => {
     ["OrganisationCreate", organisationCreateSchema, false],
     ["Organisation", organisationSchema, false],
     ["Me", meSchema, false],
-    ["BrandCreate", brandCreateSchema, false],
+    ["Sector", sectorSchema, false],
+    // sector defaults to null on the backend; the form always sends it.
+    ["BrandCreate", brandCreateSchema, true],
+    ["BrandSectorUpdate", brandSectorUpdateSchema, false],
     ["Brand", brandSchema, false],
     // category defaults to null on the backend; the form always sends it.
     ["ProductCreate", productCreateSchema, true],

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -12,7 +12,7 @@ import {
   type FakeRunRequest,
   type ResearchDepth,
 } from "@/contracts/runs";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 
 // DepthBadge colours carry their Design.md §8 meaning: D0 aqua (memory), D1 violet, D2 amber.
 const DEPTHS: { value: ResearchDepth; label: string; explain: string; dot: string }[] = [
@@ -26,6 +26,8 @@ const DEPTHS: { value: ResearchDepth; label: string; explain: string; dot: strin
  * "No failure" is "". The bounds still come from the contract (fakeRunRequestSchema).
  */
 const formSchema = fakeRunRequestSchema.omit({ org_id: true }).extend({
+  product_id: z.uuid("Choose a product."),
+  brief: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), fakeRunRequestSchema.shape.brief),
   fail_at_step: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
     fakeRunRequestSchema.shape.fail_at_step,
@@ -33,11 +35,16 @@ const formSchema = fakeRunRequestSchema.omit({ org_id: true }).extend({
 });
 type FormInput = z.input<typeof formSchema>;
 
-const DEFAULTS: FormInput = { depth: "D1", step_delay_ms: 400, fail_at_step: "" };
+const DEFAULTS: FormInput = { product_id: "", brief: "", depth: "D1", step_delay_ms: 400, fail_at_step: "" };
 
-/** Starts a fake run in `orgId` (the selected organisation; never typed by the user). */
+/**
+ * Starts a fake run in `orgId` (the selected organisation; never typed by the user) for one of
+ * its products. The API admits it first, as it will a real run: no verified claim, no covered
+ * sector, or a brief asking for a restricted claim, and it is refused with every reason.
+ */
 export function StartFakeRunForm({ orgId }: { orgId: string }) {
   const router = useRouter();
+  const products = useQuery({ queryKey: ["products", orgId, "all"], queryFn: () => api.products(orgId) });
   const {
     register,
     handleSubmit,
@@ -53,6 +60,45 @@ export function StartFakeRunForm({ orgId }: { orgId: string }) {
 
   return (
     <form onSubmit={handleSubmit((values) => start.mutate(values))} className="grid gap-6" noValidate>
+      <div className="grid gap-4">
+        <div>
+          <label htmlFor="run-product" className="mb-1.5 block text-sm font-medium text-bv-muted">
+            Product
+          </label>
+          <select
+            id="run-product"
+            {...register("product_id")}
+            aria-invalid={errors.product_id !== undefined}
+            className="min-h-11 w-full rounded-bv-sm border border-bv-border bg-bv-deep px-3 text-sm"
+          >
+            <option value="">Choose a product</option>
+            {(products.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          {errors.product_id && <p className="mt-1 text-sm text-bv-danger">Choose a product.</p>}
+          {products.isError && <p className="mt-1 text-sm text-bv-danger">{products.error.message}</p>}
+        </div>
+        <div>
+          <label htmlFor="run-brief" className="mb-1.5 block text-sm font-medium text-bv-muted">
+            Brief (optional)
+          </label>
+          <textarea
+            id="run-brief"
+            rows={3}
+            {...register("brief")}
+            aria-invalid={errors.brief !== undefined}
+            aria-describedby="run-brief-help"
+            className="w-full rounded-bv-sm border border-bv-border bg-bv-deep px-3 py-2 text-sm"
+          />
+          <p id="run-brief-help" className="mt-1 text-sm text-bv-faint">
+            {errors.brief ? <span className="text-bv-danger">At most 2000 characters.</span> : "A brief asking for a restricted claim is refused."}
+          </p>
+        </div>
+      </div>
+
       <fieldset>
         <legend className="mb-3 text-sm font-medium tracking-wide text-bv-muted">Research depth to simulate</legend>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -119,11 +165,7 @@ export function StartFakeRunForm({ orgId }: { orgId: string }) {
         </div>
       </div>
 
-      {start.error !== null && (
-        <p role="alert" className="rounded-bv-sm border border-bv-danger/50 bg-bv-danger/5 p-3 text-sm text-bv-danger">
-          {start.error.message}
-        </p>
-      )}
+      {start.error !== null && <StartError error={start.error} />}
 
       <div>
         <button
@@ -135,5 +177,28 @@ export function StartFakeRunForm({ orgId }: { orgId: string }) {
         </button>
       </div>
     </form>
+  );
+}
+
+/** A refusal lists every reason the API gave; other failures show their message. */
+function StartError({ error }: { error: Error }) {
+  const blocked = error instanceof ApiError ? error.blocked : null;
+  return (
+    <div role="alert" className="rounded-bv-sm border border-bv-danger/50 bg-bv-danger/5 p-3 text-sm text-bv-danger">
+      {blocked === null ? (
+        error.message
+      ) : (
+        <>
+          <p className="font-medium">Run blocked. Nothing was started.</p>
+          <ul className="mt-2 list-disc pl-5">
+            {blocked.reasons.map((r) => (
+              <li key={r.code} data-reason={r.code}>
+                {r.message}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }

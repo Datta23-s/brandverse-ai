@@ -35,7 +35,7 @@ EXPECTED: dict[str, dict[str, tuple[bool, bool]]] = {
     "memory_items": NONE,  # never hard-deleted, Memory.md §6.4 (0010)
     "org_members": NONE,  # revoked, never deleted (0010)
     "organisations": NONE,  # manual postgres procedure only (0010)
-    "product_claims": OWNER_AND_BACKEND_DELETE,
+    "product_claims": NONE,  # retired, never deleted; product deletion still cascades (0017)
     "products": OWNER_AND_BACKEND_DELETE,  # not once it has runs (FK)
     "runs": NONE,  # raw logs, Rules.md A1 (0010)
     "sector_constraints": NONE,  # retired, never deleted (0011)
@@ -96,7 +96,12 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "approvals_practice_is_calibration": (False, "migration", ALL_API),
     "audit_log_append_only": (False, "migration", ALL_API),
     "campaigns_active_approver": (False, "migration", ALL_API),
+    "product_claims_provenance": (False, "migration", ALL_API),  # 0017
+    "runs_initial_state": (False, "migration", ALL_API),  # 0016
     "sector_constraints_versioned": (False, "migration", ALL_API),
+    # 0019: a security definer TRIGGER function (cannot be called directly), owned by the minimal
+    # role below; it appends one kind of audit row when a brand's sector really changes.
+    "audit_brand_sector": (True, "app_audit_writer", ALL_API),
     # Read-only role checks every RLS policy calls (0003).
     "has_role": (True, "migration", ALL_API),
     "member_org_ids": (True, "migration", ALL_API),
@@ -163,6 +168,42 @@ def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx:
     memberships = tx.execute(
         "select b.rolname from pg_auth_members m join pg_roles b on b.oid = m.roleid "
         "join pg_roles r on r.oid = m.member where r.rolname = 'app_org_creator'"
+    )
+    assert memberships == []
+
+
+def test_audit_writer_has_insert_on_audit_log_and_nothing_else(tx: Tx) -> None:
+    """app_audit_writer's rights ARE app.audit_brand_sector's (0019): append audit rows, and only
+    the kind its one insert policy admits; read, change or delete nothing."""
+    attrs = tx.execute(
+        "select rolsuper, rolcanlogin, rolbypassrls, rolcreaterole, rolcreatedb, rolinherit "
+        "from pg_roles where rolname = 'app_audit_writer'"
+    )
+    assert attrs == [(False, False, False, False, False, False)]
+    held = tx.execute(
+        "select c.relname, p.privilege_type "
+        "from pg_class c join pg_namespace n on n.oid = c.relnamespace, "
+        "lateral (select unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE',"
+        "'REFERENCES','TRIGGER']) as privilege_type) p "
+        "where n.nspname in ('public', 'auth', 'app') and c.relkind in ('r', 'p', 'v', 'm') "
+        "and has_table_privilege('app_audit_writer', c.oid, p.privilege_type) "
+        "order by 1, 2"
+    )
+    assert held == [("audit_log", "INSERT")]
+    policies = tx.execute(
+        "select policyname, cmd, with_check from pg_policies "
+        "where tablename = 'audit_log' and 'app_audit_writer' = any (roles)"
+    )
+    assert policies == [
+        (
+            "audit_writer_insert",
+            "INSERT",
+            "((action = 'brand.sector_set'::text) AND (entity_type = 'brand'::text))",
+        )
+    ]
+    memberships = tx.execute(
+        "select b.rolname from pg_auth_members m join pg_roles b on b.oid = m.roleid "
+        "join pg_roles r on r.oid = m.member where r.rolname = 'app_audit_writer'"
     )
     assert memberships == []
 

@@ -193,7 +193,9 @@ def test_step_status_values_are_the_wire_values() -> None:
 
 async def test_arq_log_lines_carry_the_run_id(redis_settings: Settings) -> None:
     run_id = uuid4()
-    job = FakeRunJob(run_id=run_id, request=FakeRunRequest(org_id=uuid4(), step_delay_ms=0))
+    job = FakeRunJob(
+        run_id=run_id, request=FakeRunRequest(org_id=uuid4(), product_id=uuid4(), step_delay_ms=0)
+    )
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
     captured = io.StringIO()

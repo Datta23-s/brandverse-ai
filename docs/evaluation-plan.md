@@ -124,6 +124,33 @@ generally. This is a **confound**, not only a free-tier limitation.
    Proposed are also reported with the Strong-touching requests separated out, so a difference that
    exists only there is visible as such.
 
+**V2 — A paraphrase of a restricted claim can pass the claim gate undetected (recorded
+2026-10-17).** The gate's matching is deterministic and literal (`backend/app/core/text_match.py`,
+`Architecture.md` §8.2): it catches a restricted claim's own wording and registry-prohibited
+phrases, case- and punctuation-insensitively, and nothing else. **Deterministic matching cannot
+catch a paraphrase of a restricted claim.** Generated statements are labelled from what they cite,
+and a factual statement that cites nothing is blocked as unsourced, so the residual risk is narrow
+but real: **the classifier (Phase 3 chunk C) extracts a paraphrase of a restricted claim and cites
+a verified claim for it**, and the copy passes. **Mocks cannot measure how often that happens** —
+a fake model returns whatever the test scripts — so the rate **remains not measured until real
+model calls are approved** for that purpose.
+
+*Divergence in writing.* `docs/approval-rubric.md` T1.3 requires "No `restricted` claim appears in
+any form, including paraphrase". The rubric therefore promises more than the code delivers. Until
+the rate above is measured, paraphrase is caught only by the human approver applying T1.3, and the
+dissertation must not claim the gate blocks paraphrases (`Rules.md` A6).
+
+*Mitigation.*
+1. Restricted claims are never given to the copy-writing step: the context it receives holds
+   verified and deduced claims only (built with the generation context in chunk C/Phase 6), so a
+   paraphrase has to originate in the model, not be prompted by it.
+2. Every gate block is counted per arm as a result (`backend/app/evaluation/run_outcomes.py`), and
+   every approver rejection on T1.3 is recorded with its gate id (`approvals.failed_gate`), so
+   paraphrases that reached the approver are counted, not lost.
+3. When real calls are approved, the rate is measured on the evaluation set's 33 real restricted
+   manufacturer claims (`evaluation/test_set.yaml`) and their paraphrases, and reported with its
+   conditions. Until then it is written as *not measured*.
+
 ## 5. Statistics
 
 - Mean and SD per metric per arm.

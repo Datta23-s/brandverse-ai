@@ -390,7 +390,7 @@ def test_org_owner_reads_own_audit_editor_does_not(tx: Tx) -> None:
     _audit_row(tx)
     tx.execute("savepoint s")
     tx.as_user("owner_a")
-    assert len(tx.execute("select id from audit_log")) == 1
+    assert len(tx.execute("select id from audit_log where action = 'approve'")) == 1
     tx.execute("rollback to savepoint s")
     tx.as_user("editor_a")
     assert tx.execute("select id from audit_log") == []

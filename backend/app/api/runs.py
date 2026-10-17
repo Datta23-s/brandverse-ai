@@ -9,11 +9,16 @@ needs membership of that organisation, decided by migration 0003's app.member_or
 caller's identity; starting one needs owner or editor (app.has_role), as `runs_insert` requires.
 A caller who is not a member gets the same 404 as for a run that does not exist: a run's
 existence is not disclosed across organisations.
+
+From Phase 3 a run is admitted first (app/core/admission.py): a product with no active verified
+claim, a brand whose sector the registry does not cover, or a brief asking for a restricted claim
+is refused with 409, and the refusal is appended to audit_log. Nothing is queued.
 """
 
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -21,12 +26,21 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.api.deps import IdentityDep, ResourcesDep, require_db
+from app.core.admission import decide_admission, load_admission, record_block, summarise
 from app.core.db import as_user
 from app.core.logging import bind_run_id
 from app.core.run_events import STREAM_START, at_or_before, parse_entry_id
 from app.core.tenancy import has_role, is_member
 from app.errors import JobNotEnqueued
-from app.models.runs import FakeRunJob, FakeRunRequest, RunAccepted, RunFailed, RunQueued
+from app.models.runs import (
+    BlockReasonOut,
+    FakeRunJob,
+    FakeRunRequest,
+    RunAccepted,
+    RunBlocked,
+    RunFailed,
+    RunQueued,
+)
 from app.workers.jobs import RUN_FAKE_PIPELINE, fake_run_job_id
 
 log = logging.getLogger(__name__)
@@ -45,16 +59,57 @@ def stream_path(run_id: UUID) -> str:
     return f"/api/v1/runs/{run_id}/stream"
 
 
-@fake_router.post("/fake", status_code=status.HTTP_202_ACCEPTED)
+@fake_router.post(
+    "/fake",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={status.HTTP_409_CONFLICT: {"model": RunBlocked, "description": "Run blocked"}},
+)
 async def start_fake_run(
     resources: ResourcesDep, identity: IdentityDep, request: FakeRunRequest
 ) -> RunAccepted:
-    """Start a fake 15-step run: no LLM call, no pipeline. Returns at once; progress is streamed."""
-    async with as_user(require_db(resources), identity) as conn:
+    """Start a fake 15-step run: no LLM call, no pipeline. Returns at once; progress is streamed.
+
+    Admitted first, like a real run: a refusal is 409 with every reason, and is audit-logged."""
+    pool = require_db(resources)
+    async with as_user(pool, identity) as conn:
         if not await is_member(conn, request.org_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, ORG_NOT_FOUND)
         if not await has_role(conn, request.org_id, ["owner", "editor"]):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "starting a run needs owner or editor")
+        inputs = await load_admission(conn, request.org_id, request.product_id)
+    if inputs is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such product")
+    decision = decide_admission(inputs, request.brief, datetime.now(UTC).date())
+    if decision.blocked:
+        log.warning(
+            "run blocked at admission",
+            extra={
+                "org": str(request.org_id),
+                "product": str(request.product_id),
+                "user": str(identity.user_id),
+                "reasons": [r.code for r in decision.reasons],
+            },
+        )
+        try:
+            await record_block(
+                pool,
+                org_id=request.org_id,
+                product_id=request.product_id,
+                user_id=identity.user_id,
+                mode="fake",
+                decision=decision,
+            )
+        except Exception:
+            # The run stays blocked; a lost audit row is an error to see, never a reason to admit.
+            log.exception("run block could not be written to audit_log")
+        body = RunBlocked(
+            message=summarise(decision.reasons),
+            reasons=[
+                BlockReasonOut(code=r.code, message=r.message, refs=list(r.refs))
+                for r in decision.reasons
+            ],
+        )
+        raise HTTPException(status.HTTP_409_CONFLICT, body.model_dump(mode="json"))
 
     run_id = uuid4()
     job = FakeRunJob(run_id=run_id, request=request)

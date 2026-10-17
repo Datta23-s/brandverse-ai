@@ -4,13 +4,15 @@
  */
 import { expect, test } from "@playwright/test";
 
-import { ensureOrganisation, signIn } from "./support";
+import { FIXTURE_PRODUCT, ensureOrganisation, ensureRunnableProduct, signIn } from "./support";
 
 test("a member of another organisation cannot watch the run", async ({ browser }) => {
   const a = await browser.newContext();
   const pageA = await a.newPage();
   await signIn(pageA, "A");
   await ensureOrganisation(pageA, "A");
+  await ensureRunnableProduct(pageA);
+  await pageA.getByLabel("Product", { exact: true }).selectOption({ label: FIXTURE_PRODUCT });
   await pageA.getByLabel("Time per step (ms)").fill("50");
   await pageA.getByRole("button", { name: "Start fake run" }).click();
   await pageA.waitForURL(/\/runs\/[0-9a-f-]{36}$/, { waitUntil: "commit" });

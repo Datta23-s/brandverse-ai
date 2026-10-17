@@ -34,6 +34,7 @@ class Seed:
     brand_a: UUID
     brand_b: UUID
     product_a: UUID
+    claim_a: UUID  # a verified claim of product_a, entered by owner_a
     run_a: UUID
     campaign_a: UUID
     org_practice: UUID
@@ -90,10 +91,7 @@ def seed(db_url: str) -> Seed:
     with psycopg.connect(db_url, autocommit=True) as c:
         for uid in users.values():
             c.execute("insert into auth.users (id) values (%s)", (uid,))
-        c.execute(
-            "insert into sectors (id, label, regulated) values "
-            "('health-supplements', 'Health supplements', true), ('footwear', 'Footwear', false)"
-        )
+        # Sectors come from migration 0018 (footwear; health-supplements, regulated).
         c.execute(
             "insert into organisations (id, name, is_practice) "
             "values (%s, 'A', false), (%s, 'B', false), (%s, 'Practice', true)",
@@ -136,6 +134,19 @@ def seed(db_url: str) -> Seed:
             "insert into products (org_id, brand_id, name) values (%s, %s, 'PA') returning id",
             (org_a, brand_a),
         )
+        # A verified claim is entered by a signed-in user (0017): act as owner_a for it.
+        with c.transaction():
+            c.execute(
+                "select set_config('role', 'authenticated', true), "
+                "set_config('request.jwt.claims', %s, true)",
+                (json.dumps({"sub": str(users["owner_a"]), "role": "authenticated"}),),
+            )
+            claim_a = one(
+                "insert into product_claims (org_id, product_id, claim, claim_type, evidence_url, "
+                "created_by) values (%s, %s, 'Upper made of recycled mesh', 'verified', "
+                "'https://example.invalid/spec', 'human') returning id",
+                (org_a, product_a),
+            )
         run_a = one(
             "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
             (org_a, product_a),
@@ -165,6 +176,7 @@ def seed(db_url: str) -> Seed:
         brand_a,
         brand_b,
         product_a,
+        claim_a,
         run_a,
         campaign_a,
         org_practice,

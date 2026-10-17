@@ -34,6 +34,9 @@ export type ResearchDepth = z.infer<typeof researchDepthSchema>;
 /** POST /api/v1/runs/fake. Bounds match FakeRunRequest; every field is explicit here. */
 export const fakeRunRequestSchema = z.strictObject({
   org_id: z.uuid(),
+  /** Admitted only with an active verified claim and a brand sector the registry covers. */
+  product_id: z.uuid(),
+  brief: z.string().max(2000, "At most 2000 characters.").nullable(),
   depth: researchDepthSchema,
   step_delay_ms: z.number().int().min(0).max(5000),
   fail_at_step: z.number().int().min(1).max(15).nullable(),
@@ -45,6 +48,25 @@ export const runAcceptedSchema = z.strictObject({
   stream_url: z.string(),
 });
 export type RunAccepted = z.infer<typeof runAcceptedSchema>;
+
+/** The 409 body when admission refuses a run: blocked and logged (backend/app/core/admission.py). */
+export const runBlockedSchema = z.strictObject({
+  message: z.string(),
+  reasons: z.array(
+    z.strictObject({
+      code: z.enum([
+        "no_verified_claims",
+        "registry_coverage",
+        "registry_rule_invalid",
+        "restricted_claim_requested",
+        "prohibited_phrase_requested",
+      ]),
+      message: z.string(),
+      refs: z.array(z.string()),
+    }),
+  ),
+});
+export type RunBlocked = z.infer<typeof runBlockedSchema>;
 
 // ── Events (the SSE stream) ──────────────────────────────────────────────────────────────────
 
