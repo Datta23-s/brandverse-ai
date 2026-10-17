@@ -108,10 +108,22 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 | Prompt management | Versioned prompt templates, not inline f-strings |
 | Budget pre-flight check | A call that would breach the cap is refused |
 
-**Exit criteria**
-- [ ] A deliberate over-budget run aborts cleanly with partial output
-- [ ] Cost per call appears in the database within one second
-- [ ] Switching a tier's model is a one-line config change
+**Exit criteria** (ticked 2026-10-17 on mocked calls; zero live model calls; `Architecture.md` §4.4)
+- [x] A deliberate over-budget run aborts cleanly with partial output —
+  `backend/tests/db/test_budgeted_run.py`: four steps, one call each, against the real ledger and
+  database. With a 2-call cap, and separately a $0.004 cost cap, the third call is refused
+  pre-flight (the mocked model is never asked), the run returns the first two steps' outputs and
+  names the two not run, flagged `budget_exhausted` (`Rules.md` C4). The `runs` row reads
+  `partial`, `budget_exhausted = true`, 2 calls; the refusal is in `llm_calls` with its reason.
+  Mechanism: `app/core/budgeted_run.py`, which the Phase 6 pipeline must use.
+- [x] Cost per call appears in the database within one second — 20 mocked calls, reply to
+  cost readable from a separate connection: min 9.5 ms, median 11.3 ms, max 19.4 ms (local
+  Postgres; asserted < 1 s per call in the merge-blocking suite). One real call: 24 ms. On the
+  live pooler, a transaction of `finish()`'s shape took 35–48 ms (read-only proxy, 20 runs).
+- [x] Switching a tier's model is a one-line config change — `scripts/demo_tier_switch.py`
+  (mocked provider): one edited line in a copy of `config/models.yaml`; the provider received
+  the new model string and `llm_calls` recorded it; the other tiers were unchanged. Also
+  `test_switching_a_tiers_model_is_a_one_line_config_change`, merge-blocking.
 
 ---
 
