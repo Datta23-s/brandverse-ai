@@ -661,6 +661,21 @@ Known remaining instances, not fixed in Phase 3 (scope, `Rules.md` §1.3):
 A new table or column is checked against this rule when it is added: if its value changes what
 the system trusts or reports, it is derived, or its setting is audited with a derived actor.
 
+**Experiment membership — designed 2026-10-17, approved, not built (Phase 10).** The evaluation
+reads built so far take a list of organisation ids and subtract the `is_practice` / `is_test`
+flags, then scan every run in those organisations: a stray manual run, a re-run or a debugging run
+inside an evaluation organisation would be counted, and the organisation list is a set of
+remembered ids. Membership becomes **opt-in**, so that forgetting a marker excludes data instead of
+including it:
+
+| Element | Design |
+|---|---|
+| `experiments` | One row per experiment: name, the frozen definition (arms, request set and its file hash, prompt versions lock hash, model registry hash, approver, attempt rule as pre-registered in `docs/evaluation-plan.md` §2), created by the harness role. **Immutable once any run references it**: a trigger refuses update and delete of an experiment row while a `runs` row points at it, so its definition cannot change mid-evaluation and runs cannot be silently re-pointed — the append-only reasoning of `approvals`. |
+| `runs.experiment_id`, `runs.arm`, `runs.request_ref`, `runs.attempt` | **Set together by the harness's own database role, or not at all** (a CHECK: all four null, or all four non-null). `arm` becomes nullable for this — null means "not an experiment run"; today it is `not null default 'proposed'`, which would label every stray run as Proposed. A run inserted by an API role gets all four forced to null by the 0016 trigger's successor, as status already is: a user can neither enter a run into the experiment nor relabel its arm, which would corrupt the comparison more quietly than an extra run. No API role can update them (no update policy on `runs`, 0005); the harness role cannot change them after insert either (trigger: the four are written once). |
+| Uniqueness | `unique (experiment_id, request_ref, arm, attempt)`; `attempt` starts at 1 and is assigned by the harness in start order. Re-runs are explicit rows, never replacements. Which attempt is the primary result is pre-registered: attempt 1, whatever its outcome (`docs/evaluation-plan.md` §2). Only attempt 1 may write back to memory. |
+| Second defence | A marked run in an `is_test` or `is_practice` organisation is refused (trigger), and every read keeps both exclusion filters. |
+| Reads | Every evaluation read (`backend/app/evaluation/`) selects by `experiment_id`, never by an organisation list; the structural test that every `*_SQL` read carries the exclusion filters is extended to require the experiment filter. |
+
 **Audit log.** Append-only **for the application roles only**: `update`, `delete` and `truncate`
 are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejects them.
 

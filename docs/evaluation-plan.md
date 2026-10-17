@@ -36,6 +36,47 @@ All arms share the same cost caps (`PRD.md` §9: 20 LLM calls, 20 searches, 2 re
 - Write-back in the Proposed arm requires a human approval (`Rules.md` T6). One approver
   handles every run in every arm, working from a written rubric (decision D3, §8).
 
+### Run selection and the attempt rule — pre-registered 2026-10-17, before any data exists
+
+Fixed on **2026-10-17**, when the live project held **0 runs** and no evaluation organisation
+existed (`Architecture.md` §11, "Live project — permanent footprint", read 15:24 UTC that day).
+Any later change is an amendment, recorded with its date and reason, and the rule as written here
+is still reported alongside it.
+
+**Membership is opt-in.** A run belongs to the evaluation only if it carries an experiment marker:
+`experiment_id`, `arm`, `request_ref` (R01–R30) and `attempt`, all set together by the harness's
+own database role or not at all (design: `Architecture.md` §9, "Experiment membership"). Every
+evaluation read selects by `experiment_id`; an unmarked run — a manual run, a demo, a debugging
+run, a run in an organisation created by accident — is excluded by default. The exclusion flags
+(`is_practice`, `is_test`) stay as a second defence. Forgetting a marker removes data; it can never
+add data.
+
+**Attempts.** Each request is run once per arm (above), and a capped run is recorded, not retried
+(§1). A further attempt for the same request–arm pair is made only when an attempt could not
+produce a result at all, and it never replaces the first. Every attempt has its own runs row and
+number (1, 2, …), assigned by the harness at insertion, in the order the attempts were started.
+
+**The rule.** *All attempts are reported* (`Rules.md` A2): every attempt, with its status
+(`completed`, `partial`, `failed`, `blocked`), appears in the raw per-run logs and in the run
+outcome tables. **The primary result for each request–arm pair is attempt 1, whatever its
+outcome.** A failed, partial or blocked attempt 1 is the primary result for that pair, counted as
+such in every metric that counts outcomes.
+
+*Reason.* Attempt 1 is the only choice that does not depend on how any attempt turned out. "Best
+attempt", "last attempt" and "first completed attempt" all select on the outcome, and an arm that
+fails more often would be flattered by every one of them: re-run until it works, report the run
+that worked. Fixing attempt 1 also makes the number of attempts irrelevant to the comparison,
+which removes any incentive to re-run.
+
+*Secondary, labelled as such.* A sensitivity table reports the same metrics on "first completed
+attempt" per pair, so a reader can see how much infrastructure failures moved the result. It is
+never presented as the primary result.
+
+*Memory interaction (Proposed arm).* Later requests for a brand read memory that earlier approved
+campaigns wrote (`Memory.md` §6). Only attempt 1 may write back: the harness disables write-back
+for every attempt above 1, so the memory each later request sees comes from primary attempts only,
+and a re-run cannot change the inputs of the requests after it.
+
 ## 3. Seed exclusion
 
 Seed memory (`Memory.md` §7.1) is excluded from every evaluation run by a filter in the harness

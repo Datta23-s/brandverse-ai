@@ -344,6 +344,7 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | Quality rubric scoring | ≥ 2 human raters on ≥ 30 campaigns, Cohen's κ reported |
 | Weight tuning | `R` and `M` weights tuned; defaults and tuned values both reported |
 | Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
+| **Opt-in experiment membership** | Built as designed in `Architecture.md` §9, "Experiment membership" (approved 2026-10-17): `experiments` immutable once referenced; `experiment_id`, `arm`, `request_ref`, `attempt` set together by the harness role or forced null; every evaluation read selects by experiment. Attempt rule pre-registered 2026-10-17 in `docs/evaluation-plan.md` §2 — attempt 1 is the primary result |
 | **Hash chain on `approvals` and `audit_log`** | Built and verified **before calibration begins** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on — detection, not prevention |
 
 **Prerequisite (human):** the regulated sector's registry rules are entered and applied — see
