@@ -180,7 +180,9 @@ function StreamProblem({ error, onRetry }: { error: Error; onRetry: () => void }
     <div role="alert" className="mb-6 rounded-bv-md border border-bv-danger/50 bg-bv-danger/5 p-4">
       <p className="font-medium text-bv-danger">
         {error instanceof RunStreamError && error.code === "not_found"
-          ? "This run does not exist, or its events have expired."
+          ? "This run does not exist, or you are not a member of its organisation."
+          : error instanceof RunStreamError && error.code === "unauthenticated"
+            ? "Sign in to watch this run."
           : error instanceof RunStreamError && error.code === "forbidden"
             ? "You are not allowed to watch this run."
             : "Lost the connection to the run."}

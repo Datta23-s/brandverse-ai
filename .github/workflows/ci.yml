@@ -72,9 +72,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      redis:
+        # The authenticated API tests (tests/db/test_api.py) need Redis as well as Postgres:
+        # the run stream lives in Redis, the org check in Postgres.
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       REQUIRE_DB_TESTS: "1"
+      REDIS_TEST_URL: redis://127.0.0.1:6379/15
+      REQUIRE_REDIS_TESTS: "1"
     defaults:
       run:
         working-directory: backend
@@ -94,8 +107,13 @@ jobs:
         run: uv run python scripts/measure_memory_storage.py --rows 10000 --chars 400
 
   frontend:
-    name: Frontend (lint, type, test, build)
+    name: Frontend (lint, type, test, build, bundle scan)
     runs-on: ubuntu-24.04
+    env:
+      # Public values only. The bundle scan needs a publishable key in the build (its positive
+      # control); this one is a placeholder, valid for nothing.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9999
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_only
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -111,13 +129,29 @@ jobs:
         run: npm run test -w frontend
       - name: Build
         run: npm run build -w frontend
+      - name: No secret in the client bundle (Rules.md P2)
+        run: npm run test:bundle -w frontend
 
   e2e:
-    # Phases.md Phase 1 exit criterion, checked on every push: the fake pipeline animates in a
-    # real browser, against the real API, ARQ worker and Redis (no database: fake runs need none).
+    # Phases.md Phase 1 exit criteria, checked on every push in a real browser against the real
+    # API, ARQ worker, Redis and Postgres (the migrations). Supabase Auth is played by
+    # backend/scripts/e2e_fake_auth.py: CI holds no live secrets (Rules.md §6). The API verifies
+    # its ES256 tokens with the production verifier, unchanged. The same specs run against the
+    # live project on the laptop (E2E_AUTH_MODE=supabase, frontend/e2e/support.ts).
     name: End to end (Playwright, live stack)
     runs-on: ubuntu-24.04
     services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
       redis:
         image: redis:7.4-alpine
         ports:
@@ -127,6 +161,16 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+    env:
+      SUPABASE_URL: http://127.0.0.1:9999
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9999
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_e2e_only
+      E2E_AUTH_MODE: stub
+      # The stand-in's fixed users (backend/scripts/e2e_fake_auth.py); not real credentials.
+      E2E_A_EMAIL: e2e-a@ci.example.com
+      E2E_A_PASSWORD: ci-password-a
+      E2E_B_EMAIL: e2e-b@ci.example.com
+      E2E_B_PASSWORD: ci-password-b
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.3.0
@@ -143,19 +187,29 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npm exec -w frontend -- playwright install --with-deps chromium
-      - name: Build frontend
-        run: npm run build -w frontend
-      - name: Start API and worker
+      - name: Database with the real migrations
         working-directory: backend
         run: |
+          url=$(uv run python -m scripts.e2e_prepare_db postgresql://postgres:postgres@127.0.0.1:5432/postgres)
+          echo "DATABASE_URL=$url" >> "$GITHUB_ENV"
+      - name: Start Auth stand-in, API and worker
+        working-directory: backend
+        run: |
+          nohup uv run python -m scripts.e2e_fake_auth "$DATABASE_URL" 9999 > "$RUNNER_TEMP/auth.log" 2>&1 &
           nohup uv run python -m app.api > "$RUNNER_TEMP/api.log" 2>&1 &
           nohup uv run python -m app.workers > "$RUNNER_TEMP/worker.log" 2>&1 &
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8000/health && exit 0; sleep 1; done
-          cat "$RUNNER_TEMP/api.log"; exit 1
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8000/health/ready && curl -sf http://127.0.0.1:9999/auth/v1/.well-known/jwks.json > /dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/auth.log"; exit 1
+      - name: Build frontend
+        run: npm run build -w frontend
       - name: Playwright
         run: npm run test:e2e -w frontend
       - name: Service logs
         if: always()
         run: |
-          echo "--- api"; cat "$RUNNER_TEMP/api.log" || true
+          echo "--- auth stand-in"; tail -n 50 "$RUNNER_TEMP/auth.log" || true
+          echo "--- api"; tail -n 100 "$RUNNER_TEMP/api.log" || true
           echo "--- worker"; tail -n 50 "$RUNNER_TEMP/worker.log" || true

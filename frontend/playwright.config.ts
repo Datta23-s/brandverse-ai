@@ -8,6 +8,8 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  // One worker: the specs share fixed users (and, locally, the live project).
+  workers: 1,
   retries: 0,
   timeout: 60_000,
   reporter: [["list"]],

@@ -7,7 +7,7 @@ def test_committed_contracts_are_current() -> None:
     assert CONTRACTS_PATH.exists(), "run `uv run python -m scripts.export_contracts`"
     committed = CONTRACTS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
     assert committed == render_contracts(), (
-        "frontend/src/contracts/run-contracts.json is stale: "
+        "frontend/src/contracts/api-contracts.json is stale: "
         "run `uv run python -m scripts.export_contracts` from backend/"
     )
 

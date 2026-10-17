@@ -12,7 +12,7 @@ import {
   type FakeRunRequest,
   type ResearchDepth,
 } from "@/contracts/runs";
-import { startFakeRun } from "@/lib/api";
+import { api } from "@/lib/api";
 
 // DepthBadge colours carry their Design.md §8 meaning: D0 aqua (memory), D1 violet, D2 amber.
 const DEPTHS: { value: ResearchDepth; label: string; explain: string; dot: string }[] = [
@@ -25,7 +25,7 @@ const DEPTHS: { value: ResearchDepth; label: string; explain: string; dot: strin
  * The shared contract schema, with one form-only conversion: a <select> holds strings, and
  * "No failure" is "". The bounds still come from the contract (fakeRunRequestSchema).
  */
-const formSchema = fakeRunRequestSchema.extend({
+const formSchema = fakeRunRequestSchema.omit({ org_id: true }).extend({
   fail_at_step: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
     fakeRunRequestSchema.shape.fail_at_step,
@@ -35,23 +35,24 @@ type FormInput = z.input<typeof formSchema>;
 
 const DEFAULTS: FormInput = { depth: "D1", step_delay_ms: 400, fail_at_step: "" };
 
-export function StartFakeRunForm() {
+/** Starts a fake run in `orgId` (the selected organisation; never typed by the user). */
+export function StartFakeRunForm({ orgId }: { orgId: string }) {
   const router = useRouter();
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormInput, unknown, FakeRunRequest>({
+  } = useForm<FormInput, unknown, Omit<FakeRunRequest, "org_id">>({
     resolver: zodResolver(formSchema),
     defaultValues: DEFAULTS,
   });
   const start = useMutation({
-    mutationFn: startFakeRun,
+    mutationFn: (values: Omit<FakeRunRequest, "org_id">) => api.startFakeRun({ org_id: orgId, ...values }),
     onSuccess: (accepted) => router.push(`/runs/${accepted.run_id}`),
   });
 
   return (
-    <form onSubmit={handleSubmit((values) => start.mutate(values))} className="glass grid gap-6 p-5 sm:p-6" noValidate>
+    <form onSubmit={handleSubmit((values) => start.mutate(values))} className="grid gap-6" noValidate>
       <fieldset>
         <legend className="mb-3 text-sm font-medium tracking-wide text-bv-muted">Research depth to simulate</legend>
         <div className="grid gap-2 sm:grid-cols-3">

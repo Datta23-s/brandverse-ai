@@ -7,6 +7,7 @@ import { RunEvent } from "@/contracts/runs";
 
 import { API_URL } from "./config";
 import { ConnectionState, streamRunEvents } from "./run-stream";
+import { accessToken } from "./supabase";
 import { RunView, initialRunView, reduceRunView } from "./run-view";
 
 /**
@@ -20,7 +21,12 @@ export function useRunStream(runId: string) {
     queryKey: ["run-stream", runId],
     queryFn: streamedQuery<RunEvent, RunView>({
       streamFn: ({ signal }) =>
-        streamRunEvents(runId, { apiUrl: API_URL, signal, onConnection: setConnection }),
+        streamRunEvents(runId, {
+          apiUrl: API_URL,
+          signal,
+          onConnection: setConnection,
+          authorization: accessToken,
+        }),
       reducer: reduceRunView,
       initialValue: initialRunView,
     }),

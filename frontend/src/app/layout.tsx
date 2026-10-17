@@ -3,6 +3,8 @@ import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AccountMenu } from "@/components/auth/AccountMenu";
+
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -32,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh antialiased">
+        <Providers>
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-bv-sm focus:bg-bv-surface focus:px-4 focus:py-2"
@@ -43,12 +46,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/" className="font-display text-2xl tracking-tight text-bv-text">
               BrandverseAI
             </Link>
-            <span className="text-sm font-medium tracking-wide text-bv-muted">
-              Phase 1 · local
-            </span>
+            <AccountMenu />
           </nav>
         </header>
-        <Providers>
           <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
             {children}
           </main>

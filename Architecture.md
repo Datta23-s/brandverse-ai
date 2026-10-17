@@ -1014,6 +1014,100 @@ alter table memory_items
   drop constraint memory_items_brand_id_org_id_fkey,
   add constraint memory_items_brand_id_org_id_fkey
     foreign key (brand_id, org_id) references brands (id, org_id);
+
+-- ═══ supabase/migrations/0012_create_organisation.sql ═══
+-- 0012: a signed-in user creates an organisation and becomes its owner.
+--
+-- Before this, a new user had no way to their first organisation: `organisations` has no insert
+-- policy, and adding a member needs an existing owner. app.create_organisation is that way.
+--
+-- 1. NAME ONLY. The owner is the caller, derived inside from the request's JWT claims. A user-id
+--    parameter would let any signed-in caller mint an owner membership for someone else.
+-- 2. search_path pinned, as on every app.* function.
+-- 3. Security definer with the minimum rights needed. The function is owned by app_org_creator,
+--    a NOLOGIN role holding INSERT on organisations and org_members and nothing else: no SELECT,
+--    UPDATE, DELETE or TRUNCATE anywhere, no BYPASSRLS. Row-level security still binds it; its
+--    two insert policies admit only the rows this function writes. No API role is a member of it.
+--
+-- Why the caller is not read with auth.uid(): Supabase's postgres role cannot grant USAGE on
+-- schema auth (checked 2026-10-16: no grant option), so app_org_creator cannot call it. The
+-- function reads the same claims with the same expression instead, and this migration refuses to
+-- apply on a platform whose auth.uid() differs from that expression; a database test asserts the
+-- two agree for every claim shape (backend/tests/db/test_create_organisation.py).
+--
+-- Accepted limitation (2026-10-16): nothing limits how many organisations one user creates.
+-- Down: drop function app.create_organisation(text);
+--   drop policy org_creator_insert on organisations; drop policy members_creator_insert on org_members;
+--   revoke all on organisations, org_members from app_org_creator;
+--   revoke usage on schema public, app from app_org_creator; drop role app_org_creator;
+
+-- The expression below must be auth.uid()'s, exactly (whitespace aside).
+do $$
+begin
+  if pg_catalog.regexp_replace(
+       (select p.prosrc from pg_catalog.pg_proc p where p.oid = 'auth.uid()'::regprocedure),
+       '\s+', '', 'g')
+     <> 'selectcoalesce(nullif(current_setting(''request.jwt.claim.sub'',true),''''),(nullif(current_setting(''request.jwt.claims'',true),'''')::jsonb->>''sub''))::uuid'
+  then
+    raise exception '0012: auth.uid() no longer matches the claim expression app.create_organisation mirrors; review before applying';
+  end if;
+end $$;
+
+-- Roles are cluster-wide; create once (a re-created test database meets an existing role).
+do $$
+begin
+  if not exists (select 1 from pg_catalog.pg_roles where rolname = 'app_org_creator') then
+    create role app_org_creator nologin noinherit nosuperuser nocreatedb nocreaterole nobypassrls;
+  end if;
+end $$;
+
+grant usage on schema public, app to app_org_creator;
+grant insert on organisations, org_members to app_org_creator;
+
+create policy org_creator_insert on organisations for insert to app_org_creator
+  with check (not is_practice);
+create policy members_creator_insert on org_members for insert to app_org_creator
+  with check (role = 'owner' and granted_by = user_id and revoked_at is null);
+
+create function app.create_organisation(p_name text) returns uuid
+language plpgsql volatile security definer set search_path = '' as $$
+declare
+  -- auth.uid(), expression for expression (see the header and the check above).
+  v_owner uuid := coalesce(
+    nullif(pg_catalog.current_setting('request.jwt.claim.sub', true), ''),
+    (nullif(pg_catalog.current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+  )::uuid;
+  v_name text := pg_catalog.btrim(p_name);
+  v_org uuid := pg_catalog.gen_random_uuid();
+begin
+  if v_owner is null then
+    raise exception 'create_organisation: not signed in' using errcode = '42501';
+  end if;
+  if v_name is null or pg_catalog.char_length(v_name) not between 1 and 120 then
+    raise exception 'create_organisation: name must be 1 to 120 characters' using errcode = '22023';
+  end if;
+  insert into public.organisations (id, name) values (v_org, v_name);
+  insert into public.org_members (org_id, user_id, role, granted_by)
+    values (v_org, v_owner, 'owner', v_owner);
+  return v_org;
+end;
+$$;
+
+-- Callable by signed-in users only (functions are executable by PUBLIC by default, and Supabase
+-- grants the API roles more). Settled BEFORE the owner changes: afterwards the migration role is
+-- no longer the owner, and its REVOKE would silently match nothing (found in a rolled-back dry
+-- run on the project, 2026-10-16; a superuser, as in CI, does not show it).
+revoke all on function app.create_organisation(text) from public, anon, service_role;
+grant execute on function app.create_organisation(text) to authenticated;
+
+-- Hand the function to its minimal owner. Changing owner needs SET ROLE on the new owner and
+-- CREATE on the schema; both are granted for the change only. (On PostgreSQL 16+ the role's
+-- creator keeps the automatic ADMIN membership; postgres already holds every right the role has.)
+grant app_org_creator to current_user;
+grant create on schema app to app_org_creator;
+alter function app.create_organisation(text) owner to app_org_creator;
+revoke create on schema app from app_org_creator;
+revoke app_org_creator from current_user;
 ```
 
 ---
@@ -1024,13 +1118,15 @@ alter table memory_items
 |---|---|---|
 | `POST` | `/api/v1/runs` | Start a campaign run → `202` + `run_id` |
 | `GET` | `/api/v1/runs/{id}` | Status, current step, budget consumed |
-| `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI. Until authentication lands, fake runs only (`403` otherwise; §11, unauthenticated stream guard) |
+| `GET` | `/api/v1/runs/{id}/stream` | SSE step-by-step progress for the live pipeline UI. Signed-in members of the run's organisation only (`404` otherwise; §11, Authentication) |
 | `POST` | `/api/v1/runs/fake` | Phase 1: start a fake 15-step run (no LLM, no pipeline) → `202` + `run_id`; never mounted in production |
 | `GET` | `/health`, `/health/ready` | Liveness (no dependencies); readiness (Redis and database, `503` if either fails) |
 | `POST` | `/api/v1/runs/{id}/approve` | Resume the interrupted graph |
 | `POST` | `/api/v1/runs/{id}/revise` | Request revision (bounded by `max_revision_rounds`) |
 | `GET` | `/api/v1/campaigns/{id}` | Final package with evidence |
-| `CRUD` | `/api/v1/brands`, `/products`, `/products/{id}/claims` | Setup |
+| `GET` | `/api/v1/me` | The signed-in caller and their organisations, with roles |
+| `POST` | `/api/v1/organisations` | Create an organisation; the caller becomes owner (`app.create_organisation`, 0012) |
+| `CRUD` | `/api/v1/brands`, `/products`, `/products/{id}/claims` | Setup. Built in Phase 1: list, create and delete brands and products, each with an explicit `org_id`; claims later |
 | `GET` | `/api/v1/memory/search` | Debug and demo view of retrieval with `M` breakdown |
 | `POST` | `/api/v1/experiments/run` | Execute an evaluation arm |
 | `GET` | `/api/v1/experiments/report` | ARR, SRR, CR, LR |
@@ -1224,7 +1320,19 @@ uv run python -m app.api                # FastAPI on 127.0.0.1:8000
 uv run python -m app.workers            # ARQ worker
 uv run python -m scripts.enqueue_ping   # smoke test: a trivial job enqueues and completes
 npm run dev -w frontend                 # from the repo root: Next.js on 127.0.0.1:3000
+uv run python -m scripts.ensure_e2e_users   # once: the two fixed E2E users + orgs (B2, below)
+npm run test:e2e -w frontend            # Playwright against the live project (E2E_AUTH_MODE=supabase)
 ```
+
+- **End-to-end tests, two environments, same specs (B2, 2026-10-17).** On the laptop they run
+  against the live Supabase project as two fixed, confirmed users (`.env.e2e`, git-ignored;
+  created once with the secret key by `scripts/ensure_e2e_users.py`). Permanent footprint: 2
+  users and 2 organisations; each run deletes the brand and product it creates. In CI, which
+  holds no live secrets, `scripts/e2e_fake_auth.py` plays Supabase Auth (ES256 tokens, a JWKS,
+  sign-in, sign-up pending confirmation) against a database built from the migrations
+  (`scripts/e2e_prepare_db.py`); the API verifies those tokens with the production verifier,
+  unchanged. The frontend reads only `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (`frontend/.env.example`).
 
 - **Frontend (Phase 1 chunk B1, 2026-10-16).** Next.js 15 App Router, run locally against the
   local API (Phase 1 amended: no public URL until Phase 11). The run view (`/runs/{id}`) streams
@@ -1274,16 +1382,44 @@ npm run dev -w frontend                 # from the repo root: Next.js on 127.0.0
   (`fake-run:{run_id}`) inside the job's task, before ARQ logs the job's start. Lines ARQ logs
   before that hook (job expired, undecodable, max retries exceeded) have no `run_id`.
 
-**Unauthenticated stream guard (2026-10-16).** `GET /api/v1/runs/{id}/stream` has no
-authentication and no organisation check yet. Until it does, it **refuses every run that is not
-a fake run** with `403`: a run streams only if its first event is `run.queued` with mode `fake`,
-and anything else — a real (`pipeline`) run, a stream opened by any other event, or one whose
-first event was trimmed — is refused (fail closed, before any 204/resume logic, so a refusal
-does not even confirm whether the run finished). Run IDs being random UUIDs and the API
-listening on 127.0.0.1 is not access control. **The guard is removed only in the change that
-adds authentication and the org check (chunk B)**, together with its tests
-(`test_real_run_is_refused_while_stream_is_unauthenticated`,
-`test_stream_not_opened_by_a_fake_run_is_refused`), never on its own.
+**Authentication (Phase 1 B2, 2026-10-16/17).** The unauthenticated stream guard of chunk A
+(fake runs only, `403` otherwise) was removed in the same change that added authentication and
+the organisation check, together with its two tests, as this section required.
+
+- **Every endpoint except `/health` needs a signed-in caller** (`401` with
+  `WWW-Authenticate: Bearer` otherwise). The token is a Supabase access token, verified **locally**:
+  ES256 only (the algorithm is pinned before any key lookup, so `none` and HS256 are refused),
+  against the project's public key set (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), with
+  `exp`, `iat`, `sub`, `aud = authenticated`, `iss = {SUPABASE_URL}/auth/v1` required and
+  `role = authenticated`. The API never calls Supabase Auth per request.
+- **Key rotation.** The key set is cached (re-read after `jwks_ttl_s`, 1 hour). A token whose
+  `kid` the cache does not know triggers **one** refetch before it is rejected, so a rotation
+  does not break every request until a restart. That refetch is rate-limited
+  (`jwks_min_refetch_interval_s`, 30 s): a flood of tokens with invented `kid`s costs Supabase at
+  most one request per interval. A known `kid` with a bad signature is rejected with no refetch.
+  If Supabase is unreachable, the cached keys keep serving.
+- **Known limitation — the revocation window is 3,600 seconds.** Local verification cannot see a
+  revoked session: after a user signs out (or is removed), their access token stays valid until
+  it expires. The project's access-token lifetime, measured 2026-10-17 from real tokens issued to
+  the E2E users (`exp − iat` = `expires_in` = 3600 s), is that window. Asking Supabase per request
+  would close it at the cost of a round trip per call; the API does not, by decision
+  (2026-10-16). An open SSE stream is authorised when it opens and runs to the run's end.
+- **The organisation check.** Tenant reads and writes run **as the caller**: in one transaction,
+  `role` is set to `authenticated` and `request.jwt.claims` to the verified claims, exactly as
+  PostgREST does, so row-level security decides; every query also names its `org_id`
+  (`Rules.md` P3). A run's organisation is recorded in its first event (`run.queued.org_id`,
+  written by the API; fake runs never touch the `runs` table, whose rows can never be deleted).
+  Streaming a run needs membership of that organisation, resolved by migration 0003's
+  `app.member_org_ids()` under the caller's identity; starting one needs owner or editor
+  (`app.has_role`), as `runs_insert` requires. **A non-member gets the same `404` as for a run
+  that does not exist**, before any resume logic, so a run's existence is not disclosed across
+  organisations. Tests: `backend/tests/db/test_api.py` (merge-blocking with the database suite).
+- **Creating an organisation** goes through `app.create_organisation(name)` (migration 0012): the
+  caller becomes its owner; it takes the name only. **Accepted limitation (2026-10-16): nothing
+  limits how many organisations one user creates** — a thesis project, not a public service.
+- **Secrets.** The browser holds only the publishable key and the user's own access token. The
+  secret key is read only by local scripts (`backend/scripts/ensure_e2e_users.py`); a frontend
+  test fails if it, or any `sb_secret_` value, appears in the built client bundle (`Rules.md` P2).
 
 ### Storage per `memory_items` row
 

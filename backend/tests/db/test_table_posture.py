@@ -77,3 +77,91 @@ def test_table_posture(tx: Tx, table: str, role: str) -> None:
     assert actual == EXPECTED[table][role], (
         f"{table} as {role}: (delete, truncate) is {actual}, stated {EXPECTED[table][role]}"
     )
+
+
+# ── Functions in schema app (migration 0012 on) ──────────────────────────────────────────────
+#
+# A security definer function acts with its owner's rights, so its posture is part of the
+# tables' posture. Stated by hand like the tables: a new app.* function fails
+# `test_every_app_function_has_a_stated_posture` until it is added here deliberately.
+# owner "migration" = the role that applied the migrations (postgres on Supabase).
+
+ALL_API = frozenset({"anon", "authenticated", "service_role"})
+
+# function -> (security definer, owner, roles that may EXECUTE)
+EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
+    # Trigger functions: executable by PUBLIC (the default), harmless — a trigger function
+    # cannot be called directly.
+    "approvals_active_approver": (False, "migration", ALL_API),
+    "approvals_practice_is_calibration": (False, "migration", ALL_API),
+    "audit_log_append_only": (False, "migration", ALL_API),
+    "campaigns_active_approver": (False, "migration", ALL_API),
+    "sector_constraints_versioned": (False, "migration", ALL_API),
+    # Read-only role checks every RLS policy calls (0003).
+    "has_role": (True, "migration", ALL_API),
+    "member_org_ids": (True, "migration", ALL_API),
+    # 0012: signed-in users only; owned by the minimal role below.
+    "create_organisation": (True, "app_org_creator", frozenset({"authenticated"})),
+}
+
+
+def test_every_app_function_has_a_stated_posture(tx: Tx) -> None:
+    functions = {
+        r[0]
+        for r in tx.execute(
+            "select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+            "where n.nspname = 'app'"
+        )
+    }
+    missing = sorted(functions - EXPECTED_FUNCTIONS.keys())
+    stale = sorted(EXPECTED_FUNCTIONS.keys() - functions)
+    assert not missing, f"app functions with no stated posture: {missing}"
+    assert not stale, f"posture stated for app functions that do not exist: {stale}"
+
+
+@pytest.mark.parametrize("function", sorted(EXPECTED_FUNCTIONS))
+def test_app_function_posture(tx: Tx, function: str) -> None:
+    definer, owner, executors = EXPECTED_FUNCTIONS[function]
+    migration_role = tx.execute("select current_user")[0][0]
+    rows = tx.execute(
+        "select p.prosecdef, pg_get_userbyid(p.proowner), p.proconfig, p.oid "
+        "from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+        "where n.nspname = 'app' and p.proname = %s",
+        (function,),
+    )
+    assert len(rows) == 1, f"app.{function}: expected one function, found {len(rows)}"
+    secdef, actual_owner, config, oid = rows[0]
+    assert secdef is definer, f"app.{function}: security definer is {secdef}"
+    assert actual_owner == (migration_role if owner == "migration" else owner)
+    assert config == ['search_path=""'], f"app.{function}: search_path not pinned: {config}"
+    can_execute = {
+        role
+        for role in sorted(ALL_API)
+        if tx.execute("select has_function_privilege(%s, %s::oid, 'EXECUTE')", (role, oid))[0][0]
+    }
+    assert can_execute == executors, f"app.{function}: executable by {sorted(can_execute)}"
+
+
+def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx: Tx) -> None:
+    """app_org_creator's rights ARE app.create_organisation's: insert two kinds of row, delete,
+    truncate, update or read nothing, and no way past row-level security or into other roles."""
+    attrs = tx.execute(
+        "select rolsuper, rolcanlogin, rolbypassrls, rolcreaterole, rolcreatedb, rolinherit "
+        "from pg_roles where rolname = 'app_org_creator'"
+    )
+    assert attrs == [(False, False, False, False, False, False)]
+    held = tx.execute(
+        "select c.relname, p.privilege_type "
+        "from pg_class c join pg_namespace n on n.oid = c.relnamespace, "
+        "lateral (select unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE',"
+        "'REFERENCES','TRIGGER']) as privilege_type) p "
+        "where n.nspname in ('public', 'auth', 'app') and c.relkind in ('r', 'p', 'v', 'm') "
+        "and has_table_privilege('app_org_creator', c.oid, p.privilege_type) "
+        "order by 1, 2"
+    )
+    assert held == [("org_members", "INSERT"), ("organisations", "INSERT")]
+    memberships = tx.execute(
+        "select b.rolname from pg_auth_members m join pg_roles b on b.oid = m.roleid "
+        "join pg_roles r on r.oid = m.member where r.rolname = 'app_org_creator'"
+    )
+    assert memberships == []

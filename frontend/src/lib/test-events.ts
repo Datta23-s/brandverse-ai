@@ -12,7 +12,15 @@ function ts(advanceMs = 100): string {
   return new Date(clock).toISOString();
 }
 
-export const queued = (): RunEvent => ({ type: "run.queued", run_id: RUN_ID, ts: ts(0), mode: "fake", total_steps: 15 });
+export const ORG_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+export const queued = (): RunEvent => ({
+  type: "run.queued",
+  run_id: RUN_ID,
+  ts: ts(0),
+  mode: "fake",
+  org_id: ORG_ID,
+  total_steps: 15,
+});
 export const started = (): RunEvent => ({ type: "run.started", run_id: RUN_ID, ts: ts(), total_steps: 15 });
 export const completed = (): RunEvent => ({ type: "run.completed", run_id: RUN_ID, ts: ts() });
 export const failed = (step: number | null, error = "boom"): RunEvent => ({

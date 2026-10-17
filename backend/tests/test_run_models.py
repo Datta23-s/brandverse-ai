@@ -29,7 +29,7 @@ def test_step_number_in_range(step: int) -> None:
 @pytest.mark.parametrize(
     "event",
     [
-        RunQueued(run_id=uuid4(), mode="fake"),
+        RunQueued(run_id=uuid4(), mode="fake", org_id=uuid4()),
         StepEvent(run_id=uuid4(), step=6, name="research", status=StepStatus.SKIPPED, detail="d"),
         RunCompleted(run_id=uuid4()),
     ],

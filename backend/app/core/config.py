@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, RedisDsn, SecretStr, field_validator, model_validator
+from pydantic import Field, HttpUrl, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/core/config.py -> repository root, where `.env` lives (Architecture.md §11).
@@ -74,6 +74,23 @@ class Settings(BaseSettings):
 
     # The fake 15-step run (Phases.md Phase 1). Never mounted in production.
     fake_runs_enabled: bool = True
+
+    # Supabase Auth. Access tokens are ES256 JWTs verified locally against the project's JWKS
+    # (Architecture.md §11, "Authentication"); the API never asks Supabase per request.
+    supabase_url: HttpUrl | None = None
+    jwt_audience: str = "authenticated"
+    # Re-read the key set at least this often, to pick up a rotation proactively.
+    jwks_ttl_s: int = Field(default=3600, ge=60)
+    # An unknown `kid` triggers one refetch, at most this often (a flood of bad tokens must not
+    # hammer Supabase).
+    jwks_min_refetch_interval_s: float = Field(default=30.0, ge=1.0)
+    # Clock skew tolerated on exp/iat.
+    jwt_leeway_s: int = Field(default=30, ge=0, le=300)
+    # Safe in a browser (RLS applies); scripts use it to sign in like the frontend does.
+    supabase_publishable_key: str | None = None
+    # Backend-only, bypasses RLS: used by local scripts (e2e test users), never by a request
+    # path and never in frontend code (Rules.md P2).
+    supabase_secret_key: SecretStr | None = None
 
     # Browser origins allowed to call the API: the local Next.js app (Phases.md Phase 1, amended).
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]

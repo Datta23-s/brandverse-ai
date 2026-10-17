@@ -86,7 +86,10 @@ def test_migrations_read_no_org_claim() -> None:
 def test_auth_uid_calls_are_statement_scoped() -> None:
     # Written as a scalar subquery, (select auth.uid()) and (select app.member_org_ids()) are
     # evaluated once per statement; a bare call is evaluated once per row (Architecture.md §9).
-    code = " ".join(split_statements(_migrations_sql()))
+    # Calls, not mentions: comments (kept verbatim inside $$ function bodies) and string literals
+    # (0012 checks auth.uid()'s definition through 'auth.uid()'::regprocedure) are not calls.
+    sql = re.sub(r"--[^\n]*", "", _migrations_sql())
+    code = re.sub(r"'(?:[^']|'')*'", "''", " ".join(split_statements(sql)))
     for call in ("auth.uid()", "app.member_org_ids()"):
         n = code.count(call) - code.count(f"function {call}")  # calls, not the definition
         assert n > 0, f"{call} not used; update this test"

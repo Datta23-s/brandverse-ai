@@ -9,10 +9,12 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:bundle": "vitest run --config vitest.bundle.config.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "5.9.1",
+    "@supabase/supabase-js": "2.118.0",
     "@tanstack/react-query": "5.104.3",
     "next": "15.5.28",
     "react": "19.1.10",

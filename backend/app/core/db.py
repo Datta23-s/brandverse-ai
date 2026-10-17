@@ -7,11 +7,15 @@ budget is validated there), `min_size = 0` so an idle process holds no server co
 agents share their process's pool rather than opening their own.
 """
 
+import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
+from app.core.auth import Identity
 from app.core.config import Settings
 
 PoolRole = Literal["api", "worker"]
@@ -40,6 +44,26 @@ def create_db_pool(settings: Settings, role: PoolRole) -> AsyncConnectionPool[As
         check=AsyncConnectionPool.check_connection,
         kwargs={"application_name": f"brandverse-{role}"},
     )
+
+
+@asynccontextmanager
+async def as_user(
+    pool: AsyncConnectionPool[AsyncConnection], identity: Identity
+) -> AsyncIterator[AsyncConnection]:
+    """A transaction acting as the signed-in user, exactly as PostgREST does it.
+
+    `role` becomes `authenticated` and `request.jwt.claims` the verified claims, both
+    transaction-local, so row-level security and the 0003 membership functions decide what the
+    caller may see and do — the API's own role never reads tenant data on a user's behalf.
+    Both settings end with the transaction; the pooled connection goes back clean.
+    """
+    async with pool.connection() as conn, conn.transaction():
+        await conn.execute(
+            "select set_config('role', 'authenticated', true), "
+            "set_config('request.jwt.claims', %s, true)",
+            (json.dumps(dict(identity.claims), default=str),),
+        )
+        yield conn
 
 
 async def ping_database(pool: AsyncConnectionPool[AsyncConnection]) -> None:

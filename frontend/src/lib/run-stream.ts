@@ -10,7 +10,10 @@
  *   after the server's `retry:` delay (doubling on consecutive failures, capped), resuming with
  *   `Last-Event-ID` so no event is lost or repeated;
  * - `204 No Content` means the server has nothing more for this client: the stream ends quietly;
- * - `404` and `403` end it with an error — reconnecting cannot help;
+ * - `401`, `404` and `403` end it with an error — reconnecting cannot help (a `404` is also
+ *   what a non-member of the run's organisation gets, by design);
+ * - every connection attempt asks `authorization()` for the access token afresh, so a reconnect
+ *   after the token was refreshed never sends a stale one;
  * - the run's final event (`run.completed` / `run.failed`) ends it.
  */
 import { RunEvent, TERMINAL_EVENT_TYPES, runEventSchema } from "@/contracts/runs";
@@ -23,7 +26,7 @@ export type ConnectionState =
   | { kind: "reconnecting"; attempt: number; delayMs: number }
   | { kind: "ended" };
 
-export type RunStreamErrorCode = "not_found" | "forbidden" | "unreachable" | "protocol";
+export type RunStreamErrorCode = "unauthenticated" | "not_found" | "forbidden" | "unreachable" | "protocol";
 
 export class RunStreamError extends Error {
   constructor(
@@ -39,6 +42,8 @@ export interface RunStreamOptions {
   apiUrl: string;
   signal: AbortSignal;
   onConnection?: (state: ConnectionState) => void;
+  /** Returns the caller's access token; called before every connection attempt. */
+  authorization?: () => Promise<string>;
   /** Consecutive failed attempts (no event received) before giving up. */
   maxConsecutiveFailures?: number;
   /** Reconnect delay until the server sends `retry:`. */
@@ -75,6 +80,7 @@ export async function* streamRunEvents(
     apiUrl,
     signal,
     onConnection,
+    authorization,
     maxConsecutiveFailures = 8,
     initialRetryMs = 2000,
     fetchFn = fetch,
@@ -99,6 +105,13 @@ export async function* streamRunEvents(
   while (!signal.aborted) {
     const headers: Record<string, string> = { Accept: "text/event-stream" };
     if (lastEventId !== undefined) headers["Last-Event-ID"] = lastEventId;
+    if (authorization !== undefined) {
+      try {
+        headers.Authorization = `Bearer ${await authorization()}`;
+      } catch {
+        throw new RunStreamError("unauthenticated", "Sign in to watch this run.");
+      }
+    }
 
     let response: Response;
     try {
@@ -112,6 +125,9 @@ export async function* streamRunEvents(
     if (response.status === 204) {
       onConnection?.({ kind: "ended" });
       return;
+    }
+    if (response.status === 401) {
+      throw new RunStreamError("unauthenticated", "Sign in to watch this run.");
     }
     if (response.status === 404) {
       throw new RunStreamError("not_found", "No such run, or its events have expired.");

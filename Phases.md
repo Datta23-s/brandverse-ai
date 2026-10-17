@@ -65,9 +65,19 @@ Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4
 | **SSE run-progress stream** | A fake 15-step run renders live in the UI |
 
 **Exit criteria**
-- [ ] Sign up → create brand → create product works end to end
-- [ ] Cross-tenant access test written and green
-- [ ] The fake pipeline animates in the browser
+- [ ] Sign up → create brand → create product works end to end — *not yet ticked (2026-10-17).*
+  Demonstrated on the live Supabase project by `frontend/e2e/auth-and-setup.spec.ts`: sign in →
+  create the organisation (`app.create_organisation`, 0012) → create a brand → create a product →
+  reload → delete, as fixed E2E users; and the sign-up form up to "check your email" against the
+  Auth stand-in in CI. **Missing:** one sign-up on the live project completed by clicking the
+  real confirmation email (email confirmation is on; Supabase's default mailer only delivers to
+  the project team's addresses). Tick after that is done once.
+- [x] Cross-tenant access test written and green — `backend/tests/db/test_rls.py` (every tenant
+  table) and `backend/tests/db/test_api.py` (a member of org A cannot stream, read or write
+  org B's runs, brands or products; signed-out requests are refused), merge-blocking in CI.
+- [x] The fake pipeline animates in the browser — `frontend/e2e/run-view.spec.ts` samples the
+  stepper through a live run (each step seen running in order, ≥10 steps, earlier done and later
+  waiting), in Chromium against the real API, worker and Redis, in CI on every push (2026-10-17).
 
 > Building the SSE stream in Phase 1 against a fake run is the highest-leverage decision in this plan. It gives you a demo from week 3 and a debugging surface for everything after.
 

@@ -4,7 +4,15 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+import { ensureOrganisation, signIn } from "./support";
+
 const SHOTS = process.env.E2E_SCREENSHOT_DIR;
+
+// Runs belong to an organisation and need a signed-in owner or editor (B2).
+test.beforeEach(async ({ page }) => {
+  await signIn(page, "A");
+  await ensureOrganisation(page, "A");
+});
 
 async function startRun(page: Page, opts: { depth?: "D0" | "D1" | "D2"; delayMs: number; failAt?: number }) {
   await page.goto("/");
@@ -93,7 +101,7 @@ test("reloading mid-run replays what happened and keeps following", async ({ pag
 
 test("an unknown run says so instead of waiting forever", async ({ page }) => {
   await page.goto("/runs/00000000-0000-4000-8000-000000000000");
-  await expect(outcome(page)).toContainText("This run does not exist");
+  await expect(outcome(page)).toContainText("This run does not exist, or you are not a member");
 });
 
 test("reduced motion stops the in-progress animation (Design.md §6)", async ({ page }) => {

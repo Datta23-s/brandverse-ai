@@ -164,3 +164,44 @@ describe("streamRunEvents", () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe("streamRunEvents with authentication", () => {
+  it("asks for a fresh token on every connection attempt", async () => {
+    const run = fullRun();
+    const { fetchFn, calls } = scriptedFetch([
+      { status: 200, chunks: [toWire(run.slice(0, 4))], dropAfter: true },
+      { status: 200, chunks: [toWire(run.slice(4), 5)] },
+    ]);
+    let n = 0;
+    const events: RunEvent[] = [];
+    for await (const e of streamRunEvents(RUN_ID, {
+      apiUrl: "http://api.test",
+      signal: new AbortController().signal,
+      fetchFn,
+      sleep: async () => undefined,
+      authorization: async () => `token-${++n}`,
+    })) {
+      events.push(e);
+    }
+    expect(events).toEqual(run);
+    expect(calls.map((c) => c.headers.Authorization)).toEqual(["Bearer token-1", "Bearer token-2"]);
+  });
+
+  it("a 401 ends the stream with a sign-in error, without retrying", async () => {
+    await expect(collect([{ status: 401 }])).rejects.toMatchObject({ code: "unauthenticated" });
+  });
+
+  it("no session ends the stream before any request", async () => {
+    const { fetchFn, calls } = scriptedFetch([]);
+    const stream = streamRunEvents(RUN_ID, {
+      apiUrl: "http://api.test",
+      signal: new AbortController().signal,
+      fetchFn,
+      authorization: async () => {
+        throw new Error("not signed in");
+      },
+    });
+    await expect(stream.next()).rejects.toMatchObject({ code: "unauthenticated" });
+    expect(calls).toHaveLength(0);
+  });
+});

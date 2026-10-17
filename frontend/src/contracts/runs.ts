@@ -1,14 +1,14 @@
 /**
  * Run contracts, mirroring backend/app/models/runs.py.
  *
- * `run-contracts.json` is generated from the Pydantic models (backend/scripts/export_contracts.py)
+ * `api-contracts.json` is generated from the Pydantic models (backend/scripts/export_contracts.py)
  * and checked there; `runs.test.ts` checks these zod schemas against it, so a change on either
  * side that the other has not followed fails a test. The step list is read from the JSON, never
  * retyped.
  */
 import { z } from "zod";
 
-import contracts from "./run-contracts.json";
+import contracts from "./api-contracts.json";
 
 // ── The 15 pipeline steps (backend/app/core/pipeline.py) ─────────────────────────────────────
 
@@ -33,6 +33,7 @@ export type ResearchDepth = z.infer<typeof researchDepthSchema>;
 
 /** POST /api/v1/runs/fake. Bounds match FakeRunRequest; every field is explicit here. */
 export const fakeRunRequestSchema = z.strictObject({
+  org_id: z.uuid(),
   depth: researchDepthSchema,
   step_delay_ms: z.number().int().min(0).max(5000),
   fail_at_step: z.number().int().min(1).max(15).nullable(),
@@ -56,6 +57,7 @@ export const runQueuedSchema = z.strictObject({
   ...base,
   type: z.literal("run.queued"),
   mode: z.enum(["fake", "pipeline"]),
+  org_id: z.uuid(),
   total_steps: z.number().int(),
 });
 export const runStartedSchema = z.strictObject({

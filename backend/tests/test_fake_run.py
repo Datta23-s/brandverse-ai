@@ -31,7 +31,9 @@ class RecordedSleep:
 
 async def run(**request: object) -> tuple[bool, list[RunEvent], list[float]]:
     sink, sleep = ListSink(), RecordedSleep()
-    job = FakeRunJob(run_id=uuid4(), request=FakeRunRequest.model_validate(request))
+    job = FakeRunJob(
+        run_id=uuid4(), request=FakeRunRequest.model_validate({"org_id": str(uuid4()), **request})
+    )
     ok = await execute_fake_run(job, sink, sleep)
     assert all(e.run_id == job.run_id for e in sink.events)
     return ok, sink.events, sleep.calls

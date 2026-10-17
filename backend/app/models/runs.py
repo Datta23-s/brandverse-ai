@@ -10,13 +10,13 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import AwareDatetime, Field, TypeAdapter, model_validator
 
 from app.core.pipeline import PIPELINE_STEPS, TOTAL_STEPS
+from app.models.base import Contract
 
 ResearchDepth = Literal["D0", "D1", "D2"]
-# "fake": the Phase 1 fake run. "pipeline": the real LangGraph pipeline (Phase 6). The SSE
-# endpoint streams only "fake" until authentication exists (app/api/runs.py, the stream guard).
+# "fake": the Phase 1 fake run. "pipeline": the real LangGraph pipeline (Phase 6).
 RunMode = Literal["fake", "pipeline"]
 
 
@@ -24,19 +24,15 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-class _Contract(BaseModel):
-    # Output schemas list every field as required: the API always emits defaulted fields too.
-    model_config = ConfigDict(
-        extra="forbid", frozen=True, json_schema_serialization_defaults_required=True
-    )
-
-
 # ── API in / out ────────────────────────────────────────────────────────────────────────────
 
 
-class FakeRunRequest(_Contract):
+class FakeRunRequest(Contract):
     """Parameters of a fake run. No LLM call and no pipeline work: timing and outcome only."""
 
+    org_id: UUID = Field(
+        description="The organisation the run belongs to; the caller must be its owner or editor."
+    )
     depth: ResearchDepth = Field(
         default="D1", description="Research depth to simulate; D0 skips step 6."
     )
@@ -51,12 +47,12 @@ class FakeRunRequest(_Contract):
     )
 
 
-class RunAccepted(_Contract):
+class RunAccepted(Contract):
     run_id: UUID
     stream_url: str
 
 
-class FakeRunJob(_Contract):
+class FakeRunJob(Contract):
     """The ARQ job payload for a fake run (JSON-serialised; never pickled)."""
 
     run_id: UUID
@@ -73,7 +69,7 @@ class StepStatus(StrEnum):
     FAILED = "failed"
 
 
-class _Event(_Contract):
+class _Event(Contract):
     run_id: UUID
     ts: AwareDatetime = Field(default_factory=utc_now)
 
@@ -83,6 +79,8 @@ class RunQueued(_Event):
 
     type: Literal["run.queued"] = "run.queued"
     mode: RunMode
+    # Whose run it is. Only members of this organisation may stream it (app/api/runs.py).
+    org_id: UUID
     total_steps: int = TOTAL_STEPS
 
 

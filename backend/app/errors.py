@@ -9,6 +9,10 @@ class ApprovalNotPermitted(BrandverseError):
     """The actor may not approve this campaign (Rules.md T6)."""
 
 
+class AuthenticationFailed(BrandverseError):
+    """The request carries no valid Supabase access token. Maps to 401."""
+
+
 class RunEventCorrupt(BrandverseError):
     """A run-progress stream holds an entry that is not a valid run event."""
 
