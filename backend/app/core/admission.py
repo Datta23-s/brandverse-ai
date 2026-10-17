@@ -34,6 +34,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from app.core.sector_registry import Sector, SectorConstraint, check_registry_coverage
 from app.core.text_match import contains_phrase, matches_rule
+from app.core.truth import load_product_truth
 from app.errors import RegistryRuleInvalid
 
 log = logging.getLogger(__name__)
@@ -149,43 +150,11 @@ async def load_admission(
     conn: AsyncConnection, org_id: UUID, product_id: UUID
 ) -> AdmissionInputs | None:
     """A product's admission inputs, read as the caller. None if the org has no such product."""
-    cur = await conn.execute(
-        "select b.sector, s.regulated from products p "
-        "join brands b on b.id = p.brand_id and b.org_id = p.org_id "
-        "left join sectors s on s.id = b.sector "
-        "where p.id = %s and p.org_id = %s",
-        (product_id, org_id),
-    )
-    row = await cur.fetchone()
-    if row is None:
+    truth = await load_product_truth(conn, org_id, product_id)
+    if truth is None:
         return None
-    sector_id, regulated = row
-    sector = None if sector_id is None else Sector(sector_id, bool(regulated))
-
-    cur = await conn.execute(
-        "select id, claim, claim_type from product_claims "
-        "where org_id = %s and product_id = %s and retired_at is null "
-        "and claim_type in ('verified', 'restricted')",
-        (org_id, product_id),
-    )
-    claims = await cur.fetchall()
-    verified = sum(1 for _, _, kind in claims if kind == "verified")
-    restricted = tuple(
-        RestrictedClaim(str(i), text) for i, text, kind in claims if kind == "restricted"
-    )
-
-    rules: tuple[SectorConstraint, ...] = ()
-    if sector is not None:
-        cur = await conn.execute(
-            "select id, sector_id, kind, effective_from, retired_at, match_type, pattern "
-            "from sector_constraints where sector_id = %s",
-            (sector.id,),
-        )
-        rules = tuple(
-            SectorConstraint(str(i), s, k, eff, ret, mt, pat)
-            for i, s, k, eff, ret, mt, pat in await cur.fetchall()
-        )
-    return AdmissionInputs(sector, verified, restricted, rules)
+    restricted = tuple(RestrictedClaim(c.id, c.text) for c in truth.active("restricted"))
+    return AdmissionInputs(truth.sector, len(truth.active("verified")), restricted, truth.rules)
 
 
 async def record_block(
