@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relevance labelling</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1c1c1a; --muted: #5f5f5a; --line: #deded8;
+    --rel: #1f7a4d; --part: #9a6a00; --not: #8a2b2b; --focus: #2f5fd0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --panel: #1f1f1d; --text: #ecece8; --muted: #a3a39c; --line: #34342f;
+            --rel: #5cc08d; --part: #e0b04a; --not: #e07a7a; --focus: #7aa0ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  h1 { font-size: 1.1rem; margin: 0; }
+  .muted { color: var(--muted); font-size: 0.9rem; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 12px 0; }
+  dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 0.92rem; }
+  dt { font-weight: 600; }
+  .query { font-size: 1.15rem; font-weight: 600; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: var(--panel); }
+  li.current { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .text { margin-bottom: 8px; white-space: pre-wrap; }
+  .choices { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; font-size: 0.9rem; min-height: 40px; padding: 6px 12px; border-radius: 6px;
+           border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button[aria-pressed="true"][data-j="relevant"] { background: var(--rel); color: #fff; border-color: var(--rel); }
+  button[aria-pressed="true"][data-j="partial"] { background: var(--part); color: #fff; border-color: var(--part); }
+  button[aria-pressed="true"][data-j="not_relevant"] { background: var(--not); color: #fff; border-color: var(--not); }
+  nav { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 12px 0; flex-wrap: wrap; }
+  input { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--focus); width: 0; }
+  .warn { color: var(--not); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Relevance labelling</h1>
+    <label class="muted">Labeller <input id="labeller" autocomplete="name" placeholder="your name, then Enter"></label>
+  </header>
+  <p class="muted">Judge every candidate for the query shown. Order is random; nothing here says what any system thinks.
+     Keys: <b>1</b> relevant, <b>2</b> partially relevant, <b>3</b> not relevant, <b>j</b>/<b>k</b> next/previous candidate.
+     Work is saved in this browser as you go.</p>
+  <section class="panel" aria-label="Definitions"><dl id="defs"></dl></section>
+  <div class="progress" aria-hidden="true"><div id="bar"></div></div>
+  <nav>
+    <button id="prev" type="button">&larr; Previous query</button>
+    <span id="where" class="muted"></span>
+    <button id="next" type="button">Next query &rarr;</button>
+  </nav>
+  <section class="panel">
+    <div class="muted">Query</div>
+    <div id="query" class="query" tabindex="-1"></div>
+  </section>
+  <ul id="candidates" aria-label="Candidates"></ul>
+  <nav>
+    <span id="status" class="muted" role="status"></span>
+    <button id="export" type="button">Export labels</button>
+  </nav>
+</main>
+<script id="payload" type="application/json">__PAYLOAD__</script>
+<script>
+"use strict";
+const P = JSON.parse(document.getElementById("payload").textContent);
+const KEY = "relevance-labels-" + P.pool_sha256;
+const NAMES = { relevant: "Relevant", partial: "Partially relevant", not_relevant: "Not relevant" };
+const ORDER = ["relevant", "partial", "not_relevant"];
+let state;
+try { state = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { state = null; }
+if (!state) state = { labeller: "", started_at: new Date().toISOString(), labels: {}, position: 0 };
+let current = 0;
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode: export still works */ } }
+function total() { return P.queries.reduce((n, q) => n + q.candidates.length, 0); }
+function judged() { let n = 0; for (const q of P.queries) for (const c of q.candidates) if (state.labels[q.id]?.[c.id]) n++; return n; }
+
+const defs = document.getElementById("defs");
+for (const j of ORDER) {
+  const dt = document.createElement("dt"); dt.textContent = NAMES[j];
+  const dd = document.createElement("dd"); dd.textContent = P.definitions[j];
+  defs.append(dt, dd);
+}
+const labeller = document.getElementById("labeller");
+labeller.value = state.labeller;
+labeller.addEventListener("input", () => { state.labeller = labeller.value; save(); });
+// Enter or Tab in the name box hands the keyboard back to judging, so 1/2/3 never type into it.
+labeller.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); labeller.blur(); document.getElementById("query").focus(); }
+});
+
+function mark(qid, cid, j) {
+  state.labels[qid] = state.labels[qid] || {};
+  state.labels[qid][cid] = { judgment: j, at: new Date().toISOString() };
+  save();
+}
+
+function render() {
+  const q = P.queries[state.position];
+  document.getElementById("query").textContent = q.text;
+  document.getElementById("where").textContent = `Query ${state.position + 1} of ${P.queries.length}`;
+  const list = document.getElementById("candidates");
+  list.replaceChildren();
+  q.candidates.forEach((c, i) => {
+    const li = document.createElement("li");
+    if (i === current) li.className = "current";
+    const text = document.createElement("div"); text.className = "text"; text.textContent = c.text;
+    const choices = document.createElement("div"); choices.className = "choices";
+    for (const j of ORDER) {
+      const b = document.createElement("button");
+      b.type = "button"; b.dataset.j = j; b.textContent = NAMES[j];
+      b.setAttribute("aria-pressed", String(state.labels[q.id]?.[c.id]?.judgment === j));
+      b.addEventListener("click", () => { mark(q.id, c.id, j); current = i; render(); });
+      choices.append(b);
+    }
+    li.append(text, choices);
+    list.append(li);
+  });
+  const done = judged(), all = total();
+  document.getElementById("bar").style.width = (100 * done / all) + "%";
+  const left = q.candidates.filter(c => !state.labels[q.id]?.[c.id]).length;
+  document.getElementById("status").textContent =
+    `${done} of ${all} judged` + (left ? ` · ${left} left on this query` : "");
+  document.querySelector("li.current")?.scrollIntoView({ block: "nearest" });
+}
+
+function go(delta) {
+  state.position = Math.min(P.queries.length - 1, Math.max(0, state.position + delta));
+  current = 0; save(); render(); window.scrollTo(0, 0);
+}
+document.getElementById("prev").addEventListener("click", () => go(-1));
+document.getElementById("next").addEventListener("click", () => go(1));
+
+document.addEventListener("keydown", (e) => {
+  if (e.target === labeller) return;
+  const q = P.queries[state.position];
+  if (["1", "2", "3"].includes(e.key)) {
+    mark(q.id, q.candidates[current].id, ORDER[Number(e.key) - 1]);
+    if (current < q.candidates.length - 1) current++;
+    render();
+  } else if (e.key === "j") { current = Math.min(q.candidates.length - 1, current + 1); render(); }
+  else if (e.key === "k") { current = Math.max(0, current - 1); render(); }
+});
+
+document.getElementById("export").addEventListener("click", () => {
+  const status = document.getElementById("status");
+  if (!state.labeller.trim()) { status.innerHTML = '<span class="warn">Enter your name before exporting.</span>'; labeller.focus(); return; }
+  const done = judged(), all = total();
+  const out = {
+    pool_sha256: P.pool_sha256, labeller: state.labeller.trim(), started_at: state.started_at,
+    exported_at: new Date().toISOString(), complete: done === all, judged: done, total: all,
+    labels: state.labels,
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `relevance-labels-${P.pool_sha256.slice(0, 8)}-${out.exported_at.replace(/[:.]/g, "-")}.json`;
+  a.click();
+  status.textContent = done === all ? "Exported. All candidates judged." : `Exported a partial file (${done} of ${all}); it cannot be frozen until complete.`;
+});
+render();
+</script>
+</body>
+</html>
