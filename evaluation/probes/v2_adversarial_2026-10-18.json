@@ -1,0 +1,252 @@
+{
+  "probe": "V2 adversarial existence test (docs/evaluation-plan.md, threat V2)",
+  "pre_registered": "2026-10-18, commit 7e082d3, before the first call",
+  "reportable_statement_only": "the classifier was / was not made to miss under adversarial construction, n = 10, hand-written",
+  "ran_at": "2026-10-18T02:29:43.068423+00:00",
+  "prompt": "claim_extract@v1",
+  "run_id": "b496a429-b8b2-4a1d-8ca4-8092305c618d",
+  "calls": [
+    {
+      "id": 1,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 2,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 3,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 4,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 5,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 6,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 7,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 8,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 9,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    },
+    {
+      "id": 10,
+      "model": "gemini-3.8-flash",
+      "tier": "strong",
+      "outcome": "error",
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "rate_limit_wait_ms": 0,
+      "prompt_id": "claim_extract",
+      "prompt_version": "v1"
+    }
+  ],
+  "cases": [
+    {
+      "case": "1-bloating-fused",
+      "tactic": "fused into a sentence a verified claim supports (w-gut)",
+      "paraphrase": "so your stomach stays settled and light after every shake",
+      "restricted_claim": "reduced bloating",
+      "copy": {
+        "body": "4 billion CFU probiotics and digestive enzymes, so your stomach stays settled and light after every shake.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "2-bloating-testimonial",
+      "tactic": "framed as customer testimony, not as the product's claim",
+      "paraphrase": "That heavy, puffed-up feeling after a shake? Our regulars say it's gone.",
+      "restricted_claim": "reduced bloating",
+      "copy": {
+        "body": "Contains Velositol. That heavy, puffed-up feeling after a shake? Our regulars say it's gone.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "3-strength-imperative",
+      "tactic": "terse imperative that reads as a call to action",
+      "paraphrase": "Give it two months: heavier lifts, longer sets.",
+      "restricted_claim": "enhancing muscle strength and endurance in 8 weeks",
+      "copy": {
+        "body": "24 g protein, 11.5 g essential amino acids, 5.4 g BCAAs, 1 g glutamine (per serving). Give it two months: heavier lifts, longer sets.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "4-strength-fused",
+      "tactic": "fused onto a verified figure (w-macros)",
+      "paraphrase": "to help you lift heavier and go longer within eight weeks",
+      "restricted_claim": "enhancing muscle strength and endurance in 8 weeks",
+      "copy": {
+        "body": "5.4 g BCAAs per serving to help you lift heavier and go longer within eight weeks.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: Timeout: litellm.Timeout: Connection timed out. Timeout passed=90.0, time taken=90.029 seconds",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "5-first-fused",
+      "tactic": "a 'first' claim without the word, attached to a verified ingredient (w-velositol)",
+      "paraphrase": "an isolate-and-concentrate blend nobody in India had made before",
+      "restricted_claim": "India's first isolate + concentrate with Velositol",
+      "copy": {
+        "body": "Velositol, in an isolate-and-concentrate blend nobody in India had made before.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "6-pure-aphorism",
+      "tactic": "purity claim as an aphorism, easily read as style",
+      "paraphrase": "Nothing in it that shouldn't be, nothing missing that should.",
+      "restricted_claim": "ultra-pure",
+      "copy": {
+        "body": "Whey protein isolate and concentrate blend, 1 kg. Nothing in it that shouldn't be, nothing missing that should.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "7-pure-fused",
+      "tactic": "purity claim fused onto a verified sweetener claim (w-sweet)",
+      "paraphrase": "and as clean as protein gets",
+      "restricted_claim": "ultra-pure",
+      "copy": {
+        "body": "Sweetened only with fruit and dates, and as clean as protein gets.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "8-dermatologist-metaphor",
+      "tactic": "endorsement as an image, no 'recommend'",
+      "paraphrase": "The collagen skin doctors reach for first thing in the morning.",
+      "restricted_claim": "dermatologist recommended",
+      "copy": {
+        "body": "8000 mg marine collagen (Type I and III). The collagen skin doctors reach for first thing in the morning.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: ServiceUnavailableError: litellm.ServiceUnavailableError: GeminiException - {\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n    \"status\": \"UNAVAILABLE\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "9-clinical-fused",
+      "tactic": "clinical claim as a two-word label over a verified ingredient list (c-actives)",
+      "paraphrase": "Trial-backed botanicals",
+      "restricted_claim": "clinically proven botanicals",
+      "copy": {
+        "body": "Trial-backed botanicals: hyaluronic acid, rosehip and astaxanthin, with biotin, vitamin C (acerola) and vitamin E.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    },
+    {
+      "case": "10-wild-fused",
+      "tactic": "sourcing and purity claim fused onto the verified dose (c-dose)",
+      "paraphrase": "from fish caught in open waters, nothing farmed, nothing diluted",
+      "restricted_claim": "Premium Wild Caught Pure",
+      "copy": {
+        "body": "8000 mg of marine collagen from fish caught in open waters, nothing farmed, nothing diluted.",
+        "footer": "Illustrative disclaimer (synthetic rule): consult a qualified professional before use. Illustrative disclaimer (synthetic rule): protein content varies by serving size."
+      },
+      "error": "LLMCallFailed: gemini-3.8-flash: BadRequestError: litellm.BadRequestError: GeminiException BadRequestError - {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Request contains an invalid argument.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n",
+      "verdict": "UNRUN or FAILED"
+    }
+  ]
+}

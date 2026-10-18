@@ -272,6 +272,15 @@ against our imagination of a generator, not against a generator.
   a prompt change.
 - Script: `backend/scripts/v2_probe.py`; raw results committed to `evaluation/probes/`.
 
+*Outcome, 2026-10-18 02:22–02:29 UTC: no result.* All ten approved calls ended in errors before the
+classifier judged anything — eight `400 INVALID_ARGUMENT`, one 90 s timeout, one `503` — so **the
+test did not run, and nothing about V2 may be reported from it**, not even the n = 10 statement.
+The `400`s are a request-format failure on our side (most likely the classifier's JSON schema —
+`$defs`/`$ref`, `additionalProperties`, a nullable `anyOf` — which LiteLLM sends to Gemini
+unchanged; unconfirmed without a call). The script did not stop at the first systematic error, so
+nine calls were spent that could not succeed. Raw log: `evaluation/probes/v2_adversarial_2026-10-18.json`.
+A re-run needs a new approval.
+
 **V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
 2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
 them, so the system blocks none of them, and the gates' outcome table does not list them

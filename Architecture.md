@@ -244,7 +244,14 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | Date (UTC) | Script | Database | cheap | standard | strong |
 |---|---|---|---|---|---|
 | 2026-10-17 10:35 | `scripts/llm_smoke.py` (cap 2) | local `brandverse_e2e` | 1 | 0 | 0 |
-| **Total** | | | **1** | **0** | **0** |
+| 2026-10-18 02:22–02:29 | `scripts/v2_probe.py` (cap 10; approved: 10 strong) | local `brandverse_v2_probe` | 0 | 0 | 10 |
+| **Total** | | | **1** | **0** | **10** |
+
+2026-10-18, V2 probe: all ten strong-tier calls ended `error` and produced no result — eight
+`400 INVALID_ARGUMENT`, one client timeout at 90 s, one `503 UNAVAILABLE`. Whether Google counted
+the failed requests against the 20/day strong quota is not known; the tally assumes it did. The
+script ran on after the first `400`, a systematic error; it should have stopped there
+(`evaluation/probes/v2_adversarial_2026-10-18.json`; `docs/evaluation-plan.md`, V2).
 
 Counts are read from the throwaway database's `llm_calls`, not from the script. 2026-10-17: one
 `ok` row on `gemini-3.1-flash-lite`, valid on the first call (no repair); 19 input / 27 output
