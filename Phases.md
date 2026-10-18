@@ -249,9 +249,9 @@ threat V2 in `docs/evaluation-plan.md`.
 
 **Exit criteria**
 - [ ] Precision@10 measured on the relevance set
-- [ ] Cross-tenant memory leak test green
+- [x] Cross-tenant memory leak test green (CI; and on the live project 2026-10-18, rolled back)
 - [ ] Near-duplicate detection prevents a second insert at cosine > 0.95
-- [ ] Revocation removes an item from retrieval immediately
+- [x] Revocation removes an item from retrieval immediately (CI; and on the live project 2026-10-18, rolled back)
 
 **Phase 4 progress.** Decisions recorded 2026-10-18 (`Memory.md` §5, §8; `docs/evaluation-plan.md`
 §7): embeddings computed locally by a pinned encoder; relevance labels by Kundan, blind. The
@@ -263,7 +263,12 @@ organisations) and immediate removal on revocation (`tests/db/test_match_memory.
 criteria above are ticked once the migrations are live and checked there. The first push of 0022
 was refused on 2026-10-18 (nothing applied; `Architecture.md` §11, the 0022 lesson): `hnsw.ef_search`
 moved out of the function to the caller (`app/memory/retrieval.py`), where it is configured,
-logged with every retrieval and can be swept (`Memory.md` §4.3).
+logged with every retrieval and can be swept (`Memory.md` §4.3). 0022 and 0023 pushed 2026-10-18
+12:29 UTC. Both criteria were then checked on the live project in a transaction that was always
+rolled back, with the E2E organisations: an identical item in E2E Org B never reached E2E Org A's
+owner, and asking for Org B returned nothing; revoking Org A's item removed it from the next
+retrieval, recorded the revoker and `now()` despite a back-dated value sent, and un-revoking was
+refused. `memory_items` held 0 rows before and after.
 
 **pgvector version gap (added 2026-10-14).** CI's database gate runs pgvector 0.8.7; the
 Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds real data:

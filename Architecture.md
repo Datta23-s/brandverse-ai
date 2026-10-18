@@ -2311,6 +2311,18 @@ again immediately before the files. Checked by running the fixed harness on the 
 (from `af4dd3a`): refused with the live push's error, where the old harness had passed it. It
 supersedes the per-migration scratch scripts used for 0012–0022.
 
+0022 (revised) and 0023 had the same procedure with the fixed harness, after CI passed on
+`60bb119`: a fresh backend (five reused ones held first), acting as `postgres` (not a superuser),
+still fresh immediately before the files. Inside the rolled-back transaction the only catalog
+changes were `app.match_memory` (invoker, `search_path=""` only, EXECUTE for `authenticated` and
+`service_role`), `app.memory_items_revocation`, its trigger, and `memory_items_claim_id_org_id_fkey`
+re-created without `ON DELETE SET NULL`; the caller's path (`set_config` then the function) worked
+as `authenticated` and `service_role` and was refused to `anon`; after the rollback the catalog
+equalled the snapshot. Pushed with the CLI **2026-10-18 12:29 UTC**; `migration list` identical
+through 0023; the post-apply read matched and the full posture comparison found no mismatch (54
+checks). The two Phase 4 criteria were then checked on the project itself, rolled back
+(`Phases.md` Phase 4).
+
 ### Live project — permanent footprint
 
 What the live Supabase project holds that is not evaluation data, and why. Application roles
