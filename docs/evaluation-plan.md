@@ -359,8 +359,24 @@ against another model's opinion, a confound every number would carry).
   a label was wrong, **the label stands** and the disagreement is reported.
 - Precision@10 (`Memory.md` §8) is computed against these labels only.
 - **Retrieval depth is a reported parameter.** Every retrieval logs the `hnsw.ef_search` in effect
-  (`Memory.md` §4.3); every Precision@10 figure states it, and the value or values swept are fixed
-  before the measurement. The default (`config/scoring.yaml`) is a starting point, not a finding.
+  (`Memory.md` §4.3). **Every Precision@10 figure states both the `ef_search` used and the number
+  of rows in the collection searched**: a retrieval number without the collection size cannot be
+  interpreted.
+- **The `ef_search` sweep, pre-registered 2026-10-18** (fixed before any measurement, on the same
+  terms as the attempt rule in §2 and the superlative tiers): Precision@10 is measured at
+  `ef_search` = **40, 100, 200 and 400**, on the same frozen labels and corpus, and all four are
+  reported. **Expected result, stated in advance: flat.** The Phase 4 relevance corpus (three
+  fictional brands, `evaluation/relevance/brief.md`; separate from the seed memory, which never
+  reaches evaluation, `Memory.md` §7.1) is planned at the seed memory's scale: about 40 items per
+  brand, about 120 rows. The exact count is recorded when the corpus is frozen. HNSW at
+  `ef_search` = 100 over 120 rows is close to
+  an exhaustive search, so the index approximates almost nothing and Precision@10 is expected to
+  be identical, or nearly so, at all four values. A flat result confirms the measurement works. It
+  says nothing about the parameter's effect at scale, and it will not be reported as a finding
+  about `ef_search`.
+- **Future work, not started:** a sweep that can show `ef_search` mattering needs a corpus large
+  enough for the index to approximate: thousands to tens of thousands of rows, with labels to
+  match. That is far larger than Phase 4 and is recorded as future work, not scheduled.
 
 **Who writes what, and in what order (decided 2026-10-18).** Query-and-corpus co-design is the
 dangerous direction, and so is writing queries from a corpus just read — the writer remembers the

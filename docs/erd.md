@@ -6,8 +6,9 @@
 | Status | **Canonical.** `Architecture.md` §9 is reconciled to this document and must change in the same commit as it. |
 | Date | 14 October 2026 |
 
-This is the canonical data model. The full DDL is in `Architecture.md` §9; the Phase 1
-migrations are cut from it.
+This is the canonical data model. The DDL is the migration files in `supabase/migrations/`,
+listed in `Architecture.md` §9 with the commit that added each (until 2026-10-18 §9 held a copy of
+the SQL; the Phase 1 migrations were cut from it).
 Composite `on delete set null (col)` (§3) requires PostgreSQL 15+.
 
 ## 1. Diagram

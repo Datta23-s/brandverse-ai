@@ -1,14 +1,24 @@
-"""Architecture.md §9 must state exactly the SQL in supabase/migrations (Rules.md §8).
+"""Architecture.md §9 lists every migration file, and copies none of them (Rules.md §8).
 
-Statements are compared in order after removing comments and collapsing whitespace, so the doc
-may be laid out differently but can never describe a schema that is not the one that deploys.
+Until 2026-10-18 §9 held a copy of the migration SQL, kept in step by a script; a doc that
+duplicates code drifts, and the script needed an exception to the no-edit-scripts rule (Rules.md
+§3.3). Now §9 holds a table of file paths and the commits that added them, so there is nothing to
+sync, and these tests check only that the table is complete and that no copy creeps back. The
+other tests here read the migrations themselves.
 """
 
 import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+MIGRATIONS_DIR = REPO_ROOT / "supabase" / "migrations"
 _DOLLAR_TAG = re.compile(r"\$[A-Za-z_]*\$")
+# | `supabase/migrations/NNNN_name.sql` | `added` | `changed` or empty | what it does |
+_MIGRATION_ROW = re.compile(
+    r"^\| `supabase/migrations/(\d{4}_[a-z0-9_]+\.sql)` "
+    r"\| `[0-9a-f]{7,40}` \| *(?:`[0-9a-f]{7,40}`)? *\|",
+    re.M,
+)
 
 
 def split_statements(sql: str) -> list[str]:
@@ -48,25 +58,25 @@ def split_statements(sql: str) -> list[str]:
     return out
 
 
-def _doc_sql() -> str:
+def _section_9() -> str:
     text = (REPO_ROOT / "Architecture.md").read_text(encoding="utf-8")
-    section = text[text.index("## 9. Data model") : text.index("## 10. API surface")]
-    blocks = re.findall(r"```sql\n(.*?)```", section, flags=re.S)
-    assert blocks, "Architecture.md §9 has no sql block"
-    return "\n".join(blocks)
+    return text[text.index("## 9. Data model") : text.index("## 10. API surface")]
 
 
 def _migrations_sql() -> str:
-    files = sorted((REPO_ROOT / "supabase" / "migrations").glob("*.sql"))
+    files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     assert files
     return "\n".join(f.read_text(encoding="utf-8") for f in files)
 
 
-def test_architecture_section_9_matches_migrations() -> None:
-    doc, mig = split_statements(_doc_sql()), split_statements(_migrations_sql())
-    for n, (d, m) in enumerate(zip(doc, mig, strict=False)):
-        assert d == m, f"statement {n} differs:\n doc: {d[:200]}\n mig: {m[:200]}"
-    assert len(doc) == len(mig), f"doc has {len(doc)} statements, migrations {len(mig)}"
+def test_architecture_section_9_lists_every_migration_once_in_order() -> None:
+    listed = _MIGRATION_ROW.findall(_section_9())
+    files = [f.name for f in sorted(MIGRATIONS_DIR.glob("*.sql"))]
+    assert listed == files, f"§9 lists {listed}, the directory holds {files}"
+
+
+def test_architecture_section_9_holds_no_copy_of_the_sql() -> None:
+    assert "```sql" not in _section_9(), "§9 references the migration files; it does not copy them"
 
 
 def test_splitter_handles_quotes_and_dollar_bodies() -> None:

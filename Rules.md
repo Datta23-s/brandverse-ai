@@ -119,7 +119,11 @@ When summarising work, state what was built, what was stubbed, and what was not 
   covers source, test code, documentation, config and SQL alike. Backslashes do not survive a trip
   through a script's own string quoting: an edit script turned `\b` into invisible control
   characters in a doc, and later turned `\n` into real line breaks inside test code. Three
-  occurrences is a pattern, not bad luck.
+  occurrences is a pattern, not bad luck. **No exceptions** (ruled 2026-10-18), not even for a
+  script that "only copies verbatim": that is what the scripts that broke would have said about
+  themselves, and a rule whose exception depends on judging your own script needs judgement. Where
+  a doc needs a script to stay in step with code, remove the duplication instead: `Architecture.md`
+  §9 now lists migration files rather than copying their SQL.
 - **Regex patterns reach the database through parameterised inserts only.** The one other route is
   a migration file applied verbatim, and only with a test that reads the stored pattern back and
   asserts it compiles and matches as declared (0021's synthetic rules:
