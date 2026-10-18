@@ -114,11 +114,14 @@ When summarising work, state what was built, what was stubbed, and what was not 
   on, every schema change is a new migration — no exceptions, including fixes to a migration that
   has not yet reached production data. Before the trigger, in-place edits are recorded in the
   commit message (which migrations, and why)
-- **Regex patterns reach the database through parameterised inserts only — never through a shell
-  edit script** (adopted 2026-10-17). Backslashes do not survive the trip: an edit script once
-  turned `\b` into invisible control characters. This covers any text whose backslashes matter,
-  including registry patterns and documentation that quotes them. The one other route is a
-  migration file applied verbatim, and only with a test that reads the stored pattern back and
+- **No edit script touches a file that contains regex patterns or backslash escape sequences —
+  direct edits only** (adopted 2026-10-17, widened 2026-10-18 after the third occurrence). This
+  covers source, test code, documentation, config and SQL alike. Backslashes do not survive a trip
+  through a script's own string quoting: an edit script turned `\b` into invisible control
+  characters in a doc, and later turned `\n` into real line breaks inside test code. Three
+  occurrences is a pattern, not bad luck.
+- **Regex patterns reach the database through parameterised inserts only.** The one other route is
+  a migration file applied verbatim, and only with a test that reads the stored pattern back and
   asserts it compiles and matches as declared (0021's synthetic rules:
   `backend/tests/db/test_sector_provenance.py::test_the_seeded_patterns_behave_as_declared`).
 

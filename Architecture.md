@@ -594,8 +594,18 @@ the sector's active rules, deterministically:
 `context_superlative`, which flag; an exception anywhere is a `gate_error` block. A blocked report
 is appended to `audit_log` (`output.blocked`, actor `validation_engine`) and names the sector with
 its provenance and the superlative list version (`config/superlatives/`: both tiers in one file
-under one hash, so the thesis can state which word sat on which tier; v1 is a draft awaiting the
-project owner's word-by-word decision, 2026-10-18, and is fixed before any evaluation use).
+under one hash, so the thesis can state which word sat on which tier). **v1 was decided by the
+project owner word by word on 2026-10-18, before any evaluation used it: 29 block, 11 flag**, with
+"best" excepted before "before". Families ("most X", "highest X") are enumerated, never patterns.
+Evidence and safety claims ("clinically proven", "doctor recommended", "100% safe", …) are kept
+out on purpose: they belong to the claim gate, and a phrase in two gates would be counted twice.
+
+**Matching contract** (`backend/app/core/text_match.py`, 2026-10-18): whole words, case- and
+punctuation-insensitive; each gap between a phrase's words may be a space, a hyphen or dash, or
+nothing ("market leading" = "market-leading" = "marketleading"); "#1", "Nr. 1", "No.1" read as
+"no 1"; declared exceptions honoured. It applies to every phrase match — superlatives, the
+product's restricted claims and registry phrase rules — not to required disclaimers, which use the
+verbatim rule.
 
 **The authoring path** (`backend/scripts/apply_sector_constraints.py`, `config/sector_constraints/`):
 reviewed YAML files, dry run by default, committed files only (the commit recorded in every audit

@@ -1,10 +1,11 @@
 # Superlatives and "first" claims (Rules.md T3), for the risk gate (backend/app/core/gates.py).
 #
-# DRAFT, awaiting the project owner's word-by-word decision on the tier split (2026-10-18). v1
-# has not been used by any evaluation run or report; once decided, this file and its line in
-# versions.lock are fixed, and any later change is a new version (v2.yaml).
+# TIER SPLIT DECIDED 2026-10-18 by the project owner, word by word, before any evaluation run or
+# report used this list — the same reason as the attempt rule (docs/evaluation-plan.md §2): a
+# vocabulary chosen after seeing results is choosing the results. This file is now fixed: its hash
+# is in versions.lock, and any change is a new version (v2.yaml), recorded in every gate report.
 #
-# Two tiers, one version, one hash:
+# Two tiers:
 #   block — unambiguous superlative: no supporting citation -> the copy is BLOCKED.
 #   flag  — context-dependent ("leading to", "the only way", "the ultimate guide"): no supporting
 #           citation -> FLAGGED for the human reviewer, not blocked.
@@ -12,22 +13,39 @@
 # own text contains the same phrase. A flag-tier phrase that occurs only inside a matched
 # block-tier phrase ("leading" in "market leading") is reported once, at the block tier.
 #
-# A phrase matches as whole words, case- and punctuation-insensitively (app/core/text_match.py).
+# Matching (app/core/text_match.py): whole words, case- and punctuation-insensitive; each gap
+# between a phrase's words may be a space, a hyphen or dash, or nothing ("best selling" matches
+# "best-selling", "best–selling", "bestselling"); "#1", "Nr. 1", "No.1", "No. 1" all read as
+# "no 1". Families are ENUMERATED, never written as patterns: "most \w+" would block "most people",
+# and an unlisted surprise cannot be versioned.
+#
+# DELIBERATELY NOT HERE — evidence and safety claims, not superlatives: "clinically proven",
+# "scientifically proven", "doctor recommended", "zero side effects", "100% safe". They belong to
+# the claim gate, which resolves them against a verified claim or blocks them. A phrase in two
+# gates is counted twice and the findings table stops adding up. Do not add them here.
 version: v1
 block:
-  - best
+  - phrase: best
+    unless_followed_by: [before]   # a best-before date is not a superlative
   - finest
   - greatest
   - fastest
   - strongest
   - cheapest
+  - safest
+  - purest
   - number one
+  - no 1
   - first ever
   - world's first
   - india's first
   - most advanced
   - most powerful
   - most effective
+  - most trusted
+  - most recommended
+  - highest potency
+  - highest quality
   - unbeatable
   - unmatched
   - unrivalled
@@ -42,7 +60,6 @@ flag:
   - the only
   - ultimate
   - the first
-  - no 1
   - perfect
   - ideal
   - superior

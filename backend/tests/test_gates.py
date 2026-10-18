@@ -323,11 +323,84 @@ def test_voice_scoring_ignores_prescribed_disclaimer_text() -> None:
 # ── The superlative list is versioned and locked ─────────────────────────────────────────────
 
 
-def test_the_released_list_loads_with_both_tiers_and_t3s_examples_block() -> None:
-    lexicon = load_superlatives()
-    assert lexicon.version == "v1"
-    assert {"best", "number one", "fastest"} <= set(lexicon.block)  # Rules.md T3's examples
-    assert {"leading", "the only", "ultimate"} <= set(lexicon.flag)
+V1 = load_superlatives()
+V1_BLOCK = {gates._as_phrase(p).text for p in V1.block}
+V1_FLAG = {gates._as_phrase(p).text for p in V1.flag}
+
+
+def test_the_released_list_is_the_decided_split() -> None:
+    # Decided by the project owner 2026-10-18, before any evaluation use.
+    assert V1.version == "v1"
+    assert (len(V1_BLOCK), len(V1_FLAG)) == (29, 11)
+    assert {"best", "number one", "fastest"} <= V1_BLOCK  # Rules.md T3's examples
+    assert {"no 1", "safest", "purest", "most trusted", "most recommended"} <= V1_BLOCK
+    assert {"highest potency", "highest quality"} <= V1_BLOCK
+    assert {"leading", "the only", "ultimate", "world class", "top quality"} <= V1_FLAG
+    assert "no 1" not in V1_FLAG
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "clinically proven", "scientifically proven", "doctor recommended", "zero side effects",
+        "100% safe",
+    ],
+)  # fmt: skip
+def test_evidence_and_safety_claims_are_not_superlatives(claim: str) -> None:
+    # They belong to the claim gate; listing them here too would count one phrase twice.
+    assert not any(gates._as_phrase(p).found_in(claim) for p in V1.block + V1.flag)
+
+
+def _v1_kinds(body: str) -> list[tuple[str, str]]:
+    report = evaluate({"body": body}, (), truth(), V1, TODAY)
+    return [(f.kind, f.refs[0].split(":")[-1]) for f in report.findings]
+
+
+MULTIWORD = sorted(p for p in V1_BLOCK | V1_FLAG if " " in p)
+
+
+@pytest.mark.parametrize("phrase", MULTIWORD)
+@pytest.mark.parametrize(
+    "separator", [" ", "-", "–", ""], ids=["space", "hyphen", "en-dash", "closed"]
+)
+def test_every_multiword_phrase_matches_in_all_four_forms(phrase: str, separator: str) -> None:
+    written = phrase.replace(" ", separator)
+    kind = "unsupported_superlative" if phrase in V1_BLOCK else "context_superlative"
+    assert (kind, phrase) in _v1_kinds(f"Meet our {written} greens.")
+
+
+@pytest.mark.parametrize("written", ["No.1", "No 1", "No. 1", "#1", "nr 1", "Nr. 1", "no1"])
+def test_every_way_of_writing_no_1_blocks_like_number_one(written: str) -> None:
+    assert ("unsupported_superlative", "no 1") in _v1_kinds(f"The {written} greens powder.")
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["Best before 03/2027.", "BEST BEFORE: 03/2027", "Best-before 03/2027", "best before end"],
+)
+def test_a_best_before_date_is_not_a_superlative(body: str) -> None:
+    assert _v1_kinds(body) == []
+
+
+def test_best_is_still_a_superlative_everywhere_else() -> None:
+    assert _v1_kinds("The best greens. Best before 03/2027.") == [
+        ("unsupported_superlative", "best")
+    ]
+
+
+def test_ordinary_words_near_the_families_are_not_caught() -> None:
+    # Families are enumerated, never patterns: "most people", "highest point" are compliant.
+    assert _v1_kinds("Most people take it daily; the highest point of the day.") == []
+    assert _v1_kinds("No 10 servings were tested.") == []  # "no 1" does not match "no 10"
+
+
+def test_a_phrase_listed_twice_is_refused(tmp_path: Path) -> None:
+    text = (gates.SUPERLATIVES_DIR / "v1.yaml").read_text(encoding="utf-8") + "  - purest\n"
+    (tmp_path / "v1.yaml").write_text(text, encoding="utf-8")
+    lock = f"v1 sha256:{gates.file_sha256(tmp_path / 'v1.yaml')}\n"
+    (tmp_path / "versions.lock").write_text(lock, encoding="utf-8")
+    with pytest.raises(ValueError, match="listed twice or on both tiers"):
+        load_superlatives("v1", tmp_path)
 
 
 def test_a_phrase_on_both_tiers_is_refused(tmp_path: Path) -> None:
@@ -335,7 +408,7 @@ def test_a_phrase_on_both_tiers_is_refused(tmp_path: Path) -> None:
     (tmp_path / "v1.yaml").write_text(text, encoding="utf-8")
     lock = f"v1 sha256:{gates.file_sha256(tmp_path / 'v1.yaml')}\n"
     (tmp_path / "versions.lock").write_text(lock, encoding="utf-8")
-    with pytest.raises(ValueError, match="on both tiers"):
+    with pytest.raises(ValueError, match="listed twice or on both tiers"):
         load_superlatives("v1", tmp_path)
 
 

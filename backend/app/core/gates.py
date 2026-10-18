@@ -49,7 +49,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from app.core.config import REPO_ROOT
 from app.core.sector_registry import check_registry_coverage, verbatim_form
-from app.core.text_match import contains_phrase, matches_rule, normalise
+from app.core.text_match import contains_phrase, matches_rule, normalise, phrase_regex
 from app.core.truth import ProductTruth
 from app.errors import RegistryRuleInvalid
 from app.llm.prompts import file_sha256
@@ -113,12 +113,27 @@ SUPERLATIVES_DIR: Path = REPO_ROOT / "config" / "superlatives"
 
 
 @dataclass(frozen=True, slots=True)
+class Phrase:
+    """A superlative and the words that, following it, make it not one ("best" + "before")."""
+
+    text: str
+    unless_followed_by: tuple[str, ...] = ()
+
+    def found_in(self, text: str) -> bool:
+        return contains_phrase(text, self.text, self.unless_followed_by)
+
+
+def _as_phrase(p: "str | Phrase") -> Phrase:
+    return p if isinstance(p, Phrase) else Phrase(p)
+
+
+@dataclass(frozen=True, slots=True)
 class Superlatives:
     """A versioned superlative list in two tiers (config/superlatives/<version>.yaml)."""
 
     version: str
-    block: tuple[str, ...]  # unambiguous: unsupported -> block
-    flag: tuple[str, ...] = ()  # context-dependent: unsupported -> flag for the reviewer
+    block: tuple["str | Phrase", ...]  # unambiguous: unsupported -> block
+    flag: tuple["str | Phrase", ...] = ()  # context-dependent: unsupported -> flag for reviewer
 
 
 def load_superlatives(version: str = "v1", directory: Path = SUPERLATIVES_DIR) -> Superlatives:
@@ -137,10 +152,17 @@ def load_superlatives(version: str = "v1", directory: Path = SUPERLATIVES_DIR) -
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if data.get("version") != version:
         raise ValueError(f"superlatives {path.name} declares version {data.get('version')!r}")
-    block = tuple(str(p) for p in data["block"])
-    flag = tuple(str(p) for p in data.get("flag") or ())
-    if set(map(normalise, block)) & set(map(normalise, flag)):
-        raise ValueError(f"superlatives {version}: a phrase is on both tiers")
+
+    def entry(p: object) -> Phrase:
+        if isinstance(p, dict):
+            return Phrase(str(p["phrase"]), tuple(str(f) for f in p.get("unless_followed_by", ())))
+        return Phrase(str(p))
+
+    block = tuple(entry(p) for p in data["block"])
+    flag = tuple(entry(p) for p in data.get("flag") or ())
+    texts = [normalise(p.text) for p in block + flag]
+    if len(set(texts)) != len(texts):
+        raise ValueError(f"superlatives {version}: a phrase is listed twice or on both tiers")
     return Superlatives(version, block, flag)
 
 
@@ -272,38 +294,39 @@ def _superlatives(
     occurrence is taken out, so "leading" inside "market leading" is reported once, as a block."""
     verified = {c.id: c for c in truth.active("verified")}
 
-    def supported(phrase: str) -> bool:
+    def supported(phrase: Phrase) -> bool:
         return any(
-            contains_phrase(s.text, phrase)
+            phrase.found_in(s.text)
             and s.claim_id in verified
-            and contains_phrase(verified[s.claim_id].text, phrase)
+            and phrase.found_in(verified[s.claim_id].text)
             for s in statements
         )
 
     findings = []
-    rest = f" {normalise(copy)} "
-    for phrase in lexicon.block:
-        if not contains_phrase(copy, phrase):
+    rest = normalise(copy)  # the copy, block-tier occurrences removed as they are found
+    for phrase in map(_as_phrase, lexicon.block):
+        if not phrase.found_in(copy):
             continue
-        needle = f" {normalise(phrase)} "
-        while needle in rest:  # replace() skips back-to-back repeats; loop until none is left
-            rest = rest.replace(needle, " ")
+        pattern = phrase_regex(phrase.text, phrase.unless_followed_by)
+        if pattern is not None:
+            rest = pattern.sub(" ", rest)
         if not supported(phrase):
             findings.append(
                 Finding(
                     "unsupported_superlative",
-                    f"superlative {phrase!r} with no verified claim that states it (Rules.md T3)",
-                    (f"superlatives:{lexicon.version}:block:{phrase}",),
+                    f"superlative {phrase.text!r} with no verified claim that states it "
+                    "(Rules.md T3)",
+                    (f"superlatives:{lexicon.version}:block:{phrase.text}",),
                 )
             )
-    for phrase in lexicon.flag:
-        if f" {normalise(phrase)} " in rest and not supported(phrase):
+    for phrase in map(_as_phrase, lexicon.flag):
+        if phrase.found_in(rest) and not supported(phrase):
             findings.append(
                 Finding(
                     "context_superlative",
-                    f"{phrase!r} may be a superlative claim with no verified claim that states it; "
-                    "for the reviewer to judge (Rules.md T3)",
-                    (f"superlatives:{lexicon.version}:flag:{phrase}",),
+                    f"{phrase.text!r} may be a superlative claim with no verified claim that "
+                    "states it; for the reviewer to judge (Rules.md T3)",
+                    (f"superlatives:{lexicon.version}:flag:{phrase.text}",),
                 )
             )
     return findings
