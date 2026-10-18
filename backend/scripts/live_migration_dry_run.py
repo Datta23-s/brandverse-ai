@@ -17,7 +17,9 @@ and was refused. So this script, before running anything:
    user, as the CLI does. Prints whether that role is a superuser (on Supabase it is not).
 
 Then it snapshots the catalog (functions, triggers, constraints, columns, indexes, policies,
-grants, recorded migrations), runs the files in one transaction that is always rolled back, prints
+grants, recorded migrations) on a SEPARATE connection, because reading the catalog can load
+pgvector (pg_get_indexdef on the HNSW index does); re-asserts that the apply connection is still
+fresh; runs the files in one transaction that is always rolled back, prints
 every catalog change the files made, runs the optional `exercise(cursor)` checks inside the same
 transaction, and asserts that after the rollback the catalog equals the snapshot.
 
@@ -137,6 +139,18 @@ def assert_applying_role(conn: psycopg.Connection, url: str) -> None:
     print(f"acting as {current} (the CLI's role, no SET ROLE), superuser: {superuser}")
 
 
+def assert_still_fresh(cur: psycopg.Cursor) -> None:
+    """Immediately before the files run: nothing since connecting has loaded pgvector.
+
+    Reading the catalog can load it (pg_get_indexdef on the HNSW index does), which is why the
+    snapshot taken before the files is read on a separate connection.
+    """
+    row = cur.execute("select current_setting('hnsw.ef_search', true)").fetchone()
+    if row is None or row[0] is not None:
+        raise SystemExit("pgvector was loaded on the apply connection before the files ran")
+    print("still fresh immediately before the files: pgvector not loaded")
+
+
 def snapshot(cur: psycopg.Cursor) -> Snapshot:
     return {name: set(cur.execute(query).fetchall()) for name, query in CATALOG.items()}
 
@@ -167,19 +181,22 @@ def main() -> int:
     ap.add_argument("--read-only", action="store_true")
     args = ap.parse_args()
     url = database_url()
+    # The snapshot is read on its own connection: reading the catalog can load extensions, which
+    # would spoil the apply connection's freshness.
+    with psycopg.connect(url) as snap, snap.cursor() as cur:
+        before = snapshot(cur)
+        snap.rollback()
+    print(f"recorded migrations (last 3): {sorted(before['recorded migrations'])[-3:]}")
     conn = fresh_connection(url)
     with conn:
         assert_applying_role(conn, url)
-        with conn.cursor() as cur:
-            before = snapshot(cur)
-        conn.rollback()
-        print(f"recorded migrations (last 3): {sorted(before['recorded migrations'])[-3:]}")
         if args.read_only or not args.migrations:
             if args.exercise:
                 with conn.transaction(force_rollback=True), conn.cursor() as cur:
                     load_exercise(args.exercise)(cur)
             return 0
         with conn.transaction(force_rollback=True), conn.cursor() as cur:
+            assert_still_fresh(cur)
             for m in args.migrations:
                 cur.execute(m.read_text(encoding="utf-8").encode())
                 print(f"applied inside the dry-run transaction: {m.name}")

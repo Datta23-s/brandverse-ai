@@ -2304,8 +2304,12 @@ fixed, not just this migration: `backend/scripts/live_migration_dry_run.py` hold
 backends open until the pooler gives it a fresh one (started moments ago, pgvector not loaded),
 asserts it acts as the URL's own role with no `SET ROLE`, prints every catalog change the files
 make inside the rolled-back transaction, and asserts the catalog after the rollback equals the
-catalog before (`Rules.md` §3.3). It supersedes the per-migration scratch scripts used for
-0012–0022.
+catalog before (`Rules.md` §3.3). Its first version had the same flaw one level down: its own
+catalog snapshot (`pg_get_indexdef` on the HNSW index) loaded pgvector on the apply connection
+before the files ran. The snapshot now reads on a separate connection, and freshness is asserted
+again immediately before the files. Checked by running the fixed harness on the original 0022
+(from `af4dd3a`): refused with the live push's error, where the old harness had passed it. It
+supersedes the per-migration scratch scripts used for 0012–0022.
 
 ### Live project — permanent footprint
 
