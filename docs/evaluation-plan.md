@@ -301,7 +301,8 @@ verified claim "Up to 60 hours playback (at 60% volume)" — related, but it doe
 week". The gates would pass that statement as verified. This is V2's mechanism (laundering through
 a merely related verified claim) on an ordinary rather than a restricted claim. Whether the
 classifier needs a design change is the project owner's decision; until then this is reported, and
-it is the first thing the Phase 6 measurement should look for.
+it is the first thing the Phase 6 measurement should look for. *Decided the same day: not a
+classifier defect but an architectural gap, written up as V4 below.*
 
 **V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
 2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
@@ -318,6 +319,55 @@ phrasing (risk gate), or — when the classifier extracts it from the copy (Phas
 proof* is blocked only in that last way, when extracted as a factual statement that cites nothing,
 and how often a real model extracts it is not measured. Approver rejections on S2.1 are counted per
 arm (`approvals.failed_gate`).
+
+**V4 — Citation does not imply entailment (recorded 2026-10-18).** The claim gate's citation check
+confirms that a cited claim **exists, belongs to the product, is active and is verified**. It does
+not confirm that the claim **entails the statement citing it**. A statement can cite a genuine,
+active, verified claim and still overstate it, and nothing in the design catches that. This is a
+finding about claim-citation architectures in general — any design that grounds generated text by
+attaching a citation to each statement and then checks the citation resolves — not a bug in this
+code. It belongs in the dissertation's limitations, with the example below attached.
+
+*How it was found* (2026-10-18, verbatim). Not constructed for this write-up: it surfaced in the
+third of three cheap-tier calls (`gemini-3.1-flash-lite`) made to confirm the structured-output
+schema fix (`backend/scripts/schema_confirm.py`, the `classifier` variant; logged to the local
+throwaway database, `Architecture.md` §4.4 tally, 2026-10-18 02:58–11:07). The sample copy given
+to the claim classifier was:
+
+> Tidewell Loop N2: built for the monsoon. IPX7 rating keeps the rain out. 10 mm drivers bring
+> every word through. Lasts all week.
+
+with three verified claims: `ipx7` "IPX7 rating", `drivers` "10 mm drivers", and `60h` "Up to 60
+hours playback (at 60% volume)". "Lasts all week." was put in deliberately as a statement no claim
+supports. The model returned `{"quote": "Lasts all week.", "claim_id": "60h"}`.
+
+*The numbers.* The claim says up to 60 hours, which is 2.5 days, and only at 60% volume. "All week"
+is 7 days, 168 hours: 2.8 times the claim's best case, with its condition dropped. The citation
+resolves — `60h` exists, is active and is verified — so **the claim gate passed the statement,
+correctly by its own rules**. The gate resolves citations; it was never asked whether the claim
+says what the statement says. One instance, cheap tier, hand-written copy: it shows the gap is
+reachable, not how often it is reached. V2 (a paraphrase of a *restricted* claim passing as
+verified) is one case of this general gap.
+
+*Partial mitigation (mechanical, no model calls).* When a cited claim contains a quantity or a
+duration (a number with a unit) and the citing statement does not repeat that quantity, the gates
+**flag** the statement for the reviewer. Flag, not block. "Lasts all week." citing "Up to 60 hours
+playback" is flagged; "Lasts up to 60 hours." citing it passes; a statement citing a claim with no
+quantity in it is untouched. **What it catches: numeric overstatement only.** It does nothing for
+"clinically shown" cited to a single small study, or "loved by thousands" cited to a review count
+of forty. Those stay with the approver (`docs/approval-rubric.md`), as V3's anti-patterns do. Nor
+does it check that a repeated number keeps its qualifiers: "Lasts 60 hours." citing "Up to 60
+hours playback (at 60% volume)" repeats the number and passes, though "up to" and the volume
+condition are gone. A flag is a prompt to a person, not a finding: flags are counted per arm and
+reported as flags, never as a count of overstatements. A statement that restates the quantity
+another way ("two and a half days of playback") is flagged too, and the reviewer clears it.
+
+*Considered and rejected: a model-based entailment check.* Asking a model, per statement, whether
+the cited claim entails the statement would cover the non-numeric cases. It was rejected for three
+reasons: it adds a call for every statement, on the highest-volume path in the system; with the
+strong tier at 20 calls a day it cannot run at that volume; and the gate would then depend on the
+same class of model it exists to constrain, so the check meant to catch a model's overstatement
+would itself be a model's judgement.
 
 ## 5. Statistics
 

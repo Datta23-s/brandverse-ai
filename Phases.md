@@ -270,6 +270,15 @@ owner, and asking for Org B returned nothing; revoking Org A's item removed it f
 retrieval, recorded the revoker and `now()` despite a back-dated value sent, and un-revoking was
 refused. `memory_items` held 0 rows before and after.
 
+**A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
+(`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming
+the structured-output fix (2026-10-18, before chunk A), the claim classifier cited the verified
+claim "Up to 60 hours playback (at 60% volume)" for the planted statement "Lasts all week." — and
+the claim gate passed it, correctly by its own rules, because it resolves citations and never
+checks entailment. Recorded verbatim there with the numbers (60 hours is 2.5 days; a week is 7),
+followed by a mechanical partial mitigation (flag a statement that drops a cited claim's quantity)
+and the rejected alternative (a model-based entailment check).
+
 **pgvector version gap (added 2026-10-14).** CI's database gate runs pgvector 0.8.7; the
 Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds real data:
 - [ ] Re-run the storage measurement against the real project (heap, TOAST, HNSW, GIN per row) and
