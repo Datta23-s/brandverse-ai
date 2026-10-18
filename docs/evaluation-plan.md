@@ -291,6 +291,18 @@ Gemini at all, a defect every later structured call (Phase 5's copy writer, Phas
 have hit. Its fix — and an offline test of the request body for every structured schema we send —
 was approved instead, with up to 3 cheap-tier calls to confirm it.
 
+*Schema fix, confirmed 2026-10-18 in three cheap-tier calls* (`Architecture.md` §4.4 tally): the
+first form still returned `400`; a control showed the environment was fine; the second form
+returned a valid reply. **One observation from that valid reply, recorded verbatim and not acted
+on** (n = 1, cheap tier, a hand-written sample — it supports no rate and no claim beyond "this
+happened once"): the sample copy deliberately contained a statement no listed claim supports,
+"Lasts all week." The model returned `{"quote": "Lasts all week.", "claim_id": "60h"}`, citing the
+verified claim "Up to 60 hours playback (at 60% volume)" — related, but it does not state "all
+week". The gates would pass that statement as verified. This is V2's mechanism (laundering through
+a merely related verified claim) on an ordinary rather than a restricted claim. Whether the
+classifier needs a design change is the project owner's decision; until then this is reported, and
+it is the first thing the Phase 6 measurement should look for.
+
 **V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
 2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
 them, so the system blocks none of them, and the gates' outcome table does not list them

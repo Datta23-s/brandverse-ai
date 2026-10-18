@@ -245,13 +245,20 @@ therefore tallied here by hand, and every live-verification call is added to thi
 |---|---|---|---|---|---|
 | 2026-10-17 10:35 | `scripts/llm_smoke.py` (cap 2) | local `brandverse_e2e` | 1 | 0 | 0 |
 | 2026-10-18 02:22–02:29 | `scripts/v2_probe.py` (cap 10; approved: 10 strong) | local `brandverse_v2_probe` | 0 | 0 | 10 |
-| **Total** | | | **1** | **0** | **10** |
+| 2026-10-18 02:58–11:07 | `scripts/schema_confirm.py` (cap 3 across runs; approved: 3 cheap) | local `brandverse_v2_probe` | 3 | 0 | 0 |
+| **Total** | | | **4** | **0** | **10** |
 
 2026-10-18, V2 probe: all ten strong-tier calls ended `error` and produced no result — eight
 `400 INVALID_ARGUMENT`, one client timeout at 90 s, one `503 UNAVAILABLE`. Whether Google counted
 the failed requests against the 20/day strong quota is not known; the tally assumes it did. The
 script ran on after the first `400`, a systematic error; it should have stopped there
 (`evaluation/probes/v2_adversarial_2026-10-18.json`; `docs/evaluation-plan.md`, V2).
+
+2026-10-18, schema fix confirmation (`app/llm/schema.py`), all on `gemini-3.1-flash-lite`:
+call 1, classifier schema with nullable type lists and `maxItems` — `400`; call 2, control
+(yesterday's flat smoke request through today's gateway) — `ok`, 19 in / 27 out; call 3, classifier
+schema with nullables optional and no item counts — `ok`, 343 in / 82 out, 2,343 ms. The budget of
+three was not exceeded.
 
 Counts are read from the throwaway database's `llm_calls`, not from the script. 2026-10-17: one
 `ok` row on `gemini-3.1-flash-lite`, valid on the first call (no repair); 19 input / 27 output

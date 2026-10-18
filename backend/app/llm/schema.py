@@ -17,7 +17,8 @@ Checked against Gemini on 2026-10-18 with approved cheap-tier calls
 (backend/scripts/schema_confirm.py): the first form (type lists for nullables, `maxItems` kept)
 still returned 400; yesterday's flat smoke request through the same code path succeeded, so the
 environment was fine and the schema's shape was the cause. This form (no type lists, no item
-counts) is the one sent next; its result is recorded in docs/evaluation-plan.md.
+counts) then **succeeded** (11:06 UTC: a valid reply on the classifier's own schema and prompt).
+Which of the two removed constructs Gemini rejected was not isolated; both are kept out.
 
 Nothing is lost in strictness: the gateway still validates every reply against the full Pydantic
 model (extra fields refused, bounds checked), and repairs once if it does not validate. What the
