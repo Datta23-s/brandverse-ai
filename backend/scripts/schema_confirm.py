@@ -25,6 +25,7 @@ from uuid import UUID
 import psycopg
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
+from pydantic import BaseModel
 
 from app.core.claim_classifier import CLAIM_EXTRACT, ExtractedStatements
 from app.core.config import get_settings
@@ -33,7 +34,10 @@ from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallContext, CallLedger
 from app.llm.prompts import library_from
 from app.llm.registry import Tier, registry_from
+from scripts.llm_smoke import CapitalCity
 from tests.db.target_guard import managed_supabase_hosts
+
+AGENT = "schema-confirm"
 
 CONFIRMATION = "3 cheap-tier calls"
 MAX_CALLS = 3
@@ -80,7 +84,16 @@ def prepare_run(url: str) -> CallContext:
                 (org, product, json.dumps({"schema_confirm": True, "outside_evaluation": True})),
             ).fetchone()
         )
-    return CallContext(org_id=UUID(str(org)), run_id=UUID(str(run)), agent_id="schema-confirm")
+    return CallContext(org_id=UUID(str(org)), run_id=UUID(str(run)), agent_id=AGENT)
+
+
+def calls_already_made(url: str) -> int:
+    """Every confirmation call made so far, across runs: the budget of 3 is total, not per run."""
+    with psycopg.connect(url) as c:
+        row = c.execute(
+            "select count(*) from llm_calls where agent_id = %s and outcome <> 'refused'", (AGENT,)
+        ).fetchone()
+    return int(row[0]) if row else 0
 
 
 async def main(args: argparse.Namespace) -> int:
@@ -94,9 +107,23 @@ async def main(args: argparse.Namespace) -> int:
     if settings.google_api_key is None:
         print("GOOGLE_API_KEY is not set in .env")
         return 1
+    spent = calls_already_made(args.database_url)
+    if spent >= MAX_CALLS:
+        print(f"refusing: {spent} of {MAX_CALLS} approved calls already made")
+        return 1
     registry = registry_from(settings.models_config_path)
     prompts = library_from(settings.prompts_dir)
     ctx = prepare_run(args.database_url)
+    if args.variant == "control":
+        # Yesterday's working smoke request, unchanged, through today's gateway: isolates the
+        # environment from the schema.
+        schema: type[BaseModel] = CapitalCity
+        prompt = prompts.get("smoke_capital_city", "v1").render(country="Portugal")
+        max_tokens = 128
+    else:
+        schema = ExtractedStatements
+        prompt = prompts.get(*CLAIM_EXTRACT).render(copy=COPY, claims=CLAIMS)
+        max_tokens = 1024
     pool: AsyncConnectionPool[AsyncConnection] = AsyncConnectionPool(
         args.database_url, min_size=0, max_size=2, open=False
     )
@@ -106,7 +133,7 @@ async def main(args: argparse.Namespace) -> int:
         ledger = CallLedger(
             pool,
             registry,
-            max_calls_per_run=MAX_CALLS,
+            max_calls_per_run=MAX_CALLS - spent,
             max_cost_per_run_usd=0.05,
             pending_expiry_s=settings.llm_pending_expiry_s,
         )
@@ -120,16 +147,16 @@ async def main(args: argparse.Namespace) -> int:
             max_rate_limit_wait_s=30,
             allow_strong_tier=False,  # cheap tier only
         )
-        prompt = prompts.get(*CLAIM_EXTRACT).render(copy=COPY, claims=CLAIMS)
         while True:
             try:
                 result = await gateway.structured(
-                    ExtractedStatements,
+                    schema,
                     tier=Tier.CHEAP,
                     prompt=prompt,
                     ctx=ctx,
-                    route_reason="schema fix confirmation (approved: 3 cheap-tier calls)",
-                    max_output_tokens=1024,
+                    route_reason=f"schema fix confirmation, {args.variant} "
+                    "(approved: 3 cheap-tier calls)",
+                    max_output_tokens=max_tokens,
                 )
                 print("VALID REPLY:", result.model_dump_json(indent=2))
                 outcome = "confirmed"
@@ -159,4 +186,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", required=True)
     parser.add_argument("--confirm", default="")
+    parser.add_argument("--variant", choices=["classifier", "control"], default="classifier")
     sys.exit(asyncio.run(main(parser.parse_args()), loop_factory=asyncio.SelectorEventLoop))
