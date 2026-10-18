@@ -155,8 +155,23 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
   `tests/db/test_api.py::test_a_freshly_bootstrapped_orgs_product_runs_only_once_it_has_a_verified_claim`
   (an organisation 0012 created; a restricted claim alone does not admit). On the fake-run path:
   Phase 6's `POST /api/v1/runs` must call the same `app/core/admission.py`.
-- [ ] An attempt to generate a restricted claim is blocked and logged
-- [ ] Every claim in a sample output resolves to a source
+- [ ] An attempt to generate a restricted claim is blocked and logged — **PROVISIONAL, not settled
+  (2026-10-18).** Phase 3 cannot exit on this until a generator exists and real output passes the
+  gates. Shown on hand-written sample copy with a mocked model only:
+  `tests/test_claim_classifier.py::test_criterion_2_a_restricted_claim_in_output_is_blocked_whatever_the_model_cites`
+  (the model cites a verified claim for the restricted statement; the risk gate scans the copy and
+  blocks it anyway) and `…_the_model_ignores_is_still_blocked`; logged:
+  `tests/db/test_claim_classifier_db.py::test_a_restricted_claim_in_output_is_blocked_and_logged`
+  (`output.blocked` in `audit_log`). A brief asking for a restricted claim is refused at admission
+  (`tests/db/test_api.py`). Restricted claims never reach a model's prompt. Paraphrase is not caught
+  (threat V2).
+- [ ] Every claim in a sample output resolves to a source — **PROVISIONAL, not settled
+  (2026-10-18).** Same condition. Shown on two sample outputs built on real product material from
+  `evaluation/test_set.yaml` (Tidewell Loop N2; Verdano Whey, regulated, on the strong tier):
+  `tests/test_claim_classifier.py::test_criterion_3_every_claim_in_a_sample_output_resolves_to_a_source`
+  — every extracted statement resolved to a verified claim and its evidence URL, none left over; a
+  statement no claim supports blocks the copy. The model's extraction is scripted, so how well a
+  real model extracts is not measured.
 - [ ] Output in a regulated sector missing a required disclaimer is blocked — **PROVISIONAL, not
   settled (2026-10-17; box left open 2026-10-18).** Phase 3 cannot exit on this until a generator
   exists and real output passes the gates. Shown on test evidence only: `tests/db/test_gates_db.py::test_criterion_4_regulated_output_missing_a_required_disclaimer_is_blocked`:
@@ -198,7 +213,9 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 `Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Chunk B (output
 gates, superlative list v1, registry authoring path, staged write-back; 2026-10-17): §8.3. The
 brand-voice gate's registry half is built; its similarity score is Phase 6. Chunk C (the claim
-classifier) remains.
+classifier, `claim_extract@v1`; 2026-10-18): §8.3, mocked model only — zero real calls. **Phase 3
+is built but cannot exit**: criteria 2–5 stay provisional until a generator (Phase 6) produces real
+output that passes the gates.
 
 > **Specified, not implemented: detectors for the eight predatory anti-patterns (`Rules.md` T5;
 > decided 2026-10-18).** `Architecture.md` §8 specifies them for the risk gate. None is built, so

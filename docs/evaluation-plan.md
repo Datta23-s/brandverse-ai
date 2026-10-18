@@ -230,9 +230,11 @@ the approver applying T1.3, and the dissertation must not claim the gate blocks 
 (`Rules.md` A6).
 
 *Mitigation.*
-1. Restricted claims are never given to the copy-writing step: the context it receives holds
-   verified and deduced claims only (built with the generation context in chunk C/Phase 6), so a
-   paraphrase has to originate in the model, not be prompted by it.
+1. Restricted claims are never given to a model: `truth_context`
+   (`backend/app/core/claim_classifier.py`, built 2026-10-18) holds verified and deduced claims
+   only, it is the only view of a product's claims the classifier sees, and it is the view Phase 6's
+   copy writer will get — so a paraphrase has to originate in the model, not be prompted by it.
+   A test asserts no restricted or retired claim text reaches the prompt.
 2. Every gate block is counted per arm as a result (`backend/app/evaluation/run_outcomes.py`), and
    every approver rejection on T1.3 is recorded with its gate id (`approvals.failed_gate`), so
    paraphrases that reached the approver are counted, not lost.
@@ -250,9 +252,11 @@ an anti-pattern the approver misses ships in an approved campaign, and its rate 
 measured**; the dissertation must not claim the system blocks anti-patterns (`Rules.md` A6). Two of
 the eight overlap mechanisms that do exist and are reported under them, not under T5: an
 unsubstantiated *health* claim is blocked when it matches a restricted claim, a registry prohibited
-phrasing (risk gate), or — once statements are extracted from free copy (Phase 3 chunk C, not yet
-built) — cites nothing (claim gate); fabricated *social proof* is blocked only in that last way,
-when extracted as a factual statement that cites nothing. Approver rejections on S2.1 are counted per arm (`approvals.failed_gate`).
+phrasing (risk gate), or — when the classifier extracts it from the copy (Phase 3 chunk C, built
+2026-10-18 and tested with a mocked model only) — cites nothing (claim gate); fabricated *social
+proof* is blocked only in that last way, when extracted as a factual statement that cites nothing,
+and how often a real model extracts it is not measured. Approver rejections on S2.1 are counted per
+arm (`approvals.failed_gate`).
 
 ## 5. Statistics
 

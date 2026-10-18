@@ -617,8 +617,21 @@ in-process stage; it is committed in the transaction that writes the terminal st
 completed run, and discarded otherwise — so no write reaches the undeletable `memory_items` before
 the attempt's primacy is known (`docs/evaluation-plan.md` §2).
 
-**Not built yet in Phase 3:** the claim classifier that extracts statements from free copy
-(chunk C). Until then the gates take statements as given; chunk C supplies them.
+**The claim classifier** (Phase 3 chunk C, 2026-10-18; `backend/app/core/claim_classifier.py`,
+prompt `claim_extract@v1`): a model extracts every factual statement in the copy as an exact
+quote and names the listed claim it rests on, or none. It never labels anything — the claim gate
+computes the label from the cited claim's stored type — and every quote is checked against the
+copy. The claims a model sees (`truth_context`, also the view Phase 6's copy writer will get) are
+active verified and deduced only: **a restricted claim is never shown to a model** (Rules.md T2,
+input side). Regulated-sector output is classified on the strong tier (T4); with the strong tier
+off, the copy is blocked, not downgraded. Any model failure blocks the copy (`gate_error`).
+`validate_output` appends every blocked report to `audit_log`. Proven with a mocked model only:
+how well a real model extracts — and in particular whether it cites a verified claim for a
+paraphrase of a restricted one — is **not measured** (threat V2).
+
+**What Phase 3 cannot show without Phase 6:** there is no generator yet, so no real output has
+passed through the gates. Every output-side criterion rests on hand-written sample copy and
+scripted model replies, and stays provisional in `Phases.md` until real generated output does.
 
 ---
 

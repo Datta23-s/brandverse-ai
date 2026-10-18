@@ -2,3 +2,4 @@
 # Append-only. A released version is never edited or removed (app/llm/prompts.py).
 smoke_capital_city v1 sha256:b68f6f8619c387f765d562794c6728b786f94d152215a6ce175d492c39ffce94
 structured_repair v1 sha256:229cb7767ef7dc36f8ca791b7c85f05b12fe1771689ac7590408b6092a181b51
+claim_extract v1 sha256:cc47c221ad7081037abc38132b39e28226b3362ad545bdf4365ca5ed3bb1a32e
