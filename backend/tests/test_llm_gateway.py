@@ -7,7 +7,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, StructuredOutputInvalid
-from app.llm.gateway import LLMGateway, retry_delay_s
+from app.llm.gateway import LLMGateway, response_format, retry_delay_s
 from app.llm.prompts import PromptRef
 from app.llm.registry import Tier
 from tests.llm_fakes import (
@@ -102,7 +102,9 @@ async def test_every_call_disables_hidden_retries_and_names_the_schema() -> None
     await ask(gw)
     (kwargs,) = completion.calls
     assert kwargs["num_retries"] == 0 and kwargs["max_retries"] == 0
-    assert kwargs["response_format"] is Verdict
+    # The provider-safe schema, by name — never the raw Pydantic class (app/llm/schema.py).
+    assert kwargs["response_format"] == response_format(Verdict)
+    assert kwargs["response_format"]["json_schema"]["name"] == "Verdict"
     assert kwargs["max_tokens"] == 256
     assert kwargs["api_key"] == "test-key"
     assert kwargs["model"].startswith("gemini/test-cheap-")

@@ -38,6 +38,7 @@ from psycopg_pool import AsyncConnectionPool
 from app.core.claim_classifier import CLAIM_EXTRACT, extract_statements, truth_context
 from app.core.config import REPO_ROOT, get_settings
 from app.core.gates import evaluate, load_superlatives
+from app.core.infrastructure import classify_infrastructure_failure
 from app.core.sector_registry import Sector, SectorConstraint, verbatim_form
 from app.core.truth import Claim, ProductTruth
 from app.llm.gateway import LLMGateway
@@ -355,6 +356,14 @@ async def main(args: argparse.Namespace) -> int:
                 }
             except Exception as e:  # report, never retry
                 record |= {"error": f"{type(e).__name__}: {e}", "verdict": "UNRUN or FAILED"}
+                results.append(record)
+                print(json.dumps(record, indent=2, ensure_ascii=False))
+                if classify_infrastructure_failure(e) != "network_error":
+                    # Anything but a transient network failure (a 400, a 503, invalid output) is
+                    # treated as systematic: stop, keep the remaining calls (2026-10-18 lesson).
+                    print("stopping: a non-transient error would repeat on every remaining case")
+                    break
+                continue
             results.append(record)
             print(json.dumps(record, indent=2, ensure_ascii=False))
     finally:

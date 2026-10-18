@@ -44,6 +44,7 @@ from app.llm import _litellm
 from app.llm.ledger import CallContext, CallLedger
 from app.llm.prompts import PromptLibrary, PromptRef, RenderedPrompt
 from app.llm.registry import ModelRegistry, Tier
+from app.llm.schema import provider_schema
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ Completion = Callable[..., Awaitable[Any]]
 # The repair template, pinned by version like any other prompt (config/prompts/).
 REPAIR_PROMPT = ("structured_repair", "v1")
 _RETRY_DELAY = re.compile(r'"?retryDelay"?\s*[:=]\s*"?(\d+(?:\.\d+)?)s')
+
+
+def response_format(schema: type[BaseModel]) -> dict[str, Any]:
+    """What LiteLLM is given for structured output: the provider-safe schema, by name."""
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": schema.__name__, "schema": provider_schema(schema)},
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +230,9 @@ class LLMGateway:
                     response = await self._completion(
                         model=model.litellm_model,
                         messages=messages,
-                        response_format=schema,
+                        # Never the raw Pydantic schema: the plain, allow-listed form
+                        # (app/llm/schema.py). The reply is still validated against `schema`.
+                        response_format=response_format(schema),
                         max_tokens=max_output_tokens,
                         timeout=self._timeout_s,
                         api_key=self._api_key,
