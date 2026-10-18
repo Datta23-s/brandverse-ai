@@ -19,6 +19,16 @@
 # "no 1". Families are ENUMERATED, never written as patterns: "most \w+" would block "most people",
 # and an unlisted surprise cannot be versioned.
 #
+# AMENDED 2026-10-18, same day, still before any evaluation use, by the project owner: "best in
+# class" added to the block tier (30 block). It is one of the commonest superlatives in Indian
+# marketing copy and was not caught: "best" alone matched "best in class", but not the closed
+# "bestinclass". With separator tolerance, "best-in-class" and "bestinclass" now match too.
+#
+# KNOWN FALSE POSITIVES, CHOSEN, NOT MISSED — accepted costs of a word-by-word list, following from
+# the owner's rulings: "no 1-year warranty" blocks (reads as "no 1"); "Best beforehand" blocks
+# ("beforehand" is not "before", so the best-before exception does not apply). Checked and correct:
+# "bestow" does NOT match "best" (whole words only).
+#
 # DELIBERATELY NOT HERE — evidence and safety claims, not superlatives: "clinically proven",
 # "scientifically proven", "doctor recommended", "zero side effects", "100% safe". They belong to
 # the claim gate, which resolves them against a verified claim or blocks them. A phrase in two
@@ -55,6 +65,7 @@ block:
   - industry leading
   - top rated
   - best selling
+  - best in class   # added 2026-10-18 (see header)
 flag:
   - leading
   - the only

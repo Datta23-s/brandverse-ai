@@ -331,7 +331,8 @@ V1_FLAG = {gates._as_phrase(p).text for p in V1.flag}
 def test_the_released_list_is_the_decided_split() -> None:
     # Decided by the project owner 2026-10-18, before any evaluation use.
     assert V1.version == "v1"
-    assert (len(V1_BLOCK), len(V1_FLAG)) == (29, 11)
+    assert (len(V1_BLOCK), len(V1_FLAG)) == (30, 11)  # "best in class" added the same day
+    assert "best in class" in V1_BLOCK
     assert {"best", "number one", "fastest"} <= V1_BLOCK  # Rules.md T3's examples
     assert {"no 1", "safest", "purest", "most trusted", "most recommended"} <= V1_BLOCK
     assert {"highest potency", "highest quality"} <= V1_BLOCK
@@ -386,6 +387,13 @@ def test_best_is_still_a_superlative_everywhere_else() -> None:
     assert _v1_kinds("The best greens. Best before 03/2027.") == [
         ("unsupported_superlative", "best")
     ]
+
+
+def test_the_accepted_false_positives_behave_as_recorded_in_the_v1_header() -> None:
+    # Chosen, not missed (v1 header, 2026-10-18): both block; "bestow" correctly does not.
+    assert ("unsupported_superlative", "no 1") in _v1_kinds("Comes with no 1-year warranty.")
+    assert ("unsupported_superlative", "best") in _v1_kinds("Shake it best beforehand.")
+    assert _v1_kinds("We bestow our thanks.") == []
 
 
 def test_ordinary_words_near_the_families_are_not_caught() -> None:

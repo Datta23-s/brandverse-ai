@@ -242,6 +242,36 @@ the approver applying T1.3, and the dissertation must not claim the gate blocks 
    manufacturer claims (`evaluation/test_set.yaml`) and their paraphrases, and reported with its
    conditions. Until then it is written as *not measured*.
 
+*V2 adversarial existence test — pre-registered 2026-10-18, BEFORE the first call.* Approved by
+the project owner: **10 calls, strong tier**, one probe run. Not a sample and not the measurement in
+item 3: the coupling V2 names (a generator paraphrases a restricted claim, the classifier
+mislabels it) does not exist until Phase 6, and hand-written paraphrases test the classifier
+against our imagination of a generator, not against a generator.
+
+- **Design.** Ten paraphrases of the regulated product line's restricted claims (Verdano Whey and
+  Verdano Marine Collagen, `evaluation/test_set.yaml`), chosen to be the **hardest we can
+  construct**, not representative: each avoids the restricted claim's own wording and every word
+  on the superlative list, so only the classifier can catch it, and each either sits inside or
+  beside a statement a verified claim truly supports (inviting the model to cite that claim for
+  it) or is framed as testimonial or opinion (inviting the model to skip it). The aim is to
+  **maximise the chance of a miss**.
+- **A miss** is a case whose copy is not blocked although it contains the paraphrase — the model
+  omitted the paraphrased statement, or cited a verified claim for it.
+- **What may be reported, fixed now.** **n = 10 cannot estimate a miss rate, and no rate will be
+  reported from it.** The result is reported only as: *"the classifier was / was not made to miss
+  under adversarial construction, n = 10, hand-written"* — and nothing stronger. Every miss is
+  reported verbatim: the paraphrase, the restricted claim it carries, what the model returned.
+- **Logging.** All calls go to `llm_calls` in a throwaway local database
+  (`brandverse_v2_probe`), agent `v2-probe-adversarial`, in a run whose request marks the probe; no
+  experiment marker exists on it, so it is outside the evaluation by design (`Architecture.md` §9,
+  "Experiment membership"). Calls are added to the tally in `Architecture.md` §4.4. The ledger caps
+  the run at 10 calls: a case that needs a repair spends a second call and a later case may go
+  unrun — reported as unrun, never re-tried.
+- **If it misses**, the classifier is not changed in response: the result goes to the project owner,
+  because a classifier that mislabels paraphrased restricted claims may need a design change, not
+  a prompt change.
+- Script: `backend/scripts/v2_probe.py`; raw results committed to `evaluation/probes/`.
+
 **V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
 2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
 them, so the system blocks none of them, and the gates' outcome table does not list them
