@@ -600,12 +600,12 @@ the sector's active rules, deterministically:
 
 | Gate | Checks | Findings |
 |---|---|---|
-| Claim | Each factual statement (an exact quote from the copy, with what it cites) is labelled from its citation, never by a model | resolves to a source (verified); `deduced_labelled` (flag); `unsourced_claim`, `cites_unknown_claim`, `cites_retired_claim`, `cites_restricted_claim`, `deduced_unlabelled`, `statement_not_in_copy` (block) |
+| Claim | Each factual statement (an exact quote from the copy, with what it cites) is labelled from its citation, never by a model | resolves to a source (verified); `deduced_labelled` (flag); `unrepeated_quantity` (flag: the cited claim states a quantity the statement does not repeat — a resolved citation does not show entailment, `docs/evaluation-plan.md` V4; `backend/app/core/quantities.py`); `unsourced_claim`, `cites_unknown_claim`, `cites_retired_claim`, `cites_restricted_claim`, `deduced_unlabelled`, `statement_not_in_copy` (block) |
 | Risk | The whole copy | `restricted_claim_in_copy`, `prohibited_phrase`, `missing_disclaimer`, superlatives in two tiers (Rules.md T3; a superlative passes only in a statement citing a verified claim whose own text states it): unambiguous ones unsupported → `unsupported_superlative` (block); context-dependent ones ("leading", "the only", "ultimate") unsupported → `context_superlative` (**flag** for the reviewer — raised for a person, neither silently permitted nor wrongly blocked), `registry_coverage`, `registry_rule_invalid`. **Not the eight anti-patterns (T5)**: no detector exists, so none is in the outcome table — T5 is unmet (`Phases.md` Phase 3) |
 | Brand voice, registry half | Required disclaimers | `altered_disclaimer` — present but with case or punctuation changed, distinct from `missing_disclaimer`; `voice_scoring_text` strips disclaimer text before Phase 6's similarity, which is not built here |
 
-`SEVERITY` is closed and immutable: every finding kind blocks except `deduced_labelled` and
-`context_superlative`, which flag; an exception anywhere is a `gate_error` block. A blocked report
+`SEVERITY` is closed and immutable: every finding kind blocks except `deduced_labelled`,
+`context_superlative` and `unrepeated_quantity`, which flag; an exception anywhere is a `gate_error` block. A blocked report
 is appended to `audit_log` (`output.blocked`, actor `validation_engine`) and names the sector with
 its provenance and the superlative list version (`config/superlatives/`: both tiers in one file
 under one hash, so the thesis can state which word sat on which tier). **v1 was decided by the

@@ -93,9 +93,9 @@ def test_every_finding_kind_has_an_outcome_and_a_gate() -> None:
     assert set(SEVERITY) == set(get_args(FindingKind)) == set(GATE_OF)
 
 
-def test_only_a_labelled_deduction_and_a_context_superlative_flag() -> None:
+def test_only_a_labelled_deduction_a_context_superlative_and_an_unrepeated_quantity_flag() -> None:
     flagged = {k for k, v in SEVERITY.items() if v != "block"}
-    assert flagged == {"deduced_labelled", "context_superlative"}
+    assert flagged == {"deduced_labelled", "context_superlative", "unrepeated_quantity"}
     assert set(SEVERITY.values()) == {"block", "flag"}  # nothing is ever only a warning
 
 
@@ -179,6 +179,44 @@ def test_a_labelled_deduction_is_flagged_not_blocked() -> None:
     )
     assert report.outcome == "flag"
     assert report.resolutions[0].label == "deduced"
+
+
+PLAYBACK = Claim(
+    "60h",
+    "Up to 60 hours playback (at 60% volume)",
+    "verified",
+    "https://example.invalid/60h",
+    False,
+)
+TIDEWELL = "Tidewell Loop N2: built for the monsoon. Lasts all week."
+
+
+def test_v4_a_resolved_citation_that_drops_the_claims_quantity_is_flagged_not_blocked() -> None:
+    # Threat V4, the example it was found with: the citation resolves (exists, active, verified),
+    # so before this the gate passed it. 60 hours is 2.5 days; a week is 7.
+    t = ProductTruth(FOOTWEAR, (PLAYBACK,), ())
+    report = evaluate({"body": TIDEWELL}, (Statement("Lasts all week.", "60h"),), t, LEXICON, TODAY)
+    assert [(f.kind, f.outcome, f.refs) for f in report.findings] == [
+        ("unrepeated_quantity", "flag", ("60h",))
+    ]
+    assert "60 hours" in report.findings[0].message and "60%" in report.findings[0].message
+    assert report.outcome == "flag"
+    assert [r.label for r in report.resolutions] == ["verified"]  # still resolved, and shown
+
+
+def test_a_statement_repeating_the_claims_quantities_passes() -> None:
+    t = ProductTruth(FOOTWEAR, (PLAYBACK,), ())
+    copy = {"body": "Lasts up to 60 hours at 60% volume."}
+    statement = Statement("Lasts up to 60 hours at 60% volume.", "60h")
+    assert evaluate(copy, (statement,), t, LEXICON, TODAY).outcome == "pass"
+
+
+def test_a_labelled_deduction_dropping_its_claims_quantity_is_flagged_for_both() -> None:
+    claim = Claim("d60", "About 300 charge cycles before fading", "deduced", None, False)
+    t = ProductTruth(FOOTWEAR, (claim,), ())
+    copy = {"body": "We think it lasts for years."}
+    statement = Statement("it lasts for years", "d60", labelled_deduction=True)
+    assert kinds(copy, (statement,), t) == ["deduced_labelled", "unrepeated_quantity"]
 
 
 def test_a_quote_may_differ_from_the_copy_only_in_layout() -> None:

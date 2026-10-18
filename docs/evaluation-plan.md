@@ -349,18 +349,22 @@ says what the statement says. One instance, cheap tier, hand-written copy: it sh
 reachable, not how often it is reached. V2 (a paraphrase of a *restricted* claim passing as
 verified) is one case of this general gap.
 
-*Partial mitigation (mechanical, no model calls).* When a cited claim contains a quantity or a
-duration (a number with a unit) and the citing statement does not repeat that quantity, the gates
-**flag** the statement for the reviewer. Flag, not block. "Lasts all week." citing "Up to 60 hours
-playback" is flagged; "Lasts up to 60 hours." citing it passes; a statement citing a claim with no
-quantity in it is untouched. **What it catches: numeric overstatement only.** It does nothing for
-"clinically shown" cited to a single small study, or "loved by thousands" cited to a review count
-of forty. Those stay with the approver (`docs/approval-rubric.md`), as V3's anti-patterns do. Nor
-does it check that a repeated number keeps its qualifiers: "Lasts 60 hours." citing "Up to 60
-hours playback (at 60% volume)" repeats the number and passes, though "up to" and the volume
-condition are gone. A flag is a prompt to a person, not a finding: flags are counted per arm and
-reported as flags, never as a count of overstatements. A statement that restates the quantity
-another way ("two and a half days of playback") is flagged too, and the reviewer clears it.
+*Partial mitigation (mechanical, no model calls; built 2026-10-18, `backend/app/core/quantities.py`,
+finding `unrepeated_quantity`).* When a cited claim contains a quantity (a number written in
+digits, with its unit if it has one) and the citing statement does not repeat it, the claim gate
+**flags** the statement for the reviewer. Flag, not block. Every quantity in the claim must be
+repeated, units compared across spellings ("60h" repeats "60 hours"). With the claim "Up to 60
+hours playback (at 60% volume)": "Lasts all week." is flagged (both quantities dropped); "Lasts up
+to 60 hours." is flagged too (the 60% condition dropped); "Lasts up to 60 hours at 60% volume."
+passes; a statement citing a claim with no number in it is untouched. **What it catches: numeric
+overstatement only.** It does nothing for "clinically shown" cited to a single small study, or
+"loved by thousands" cited to a review count of forty. Those stay with the approver
+(`docs/approval-rubric.md`), as V3's anti-patterns do. Nor does it check qualifiers written in
+words: "Lasts 60 hours." citing "Up to 60 hours playback" repeats the number and passes, though
+"up to" is gone. Number words are not read, so a statement restating the quantity another way
+("two and a half days of playback") is flagged and the reviewer clears it. A flag is a prompt to a
+person, not a finding: flags are counted per arm and reported as flags, never as a count of
+overstatements.
 
 *Considered and rejected: a model-based entailment check.* Asking a model, per statement, whether
 the cited claim entails the statement would cover the non-numeric cases. It was rejected for three

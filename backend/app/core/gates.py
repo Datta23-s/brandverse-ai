@@ -19,10 +19,13 @@ finding kind is added here mapped to `block` — T5 allows nothing else.
   scores voice similarity. The similarity score itself is not built here.
 
 **How a gate fails: blocked, never warned** (Rules.md T2). `SEVERITY` maps every finding
-kind to its outcome and cannot be changed at runtime. Two kinds flag for the human reviewer rather
-than block: `deduced_labelled` (a labelled deduction is allowed, and shown) and
+kind to its outcome and cannot be changed at runtime. Three kinds flag for the human reviewer
+rather than block: `deduced_labelled` (a labelled deduction is allowed, and shown),
 `context_superlative` (a context-dependent superlative such as "leading" or "the only", with no
-citation: raised for a person rather than silently permitted or wrongly blocked). Everything else
+citation: raised for a person rather than silently permitted or wrongly blocked) and
+`unrepeated_quantity` (a resolved citation whose claim states a quantity the statement does not
+repeat — "Lasts all week." citing "Up to 60 hours playback": a citation that resolves does not
+show the claim entails the statement, threat V4; app/core/quantities.py). Everything else
 blocks. An exception
 anywhere in evaluation is itself a block (`gate_error`), never a pass. A block is logged and
 appended to audit_log (`record_gate_block`).
@@ -48,9 +51,10 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from app.core.config import REPO_ROOT
+from app.core.quantities import unrepeated_quantities
 from app.core.sector_registry import check_registry_coverage, verbatim_form
 from app.core.text_match import contains_phrase, matches_rule, normalise, phrase_regex
-from app.core.truth import ProductTruth
+from app.core.truth import Claim, ProductTruth
 from app.errors import RegistryRuleInvalid
 from app.llm.prompts import file_sha256
 
@@ -67,6 +71,7 @@ FindingKind = Literal[
     "cites_restricted_claim",
     "deduced_unlabelled",
     "deduced_labelled",
+    "unrepeated_quantity",
     # risk gate: the whole copy
     "restricted_claim_in_copy",
     "prohibited_phrase",
@@ -82,7 +87,9 @@ FindingKind = Literal[
 ]
 
 # Every finding kind's outcome, fixed. A new kind with no entry fails the test suite.
-FLAGGED: frozenset[FindingKind] = frozenset({"deduced_labelled", "context_superlative"})
+FLAGGED: frozenset[FindingKind] = frozenset(
+    {"deduced_labelled", "context_superlative", "unrepeated_quantity"}
+)
 SEVERITY: Mapping[FindingKind, Outcome] = MappingProxyType(
     {kind: ("flag" if kind in FLAGGED else "block") for kind in get_args(FindingKind)}
 )
@@ -99,6 +106,7 @@ GATE_OF: Mapping[FindingKind, GateName] = MappingProxyType(
                 "cites_restricted_claim",
                 "deduced_unlabelled",
                 "deduced_labelled",
+                "unrepeated_quantity",
                 "gate_error",
             )
             else "brand_voice"
@@ -223,6 +231,22 @@ def _copy_text(copy: Mapping[str, str]) -> str:
     return "\n".join(copy.values())
 
 
+def _quantity_check(s: Statement, claim: Claim) -> list[Finding]:
+    """A resolved citation whose claim states a quantity the statement does not repeat is flagged
+    (threat V4: a citation that resolves does not show the claim entails the statement)."""
+    dropped = unrepeated_quantities(claim.text, s.text)
+    if not dropped:
+        return []
+    return [
+        Finding(
+            "unrepeated_quantity",
+            f"the cited claim states {', '.join(q.text for q in dropped)}, which the statement "
+            f"does not repeat; for the reviewer to judge whether it overstates: {s.text[:80]!r}",
+            (claim.id,),
+        )
+    ]
+
+
 def _claim_gate(
     statements: Sequence[Statement], copy: str, truth: ProductTruth
 ) -> tuple[list[Finding], list[Resolution]]:
@@ -273,6 +297,7 @@ def _claim_gate(
                 findings.append(
                     Finding("deduced_labelled", f"labelled deduction: {quote!r}", (claim.id,))
                 )
+                findings.extend(_quantity_check(s, claim))
                 resolutions.append(Resolution(s.text, "deduced", claim.id, claim.evidence_url))
             else:
                 findings.append(
@@ -283,6 +308,7 @@ def _claim_gate(
                     )
                 )
         else:
+            findings.extend(_quantity_check(s, claim))
             resolutions.append(Resolution(s.text, "verified", claim.id, claim.evidence_url))
     return findings, resolutions
 
