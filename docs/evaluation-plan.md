@@ -323,10 +323,14 @@ arm (`approvals.failed_gate`).
 **V4 — Citation does not imply entailment (recorded 2026-10-18).** The claim gate's citation check
 confirms that a cited claim **exists, belongs to the product, is active and is verified**. It does
 not confirm that the claim **entails the statement citing it**. A statement can cite a genuine,
-active, verified claim and still overstate it, and nothing in the design catches that. This is a
-finding about claim-citation architectures in general — any design that grounds generated text by
-attaching a citation to each statement and then checks the citation resolves — not a bug in this
-code. It belongs in the dissertation's limitations, with the example below attached.
+active, verified claim and still overstate it, and nothing in the design catches that. This
+follows from the definition, not from observation: whether a cited claim exists and is active,
+and whether it supports the statement, are different questions, so by construction a check that
+answers the first cannot detect a failure of the second. It therefore holds for any design that
+grounds generated text by attaching a citation to each statement and checking only that the
+citation resolves; it is not a bug in this code. The example below shows the gap is reachable; it
+is an illustration, not the evidence. It belongs in the dissertation's limitations, with the
+example attached.
 
 *How it was found* (2026-10-18, verbatim). Not constructed for this write-up: it surfaced in the
 third of three cheap-tier calls (`gemini-3.1-flash-lite`) made to confirm the structured-output
@@ -450,7 +454,8 @@ against another model's opinion, a confound every number would carry).
 
 **Embeddings — decided 2026-10-18.** Computed locally by a pinned sentence-transformer
 (`BAAI/bge-base-en-v1.5`, revision and weights hash in `Memory.md` §5), never by a hosted API and
-never billed: reproducible years later, no quota competition with the strong tier, and not the
+never billed: a recorded revision and a weights hash checked on load, which a hosted endpoint
+does not give; no quota competition with the strong tier, and not the
 contribution — the encoder is a parameter of the retrieval results and is reported as such.
 
 ## 8. Decisions

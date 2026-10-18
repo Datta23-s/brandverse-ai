@@ -174,10 +174,10 @@ live project: `Architecture.md` §11). Below roughly 10,000 rows HNSW adds littl
 
 **Decision 2026-10-18 (project owner): embeddings are computed LOCALLY by a pinned
 sentence-transformer, never by a hosted API, and are never billed.** It replaces the Gemini
-embedding endpoint below. Reasons, in order of weight: (a) **reproducibility** — a hosted model can
-change under us with no version bump and every retrieval number would silently stop being
-reproducible; a pinned local model with a recorded revision and weights hash is reproducible years
-later; (b) **quota** — embeddings are the highest-volume call (every memory write, every query) and
+embedding endpoint below. Reasons, in order of weight: (a) **reproducibility** — a pinned local model
+gives a recorded revision and a weights hash that can be checked on load; a hosted endpoint gives
+neither, so only the local model ties a retrieval number to the exact model that produced its
+vectors; (b) **quota** — embeddings are the highest-volume call (every memory write, every query) and
 must not compete with the strong tier's 20/day; (c) **it is not the contribution** — the claim is
 about hybrid retrieval, the `M`-score and the reuse bands; the encoder is a parameter, and the
 thesis says so.
@@ -216,7 +216,14 @@ uses the same encoder and records its id and revision in `pool.lock`.
 
 ## 6. Write-back — step 15
 
-The strictest part of the system. **Writing a wrong fact to memory poisons every future campaign for that brand.**
+The strictest part of the system. **A wrong fact written to memory can be retrieved in any later
+campaign for that brand, and the design compounds an error nobody notices.** Each reuse at
+`M ≥ 0.90` in an approved campaign raises the item's `confidence` (§6.3), and `confidence` enters
+the `M`-score through `E` (source score × confidence, §3), so the item ranks higher and is more
+likely to be retrieved again. The counterweight depends on someone noticing: a validation flag or a
+reviewer's edit lowers `confidence` (§6.3), and revocation removes the item (§6.4). Until source
+scores exist (Phase 5) `E` is left out of `M`, so `confidence` does not yet affect retrieval; the
+compounding starts then. Hence the eligibility rules below.
 
 ### 6.1 Eligibility
 

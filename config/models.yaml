@@ -90,8 +90,8 @@ tiers:
 embedding:
   # DECIDED 2026-10-18 (project owner; Memory.md §5): computed LOCALLY by a pinned
   # sentence-transformer, never by a hosted API. No llm_calls row, no quota, no cost. Replaces
-  # gemini-embedding-2 (hosted; a model that can change under us with no version bump would make
-  # every retrieval number unreproducible). Loaded and checked by backend/app/memory/embeddings.py:
+  # gemini-embedding-2 (hosted: no revision or weights hash to record or check, so a retrieval
+  # number could not be tied to the exact model behind its vectors). Loaded and checked by backend/app/memory/embeddings.py:
   # the weights' size and sha256 at this exact revision, a final Normalize module, and the
   # dimension, which must equal memory_items.embedding vector(768) (asserted by a database test).
   # Values read from the Hugging Face Hub 2026-10-18.
