@@ -723,13 +723,14 @@ values, so a run cannot arrive already `blocked`, `completed` or costed and be c
 brand's owner knows it, so it cannot be derived; the caller supplies it and every set or change is
 written to `audit_log` by a security-definer trigger, with the actor read from the JWT.
 
-Known remaining instances, not fixed in Phase 3 (scope, `Rules.md` §1.3):
-- `memory_items.revoked_at` is supplied by the revoking user (the `memory_revoke` policy checks
-  `revoked_by = auth.uid()`, not the time) — Phase 4, with the rest of write-back and revocation.
-- `memory_items.claim_id` is `on delete set null`, and a product with no runs can be deleted; a
-  claim-backed memory item would then lose its claim. No memory items exist yet — Phase 4.
-- `runs.arm` is chosen by whoever inserts the run. The harness counts only evaluation
-  organisations, whose members are the team (`docs/evaluation-plan.md` D5).
+Instances left open in Phase 3 (scope, `Rules.md` §1.3), and their state:
+- ~~`memory_items.revoked_at` is supplied by the revoking user~~ — **closed by 0023 (Phase 4
+  chunk A, 2026-10-18)**: a trigger sets `revoked_at = now()` and, for a signed-in user,
+  `revoked_by = auth.uid()`; revocation is one-way and recorded once.
+- ~~`memory_items.claim_id` is `on delete set null`~~ — **closed by 0023**: the foreign key is now
+  `no action`, so a product whose claims back a memory item cannot be deleted.
+- `runs.arm` is chosen by whoever inserts the run — open; closed by the experiment-membership
+  design (below), which forces it with the other experiment markers (Phase 10).
 
 A new table or column is checked against this rule when it is added: if its value changes what
 the system trusts or reports, it is derived, or its setting is audited with a derived actor.
@@ -1890,6 +1891,145 @@ values
   ('health-supplements', 'IN', 'required_disclaimer', 'phrase', 'protein',
    'Illustrative disclaimer (synthetic rule): protein content varies by serving size.',
    null, 'Synthetic rule, not derived from any regulation. Illustrative only.', '2026-10-17', null);
+
+-- ═══ supabase/migrations/0022_match_memory.sql ═══
+-- 0022: app.match_memory, hybrid retrieval (Memory.md §4.2): a vector branch and a full-text branch
+-- over the caller's organisation, fused by Reciprocal Rank Fusion (k = 60). It produces the
+-- CANDIDATE set; the M-score is computed in the application over these candidates, because P, C
+-- and A need request context the database does not hold (backend/app/memory/scoring.py).
+--
+-- As specified, with these changes, each deliberate:
+-- 1. SECURITY INVOKER and search_path pinned: the caller's row-level security applies (memory_read,
+--    0006), on top of the explicit org filter (Rules.md P3), so an org the caller is not a member
+--    of returns nothing whatever p_org_id says. pgvector lives in schema public, so the operator is
+--    written OPERATOR(public.<=>).
+-- 2. Seed memory is EXCLUDED unless the caller passes p_include_seed (Memory.md §7.1: seeded items
+--    never reach evaluation; opt-in, so forgetting the flag excludes them rather than including).
+-- 3. The full-text branch orders before its limit (the specification's LIMIT 60 had no ORDER BY,
+--    so which 60 matches survived was arbitrary).
+-- 4. p_sector is not a parameter: it was declared and unused; sector alignment is the M-score's A.
+-- 5. Returns what the M-score needs beside the ranks: cosine similarity (S), the item's product
+--    category (P), the backing claim's type (the freshness exemption for verified claims), sector,
+--    confidence and freshness.
+-- 6. hnsw.ef_search = 100 for the duration of the call (Memory.md §4.3), set on the function.
+-- Down: drop function app.match_memory(uuid, public.vector, text, uuid, boolean, integer);
+create function app.match_memory(
+  p_org_id       uuid,
+  p_query_embed  public.vector(768),
+  p_query_text   text,
+  p_brand_id     uuid    default null,
+  p_include_seed boolean default false,
+  p_limit        integer default 20
+) returns table (
+  id uuid, content text, kind text, brand_id uuid, product_id uuid, product_category text,
+  claim_id uuid, claim_type text, sector text, source_url text, provenance text,
+  confidence numeric, created_at timestamptz, freshness_days integer, similarity double precision,
+  vec_rank integer, txt_rank integer, rrf numeric
+)
+language sql stable security invoker
+set search_path = ''
+set hnsw.ef_search = 100
+as $$
+with scoped as (
+  select m.*
+  from public.memory_items m
+  where m.org_id = p_org_id
+    and not m.revoked
+    and m.approved
+    and (p_include_seed or not m.is_seed)
+    and (p_brand_id is null or m.brand_id = p_brand_id or m.brand_id is null)
+),
+vec as (
+  select s.id, row_number() over (order by s.embedding OPERATOR(public.<=>) p_query_embed) as r
+  from scoped s
+  where s.embedding is not null
+  order by s.embedding OPERATOR(public.<=>) p_query_embed
+  limit 60
+),
+txt as (
+  select ranked.id, ranked.r
+  from (
+    select s.id, row_number() over (
+             order by pg_catalog.ts_rank_cd(pg_catalog.to_tsvector('english', s.content),
+                                            pg_catalog.websearch_to_tsquery('english', p_query_text))
+                      desc, s.id) as r
+    from scoped s
+    where pg_catalog.to_tsvector('english', s.content)
+          @@ pg_catalog.websearch_to_tsquery('english', p_query_text)
+  ) ranked
+  order by ranked.r
+  limit 60
+)
+select s.id, s.content, s.kind, s.brand_id, s.product_id, p.category, s.claim_id, c.claim_type,
+       s.sector, s.source_url, s.provenance, s.confidence, s.created_at, s.freshness_days,
+       case when s.embedding is null then null
+            else 1 - (s.embedding OPERATOR(public.<=>) p_query_embed) end as similarity,
+       v.r::integer, t.r::integer,
+       (coalesce(1.0 / (60 + v.r), 0) + coalesce(1.0 / (60 + t.r), 0))::numeric as rrf
+from scoped s
+left join vec v on v.id = s.id
+left join txt t on t.id = s.id
+left join public.products p on p.id = s.product_id and p.org_id = s.org_id
+left join public.product_claims c on c.id = s.claim_id and c.org_id = s.org_id
+where v.id is not null or t.id is not null
+order by rrf desc, s.id
+limit p_limit
+$$;
+
+revoke all on function app.match_memory(uuid, public.vector, text, uuid, boolean, integer)
+  from public, anon;
+grant execute on function app.match_memory(uuid, public.vector, text, uuid, boolean, integer)
+  to authenticated, service_role;
+
+-- ═══ supabase/migrations/0023_memory_trust.sql ═══
+-- 0023: closes the two memory instances of the trust-deciding-columns rule left open in Phase 3
+-- (Architecture.md §9, "Known remaining instances"):
+--
+-- 1. Revocation is recorded by the server. Before this, a revoking user supplied revoked_at
+--    themself (memory_revoke checks only revoked_by = auth.uid()), so a revocation could be
+--    back-dated. Now a trigger sets revoked_at = now() — and, for a signed-in user, revoked_by =
+--    auth.uid() — whatever was sent. Revocation is also made one-way: Memory.md §6.4 says a revoked
+--    item leaves retrieval permanently, so revoked cannot return to false, and a recorded
+--    revocation (who, when, why) cannot be rewritten. The backend's own role may revoke (Phase 4's
+--    confidence decay) and must name the revoker; the table's check constraint still requires it.
+-- 2. A memory item backed by a claim keeps its claim. memory_items.claim_id was ON DELETE SET NULL,
+--    and deleting a product with no runs cascades to its claims, so a claim-backed item would have
+--    lost its provenance silently. The foreign key becomes NO ACTION: a product whose claims back a
+--    memory item cannot be deleted, as a product with runs cannot (0005), and a brand with memory
+--    items cannot (0011). The project held no memory_items rows when this was written.
+-- Down: drop trigger memory_items_revocation on memory_items;
+--   drop function app.memory_items_revocation();
+--   alter table memory_items drop constraint memory_items_claim_id_org_id_fkey,
+--     add constraint memory_items_claim_id_org_id_fkey foreign key (claim_id, org_id)
+--       references product_claims (id, org_id) on delete set null (claim_id);
+create function app.memory_items_revocation() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if old.revoked and not new.revoked then
+    raise exception 'memory_items: revocation is permanent (Memory.md §6.4)';
+  end if;
+  if old.revoked then
+    if (new.revoked_by, new.revoked_at, new.revoked_reason)
+       is distinct from (old.revoked_by, old.revoked_at, old.revoked_reason) then
+      raise exception 'memory_items: a revocation is recorded once and never rewritten';
+    end if;
+    return new;
+  end if;
+  if new.revoked then
+    new.revoked_at := pg_catalog.now();
+    if current_user in ('authenticated', 'anon') then
+      new.revoked_by := (select auth.uid());
+    end if;
+  end if;
+  return new;
+end $$;
+create trigger memory_items_revocation before update on memory_items
+  for each row execute function app.memory_items_revocation();
+
+alter table memory_items
+  drop constraint memory_items_claim_id_org_id_fkey,
+  add constraint memory_items_claim_id_org_id_fkey foreign key (claim_id, org_id)
+    references product_claims (id, org_id);
 ```
 
 ---

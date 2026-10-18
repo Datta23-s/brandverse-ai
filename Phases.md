@@ -253,6 +253,15 @@ threat V2 in `docs/evaluation-plan.md`.
 - [ ] Near-duplicate detection prevents a second insert at cosine > 0.95
 - [ ] Revocation removes an item from retrieval immediately
 
+**Phase 4 progress.** Decisions recorded 2026-10-18 (`Memory.md` §5, §8; `docs/evaluation-plan.md`
+§7): embeddings computed locally by a pinned encoder; relevance labels by Kundan, blind. The
+labelling tool is built. Chunk A (2026-10-18, migrations 0022–0023 not yet on the live project):
+`app.match_memory`, the `M`-score with breakdown (`config/scoring.yaml`, defaults), freshness with
+the verified-claim exemption, the reuse bands, memory coverage, and the two memory trust fixes.
+Tested against the real migrations: the cross-tenant leak test (including a member of both
+organisations) and immediate removal on revocation (`tests/db/test_match_memory.py`) — the two
+criteria above are ticked once the migrations are live and checked there.
+
 **pgvector version gap (added 2026-10-14).** CI's database gate runs pgvector 0.8.7; the
 Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds real data:
 - [ ] Re-run the storage measurement against the real project (heap, TOAST, HNSW, GIN per row) and

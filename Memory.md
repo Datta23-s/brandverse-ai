@@ -138,6 +138,17 @@ $$;
 
 RRF produces the **candidate set**. The `M`-score is then computed in the application layer over those candidates, because `P`, `C` and `A` need request context the database does not hold. Do not try to compute `M` in SQL.
 
+**As built (migration 0022, 2026-10-18):** `app.match_memory` follows this specification with
+deliberate corrections — `SECURITY INVOKER` and a pinned `search_path` (the caller's row-level
+security applies on top of the `org_id` filter); seed memory excluded unless `p_include_seed`
+(opt-in); the full-text branch ordered before its `LIMIT 60` (above, it had no `ORDER BY`, so which
+60 matches survived was arbitrary); `p_sector` dropped (declared above but never used — sector
+alignment is the `M`-score's `A`); and the cosine similarity, product category and backing claim's
+type returned for the scorer. The `M`-score is `backend/app/memory/scoring.py`, weights in
+`config/scoring.yaml` (defaults, untuned): a component that cannot be computed yet — `C` until
+persona vectors (Phase 6), `E` until source scores (Phase 5) — is left out and the remaining
+weights renormalised, never filled with a guess, and the breakdown names it.
+
 ### 4.3 Index strategy
 
 ```sql

@@ -1,0 +1,27 @@
+# The M-score (Memory.md §3.1): reuse decision over memory candidates (backend/app/memory/scoring.py).
+#
+# DEFAULTS, NOT TUNED. Tuned in Phase 10 against the frozen relevance labels; defaults and tuned
+# values are both reported (Rules.md A5). Every number here is a parameter of the results.
+#
+# Missing components are LEFT OUT and the remaining weights renormalised — never filled with a
+# neutral guess — and the breakdown names what was left out:
+#   C (customer match) needs persona vectors, which arrive with A3 in Phase 6;
+#   E (evidence quality) needs a stored source score, which arrives with source scoring in Phase 5.
+version: defaults-2026-10-18
+memory:
+  weights: {S: 0.30, P: 0.20, C: 0.15, A: 0.15, F: 0.10, E: 0.10}
+  # S: cosine similarity of query and item embeddings, clamped to [0, 1]. Not (1 + cos) / 2, which
+  # would lift unrelated items (cos ~ 0.3) to 0.65, the floor of the reuse bands.
+  product_match: {same_product: 1.0, same_brand: 0.7, same_category: 0.4, other: 0.1}
+  sector_alignment: {same: 1.0, adjacent: 0.6, unrelated: 0.2}
+  # Pairs of sector keys counted as adjacent. None declared yet: every other sector is unrelated.
+  adjacent_sectors: []
+  freshness_lambda: 0.7          # F = exp(-lambda * age_days / freshness_days)
+  default_freshness_days:        # when an item states none (Memory.md §2)
+    persona: 180
+    competitor: 60
+    insight: 365
+    claim: 365
+    creative: 180
+    sector: 365
+  bands: {reuse: 0.90, adapt: 0.80, support: 0.65}   # Memory.md §3.2

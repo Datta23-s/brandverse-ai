@@ -109,6 +109,15 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "member_org_ids": (True, "migration", ALL_API),
     # 0012: signed-in users only; owned by the minimal role below.
     "create_organisation": (True, "app_org_creator", frozenset({"authenticated"})),
+    # 0022: hybrid retrieval; SECURITY INVOKER, so the caller's RLS applies. Not anon.
+    "match_memory": (False, "migration", frozenset({"authenticated", "service_role"})),
+    # 0023: revocation recorded by the server, one-way.
+    "memory_items_revocation": (False, "migration", ALL_API),
+}
+
+# Settings a function carries beyond its pinned search_path, stated as deliberately as the rest.
+EXTRA_CONFIG: dict[str, list[str]] = {
+    "match_memory": ["hnsw.ef_search=100"],  # Memory.md §4.3
 }
 
 
@@ -140,7 +149,8 @@ def test_app_function_posture(tx: Tx, function: str) -> None:
     secdef, actual_owner, config, oid = rows[0]
     assert secdef is definer, f"app.{function}: security definer is {secdef}"
     assert actual_owner == (migration_role if owner == "migration" else owner)
-    assert config == ['search_path=""'], f"app.{function}: search_path not pinned: {config}"
+    expected = ['search_path=""', *EXTRA_CONFIG.get(function, [])]
+    assert config == expected, f"app.{function}: config {config}, stated {expected}"
     can_execute = {
         role
         for role in sorted(ALL_API)
