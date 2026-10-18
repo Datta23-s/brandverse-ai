@@ -309,6 +309,30 @@ arm (`approvals.failed_gate`).
 not appear in the 30-request evaluation set (decision D1, §8). Defaults and tuned values are both
 reported (`Rules.md` A5).
 
+### The relevance set — decided 2026-10-18, before it is built or any ranker is tuned
+
+**Labeller: Kundan, by hand, blind, before any tuning.** The developer does not label the set the
+developer's retrieval is judged against, and no model labels it (the system would be measured
+against another model's opinion, a confound every number would carry).
+
+- **Pool.** 50 queries, each with a fixed candidate pool drawn from the **union** of lexical
+  (full-text) and vector retrieval, so the pool is not shaped by the ranker under test (RRF and the
+  `M`-score are not used to build it).
+- **Blind.** Candidate order randomised per query; no scores, no ranks, no indication of which
+  retriever found a candidate.
+- **Judgments.** Three, each defined in one sentence in the task itself: relevant, partially
+  relevant, not relevant.
+- **Consistency.** 5 of the queries appear twice, unmarked; the labeller's agreement with themself
+  on those is **reported**, not hidden.
+- **Frozen.** Labels are timestamped and frozen before any ranker tuning. If tuning later suggests
+  a label was wrong, **the label stands** and the disagreement is reported.
+- Precision@10 (`Memory.md` §8) is computed against these labels only.
+
+**Embeddings — decided 2026-10-18.** Computed locally by a pinned sentence-transformer
+(`BAAI/bge-base-en-v1.5`, revision and weights hash in `Memory.md` §5), never by a hosted API and
+never billed: reproducible years later, no quota competition with the strong tier, and not the
+contribution — the encoder is a parameter of the retrieval results and is reported as such.
+
 ## 8. Decisions
 
 | # | Decision | Agreed |

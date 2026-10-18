@@ -153,9 +153,23 @@ Set `hnsw.ef_search = 100` per session for recall. Below roughly 10,000 rows HNS
 
 ## 5. Embeddings
 
+**Decision 2026-10-18 (project owner): embeddings are computed LOCALLY by a pinned
+sentence-transformer, never by a hosted API, and are never billed.** It replaces the Gemini
+embedding endpoint below. Reasons, in order of weight: (a) **reproducibility** — a hosted model can
+change under us with no version bump and every retrieval number would silently stop being
+reproducible; a pinned local model with a recorded revision and weights hash is reproducible years
+later; (b) **quota** — embeddings are the highest-volume call (every memory write, every query) and
+must not compete with the strong tier's 20/day; (c) **it is not the contribution** — the claim is
+about hybrid retrieval, the `M`-score and the reuse bands; the encoder is a parameter, and the
+thesis says so.
+
 | Decision | Value |
 |---|---|
-| Model | `gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072). **Normalisation verified 2026-10-14** against ai.google.dev/gemini-api/docs/embeddings: "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)" — no manual normalisation (unlike `gemini-embedding-001`, which requires it). Several texts in one request are aggregated into a single embedding unless each is wrapped in its own `Content` object. Free tier: 100 RPM / 30K TPM / 1000 RPD. Model ID lives only in `config/models.yaml`, never here or in an env var. |
+| Model | **`BAAI/bge-base-en-v1.5`**, Hugging Face revision **`a5beb1e3e68b9ab74eb54cfd186867f64f240e1a`** (last modified 2024-02-21), MIT licence; weights `model.safetensors`, 437,955,512 bytes, SHA-256 **`c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7`** (read from the Hub 2026-10-18). Loaded with `sentence-transformers` at that exact revision; the hash is checked on load. |
+| Dimension | **768** — equal to `memory_items.embedding vector(768)` (migration 0006), so the column is unchanged and the Phase 0 storage measurement (9,495 B/row, `Architecture.md` §11) stands. A test asserts the configured dimension equals the column's. |
+| Normalisation | The model's own pipeline ends in a `Normalize` module: every vector is unit length, so cosine distance is exact. Short retrieval queries get BAAI's query instruction ("Represent this sentence for searching relevant passages: "); stored items do not. |
+| Where | Computed on the laptop (CPU). No API, no `llm_calls` row, no quota, no cost. Max 512 tokens per input. |
+| ~~Model (superseded 2026-10-18)~~ | ~~`gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072). **Normalisation verified 2026-10-14** against ai.google.dev/gemini-api/docs/embeddings: "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)" — no manual normalisation (unlike `gemini-embedding-001`, which requires it). Several texts in one request are aggregated into a single embedding unless each is wrapped in its own `Content` object. Free tier: 100 RPM / 30K TPM / 1000 RPD. Model ID lives only in `config/models.yaml`, never here or in an env var.~~ |
 | Chunking | Semantic, 200–400 tokens, 15% overlap |
 | Normalisation | Lowercase, strip boilerplate, collapse whitespace. Never strip numbers or units. |
 | Storage | `vector(768)`, cosine distance |
@@ -242,6 +256,17 @@ Report these independently of the end-to-end metrics:
 | **Poisoning incidents** | Wrong facts that reached a campaign via memory | 0 — investigate every one |
 
 Precision@10 needs a hand-labelled relevance set. Build it in Phase 4 with 50 queries, not in Phase 10 under deadline pressure.
+
+**Who labels it — decided 2026-10-18 (project owner): Kundan labels the set by hand, blind, before
+any tuning.** Not the developer (whose retrieval is judged against it) and not a model (the system
+would be measured against another model's opinion). The task is built so the labels cannot be
+contaminated: a fixed candidate pool per query, drawn from the union of lexical and vector
+retrieval so it is not shaped by the ranker under test; candidate order randomised per query; no
+scores, ranks or retriever shown; three judgments — relevant, partially relevant, not relevant —
+each defined in one sentence in the task; 5 unmarked duplicate queries to measure the labeller's
+own consistency, which is reported. Labels are timestamped and frozen before any ranker tuning; if
+tuning later suggests a label was wrong, the label stands and the disagreement is reported
+(`docs/evaluation-plan.md` §7).
 
 ---
 
