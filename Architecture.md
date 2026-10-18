@@ -842,9 +842,8 @@ instead of it:
 The column defaults (50.00 USD, 10 runs/hour, 60 requests/minute) are **placeholders, not derived
 values**; set them per organisation and report any values used in evaluation.
 
-**Migrations.** The DDL is the migration files themselves; this section does not copy them (a doc
-that duplicates code drifts, and keeping a copy in step needed a syncing script — removed
-2026-10-18). Each row gives the file and the commit that added it; "Changed" is set only where a
+**Migrations.** The DDL is the migration files themselves; this section does not copy them (keeping
+a copy in step needed a syncing script — removed 2026-10-18). Each row gives the file and the commit that added it; "Changed" is set only where a
 file was edited after it was added, which `Rules.md` §3.3 allows only before a migration first
 reaches the project. A test (`backend/tests/test_schema_doc_sync.py`) fails if a migration file
 is missing from this table, listed twice, out of order, or listed but absent.
@@ -1037,8 +1036,7 @@ suite apply migrations and run every test as a superuser; on the project, migrat
 `postgres`, which is not one. Anything a superuser may do that `postgres` may not passes the
 merge-blocking gate and fails only on the live push. It has hidden two things so far: revoking
 EXECUTE on a function `postgres` no longer owns (0012, below) and attaching an unloaded
-extension's setting to a function (0022's first draft, below). It will hide something else
-later. The live dry run (below, `Rules.md` §3.3) is the current mitigation, not a fix; a
+extension's setting to a function (0022's first draft, below). The live dry run (below, `Rules.md` §3.3) is the current mitigation, not a fix; a
 non-superuser migration role in CI is a Phase 11 concern.
 
 **Platform compared with `backend/tests/db/supabase_platform_stub.sql`** (read-only, 2026-10-14):

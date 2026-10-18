@@ -118,8 +118,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
   direct edits only** (adopted 2026-10-17, widened 2026-10-18 after the third occurrence). This
   covers source, test code, documentation, config and SQL alike. Backslashes do not survive a trip
   through a script's own string quoting: an edit script turned `\b` into invisible control
-  characters in a doc, and later turned `\n` into real line breaks inside test code. Three
-  occurrences is a pattern, not bad luck. **No exceptions** (ruled 2026-10-18), not even for a
+  characters in a doc, and later turned `\n` into real line breaks inside test code. **No exceptions** (ruled 2026-10-18), not even for a
   script that "only copies verbatim": that is what the scripts that broke would have said about
   themselves, and a rule whose exception depends on judging your own script needs judgement. Where
   a doc needs a script to stay in step with code, remove the duplication instead: `Architecture.md`

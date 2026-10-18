@@ -432,9 +432,7 @@ against another model's opinion, a confound every number would carry).
   enough for the index to approximate: thousands to tens of thousands of rows, with labels to
   match. That is far larger than Phase 4 and is recorded as future work, not scheduled.
 
-**Who writes what, and in what order (decided 2026-10-18).** Query-and-corpus co-design is the
-dangerous direction, and so is writing queries from a corpus just read — the writer remembers the
-answers, and Precision@10 comes out inflated for a reason no reader could see. So:
+**Who writes what, and in what order (decided 2026-10-18).**
 
 1. The developer writes a one-page **brief**: three fictional brands, their sectors, product lines
    and rough positioning (`evaluation/relevance/brief.md`). The labeller sees the brief.
