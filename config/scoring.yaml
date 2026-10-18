@@ -25,3 +25,10 @@ memory:
     creative: 180
     sector: 365
   bands: {reuse: 0.90, adapt: 0.80, support: 0.65}   # Memory.md §3.2
+retrieval:
+  # HNSW search depth, set per transaction before app.match_memory (backend/app/memory/retrieval.py)
+  # and logged with every retrieval. A parameter of the results: evaluation reports retrieval
+  # quality against it and Phase 6 reports latency against it. pgvector accepts 1..1000. Below 60
+  # it also truncates the vector branch (limit 60) to ef_search rows, since iterative index scans
+  # are off; a sweep below 60 measures that too.
+  hnsw_ef_search: 100                                  # Memory.md §4.3

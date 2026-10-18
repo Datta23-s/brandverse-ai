@@ -144,7 +144,8 @@ security applies on top of the `org_id` filter); seed memory excluded unless `p_
 (opt-in); the full-text branch ordered before its `LIMIT 60` (above, it had no `ORDER BY`, so which
 60 matches survived was arbitrary); `p_sector` dropped (declared above but never used — sector
 alignment is the `M`-score's `A`); and the cosine similarity, product category and backing claim's
-type returned for the scorer. The `M`-score is `backend/app/memory/scoring.py`, weights in
+type returned for the scorer. `hnsw.ef_search` is set by the caller, not by the function (§4.3).
+The `M`-score is `backend/app/memory/scoring.py`, weights in
 `config/scoring.yaml` (defaults, untuned): a component that cannot be computed yet — `C` until
 persona vectors (Phase 6), `E` until source scores (Phase 5) — is left out and the remaining
 weights renormalised, never filled with a guess, and the breakdown names it.
@@ -158,7 +159,14 @@ create index on memory_items using gin (to_tsvector('english', content));
 create index on memory_items (org_id, brand_id, kind) where not revoked;
 ```
 
-Set `hnsw.ef_search = 100` per session for recall. Below roughly 10,000 rows HNSW adds little over a sequential scan — build the index anyway so behaviour at scale is the behaviour you tested.
+Set `hnsw.ef_search = 100` per session for recall. **As built (2026-10-18):** the CALLER sets it,
+transaction-local, before calling `app.match_memory` (`backend/app/memory/retrieval.py`); the
+default lives in `config/scoring.yaml` (`retrieval.hnsw_ef_search`) beside the `M`-score weights,
+and the value in effect is returned and logged with every retrieval. It is deliberately not part
+of the function definition: it is a search-time quality-versus-speed parameter, so evaluation
+reports retrieval quality against it and Phase 6 reports latency against it as a curve, not one
+frozen operating point (an earlier draft of 0022 set it on the function, which also failed on the
+live project: `Architecture.md` §11). Below roughly 10,000 rows HNSW adds little over a sequential scan — build the index anyway so behaviour at scale is the behaviour you tested.
 
 ---
 

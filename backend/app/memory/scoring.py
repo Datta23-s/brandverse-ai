@@ -90,9 +90,14 @@ class MemoryScoring(_Strict):
     bands: Bands
 
 
+class Retrieval(_Strict):
+    hnsw_ef_search: int = Field(ge=1, le=1000)  # pgvector's accepted range
+
+
 class ScoringConfig(_Strict):
     version: str
     memory: MemoryScoring
+    retrieval: Retrieval
 
 
 def load_scoring(path: Path = SCORING_PATH) -> ScoringConfig:

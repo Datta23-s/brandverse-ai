@@ -124,6 +124,13 @@ When summarising work, state what was built, what was stubbed, and what was not 
   a migration file applied verbatim, and only with a test that reads the stored pattern back and
   asserts it compiles and matches as declared (0021's synthetic rules:
   `backend/tests/db/test_sector_provenance.py::test_the_seeded_patterns_behave_as_declared`).
+- **A pre-apply check runs as the role that will apply it, on a connection with no state the real
+  apply will not have** (adopted 2026-10-18). Twice a check ran somewhere friendlier than
+  production and passed what production refused: the CI platform stub, whose superuser could
+  revoke grants Supabase's `postgres` cannot (0012), and a rolled-back dry run of 0022 on a pooled
+  backend that already had pgvector loaded, where the CLI push got a fresh backend and was denied
+  a setting. Live dry runs use `backend/scripts/live_migration_dry_run.py`, which refuses to run
+  until it holds a fresh backend acting as the URL's own role, and prints both facts.
 
 ---
 

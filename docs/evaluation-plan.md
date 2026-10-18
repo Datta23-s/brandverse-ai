@@ -358,6 +358,9 @@ against another model's opinion, a confound every number would carry).
 - **Frozen.** Labels are timestamped and frozen before any ranker tuning. If tuning later suggests
   a label was wrong, **the label stands** and the disagreement is reported.
 - Precision@10 (`Memory.md` §8) is computed against these labels only.
+- **Retrieval depth is a reported parameter.** Every retrieval logs the `hnsw.ef_search` in effect
+  (`Memory.md` §4.3); every Precision@10 figure states it, and the value or values swept are fixed
+  before the measurement. The default (`config/scoring.yaml`) is a starting point, not a finding.
 
 **Who writes what, and in what order (decided 2026-10-18).** Query-and-corpus co-design is the
 dangerous direction, and so is writing queries from a corpus just read — the writer remembers the

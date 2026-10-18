@@ -260,7 +260,10 @@ labelling tool is built. Chunk A (2026-10-18, migrations 0022–0023 not yet on 
 the verified-claim exemption, the reuse bands, memory coverage, and the two memory trust fixes.
 Tested against the real migrations: the cross-tenant leak test (including a member of both
 organisations) and immediate removal on revocation (`tests/db/test_match_memory.py`) — the two
-criteria above are ticked once the migrations are live and checked there.
+criteria above are ticked once the migrations are live and checked there. The first push of 0022
+was refused on 2026-10-18 (nothing applied; `Architecture.md` §11, the 0022 lesson): `hnsw.ef_search`
+moved out of the function to the caller (`app/memory/retrieval.py`), where it is configured,
+logged with every retrieval and can be swept (`Memory.md` §4.3).
 
 **pgvector version gap (added 2026-10-14).** CI's database gate runs pgvector 0.8.7; the
 Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds real data:

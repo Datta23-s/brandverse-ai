@@ -16,7 +16,10 @@
 -- 5. Returns what the M-score needs beside the ranks: cosine similarity (S), the item's product
 --    category (P), the backing claim's type (the freshness exemption for verified claims), sector,
 --    confidence and freshness.
--- 6. hnsw.ef_search = 100 for the duration of the call (Memory.md §4.3), set on the function.
+-- 6. hnsw.ef_search is NOT set here. It is a search-time depth parameter that evaluation sweeps
+--    and Phase 6 measures latency against, so the caller sets it per transaction from
+--    config/scoring.yaml and logs the value used (backend/app/memory/retrieval.py). search_path
+--    stays on the function: that one is a security property, not a tuning knob.
 -- Down: drop function app.match_memory(uuid, public.vector, text, uuid, boolean, integer);
 create function app.match_memory(
   p_org_id       uuid,
@@ -33,7 +36,6 @@ create function app.match_memory(
 )
 language sql stable security invoker
 set search_path = ''
-set hnsw.ef_search = 100
 as $$
 with scoped as (
   select m.*

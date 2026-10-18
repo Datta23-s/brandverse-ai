@@ -1911,7 +1911,10 @@ values
 -- 5. Returns what the M-score needs beside the ranks: cosine similarity (S), the item's product
 --    category (P), the backing claim's type (the freshness exemption for verified claims), sector,
 --    confidence and freshness.
--- 6. hnsw.ef_search = 100 for the duration of the call (Memory.md §4.3), set on the function.
+-- 6. hnsw.ef_search is NOT set here. It is a search-time depth parameter that evaluation sweeps
+--    and Phase 6 measures latency against, so the caller sets it per transaction from
+--    config/scoring.yaml and logs the value used (backend/app/memory/retrieval.py). search_path
+--    stays on the function: that one is a security property, not a tuning knob.
 -- Down: drop function app.match_memory(uuid, public.vector, text, uuid, boolean, integer);
 create function app.match_memory(
   p_org_id       uuid,
@@ -1928,7 +1931,6 @@ create function app.match_memory(
 )
 language sql stable security invoker
 set search_path = ''
-set hnsw.ef_search = 100
 as $$
 with scoped as (
   select m.*
@@ -2187,6 +2189,15 @@ assumed away: Phase 4 re-verifies HNSW behaviour and storage against the real pr
 the project to a newer minor version on a restore (§11, restoring a paused project), so the two
 are re-compared after any restore or upgrade.
 
+**Known limitation — tests run as a superuser (recorded 2026-10-18).** CI and the local database
+suite apply migrations and run every test as a superuser; on the project, migrations run as
+`postgres`, which is not one. Anything a superuser may do that `postgres` may not passes the
+merge-blocking gate and fails only on the live push. It has hidden two things so far: revoking
+EXECUTE on a function `postgres` no longer owns (0012, below) and attaching an unloaded
+extension's setting to a function (0022's first draft, below). It will hide something else
+later. The live dry run (below, `Rules.md` §3.3) is the current mitigation, not a fix; a
+non-superuser migration role in CI is a Phase 11 concern.
+
 **Platform compared with `backend/tests/db/supabase_platform_stub.sql`** (read-only, 2026-10-14):
 
 | Aspect | Real platform | Stub | Effect on the RLS tests |
@@ -2232,8 +2243,9 @@ npx supabase@2.120.0 db push --db-url "$DATABASE_URL"
 passes on CI's pgvector image before a push, never after.
 
 **Before pushing a migration that creates or changes an `app.*` function** (the lesson above):
-run the migration file against the project inside a transaction that is always rolled back
-(`psycopg`: `async with conn.transaction(force_rollback=True)`), and inside it read, for every
+run the migration file against the project inside a transaction that is always rolled back —
+since 2026-10-18 with `backend/scripts/live_migration_dry_run.py`, on a fresh backend as the
+applying role (`Rules.md` §3.3; the 0022 lesson below) — and inside it read, for every
 such function, its owner, `prosecdef`, `proconfig` and
 `has_function_privilege(<role>, <function>, 'EXECUTE')` for `anon`, `authenticated` and
 `service_role`. They must match what `backend/tests/db/test_table_posture.py` states. Then
@@ -2275,6 +2287,25 @@ as stated, exactly the four synthetic rules (no URL, no author, the fixed source
 write grant on `sectors` for `anon` or `authenticated`; the rollback left nothing. Pushed with the
 CLI **2026-10-17 16:04 UTC**; `migration list` identical through 0021; the post-apply read matched
 and the full posture comparison found no mismatch (52 checks).
+
+**Lesson (2026-10-18, migration 0022): the dry run passed and the push was refused.** 0022's first
+draft set `hnsw.ef_search = 100` on `app.match_memory`. CI passed on `af4dd3a`, the rolled-back dry
+run on the live project created the function and called it, and the rollback was clean. The CLI
+push then failed at 0022's first statement: `permission denied to set parameter "hnsw.ef_search"
+(SQLSTATE 42501)`. Nothing was applied (0023 was never reached; the read-only posture read after
+the failure matched the read before). Cause: Postgres lets a non-superuser attach an extension's
+setting to a function only once that extension's library is loaded in the backend; before that
+the name is an unknown placeholder and the check fails. The session pooler hands a new client a
+reused backend: the dry run got one where pgvector was already loaded, the push got a fresh one.
+Reproduced on the local container (a non-superuser role, fresh backend: 42501; after loading
+pgvector: created). Two changes followed. The setting left the function: it is a search-time
+parameter the caller sets per transaction and logs (`Memory.md` §4.3). And the dry run itself was
+fixed, not just this migration: `backend/scripts/live_migration_dry_run.py` holds non-fresh
+backends open until the pooler gives it a fresh one (started moments ago, pgvector not loaded),
+asserts it acts as the URL's own role with no `SET ROLE`, prints every catalog change the files
+make inside the rolled-back transaction, and asserts the catalog after the rollback equals the
+catalog before (`Rules.md` §3.3). It supersedes the per-migration scratch scripts used for
+0012–0022.
 
 ### Live project — permanent footprint
 

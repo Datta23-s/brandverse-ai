@@ -115,11 +115,6 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "memory_items_revocation": (False, "migration", ALL_API),
 }
 
-# Settings a function carries beyond its pinned search_path, stated as deliberately as the rest.
-EXTRA_CONFIG: dict[str, list[str]] = {
-    "match_memory": ["hnsw.ef_search=100"],  # Memory.md §4.3
-}
-
 
 def test_every_app_function_has_a_stated_posture(tx: Tx) -> None:
     functions = {
@@ -149,8 +144,9 @@ def test_app_function_posture(tx: Tx, function: str) -> None:
     secdef, actual_owner, config, oid = rows[0]
     assert secdef is definer, f"app.{function}: security definer is {secdef}"
     assert actual_owner == (migration_role if owner == "migration" else owner)
-    expected = ['search_path=""', *EXTRA_CONFIG.get(function, [])]
-    assert config == expected, f"app.{function}: config {config}, stated {expected}"
+    # Only the pinned search_path: a tuning setting such as hnsw.ef_search belongs to the caller,
+    # where it can be varied and logged (app/memory/retrieval.py), not to the function definition.
+    assert config == ['search_path=""'], f"app.{function}: config {config}"
     can_execute = {
         role
         for role in sorted(ALL_API)
