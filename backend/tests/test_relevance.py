@@ -67,10 +67,35 @@ def fake_encoder(texts: Sequence[str]) -> list[list[float]]:
     return out
 
 
+class FakeEncoder:
+    """fake_encoder behind the Encoder protocol; records which method embedded which text."""
+
+    model, version, dimensions = "fake", "1", 32
+
+    def __init__(self) -> None:
+        self.as_query: list[str] = []
+        self.as_document: list[str] = []
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        self.as_document += texts
+        return fake_encoder(texts)
+
+    def embed_queries(self, texts: Sequence[str]) -> list[list[float]]:
+        self.as_query += texts
+        return fake_encoder(texts)
+
+
 def pool(
     seed: int = 7, duplicates: int = 2, depth: int = 4
 ) -> tuple[dict[str, object], dict[str, object]]:
-    return build_pool(QUERIES, ITEMS, fake_encoder, depth=depth, duplicates=duplicates, seed=seed)
+    return build_pool(QUERIES, ITEMS, FakeEncoder(), depth=depth, duplicates=duplicates, seed=seed)
+
+
+def test_queries_are_embedded_as_queries_and_items_as_documents() -> None:
+    encoder = FakeEncoder()
+    build_pool(QUERIES, ITEMS, encoder, depth=4, duplicates=0, seed=1)
+    assert encoder.as_query == [q.text for q in QUERIES]
+    assert encoder.as_document == [i.text for i in ITEMS]
 
 
 # ── Blind ────────────────────────────────────────────────────────────────────────────────────
@@ -202,11 +227,12 @@ def test_precision_counts_unjudged_items_as_not_relevant_and_says_how_many() -> 
 
 
 def test_the_task_is_written_once_and_frozen_labels_are_never_overwritten(tmp_path: Path) -> None:
-    summary = write_task(tmp_path, QUERIES, ITEMS, fake_encoder, seed=3, depth=4, duplicates=2)
+    summary = write_task(tmp_path, QUERIES, ITEMS, FakeEncoder(), seed=3, depth=4, duplicates=2)
     assert summary["sittings"] == len(QUERIES) + 2
+    assert summary["encoder"] == {"model": "fake", "version": "1"}  # the pool depends on it
     assert (tmp_path / "label.html").exists() and (tmp_path / "pool_key.json").exists()
     with pytest.raises(FileExistsError, match="pool is fixed"):
-        write_task(tmp_path, QUERIES, ITEMS, fake_encoder, seed=3)
+        write_task(tmp_path, QUERIES, ITEMS, FakeEncoder(), seed=3)
 
     payload = json.loads((tmp_path / "pool_payload.json").read_text(encoding="utf-8"))
     export = tmp_path / "export.json"

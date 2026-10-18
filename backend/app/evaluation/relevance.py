@@ -26,9 +26,13 @@ import math
 import random
 import re
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
+
+# Queries and items are embedded by separate methods: the query instruction applies to queries
+# only (Memory.md §5).
+from app.memory.embeddings import Encoder
 
 Judgment = Literal["relevant", "partial", "not_relevant"]
 JUDGMENTS: tuple[Judgment, ...] = ("relevant", "partial", "not_relevant")
@@ -41,8 +45,6 @@ DEFINITIONS: Mapping[Judgment, str] = {
     "would need real adaptation to use.",
     "not_relevant": "The item does not help answer the query.",
 }
-
-Encoder = Callable[[Sequence[str]], Sequence[Sequence[float]]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,8 +126,8 @@ def build_pool(
         raise ValueError("cannot duplicate more queries than there are")
     rng = random.Random(seed)  # noqa: S311 - a reproducible shuffle, not a secret
     text = {i.id: i.text for i in items}
-    vectors = dict(zip(text, encoder([i.text for i in items]), strict=True))
-    query_vectors = encoder([q.text for q in queries])
+    vectors = dict(zip(text, encoder.embed_documents([i.text for i in items]), strict=True))
+    query_vectors = encoder.embed_queries([q.text for q in queries])
 
     pools: dict[str, list[str]] = {}
     for q, qv in zip(queries, query_vectors, strict=True):

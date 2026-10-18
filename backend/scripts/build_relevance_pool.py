@@ -15,7 +15,10 @@ Refuses to overwrite an existing pool.lock: once labelling has started, the pool
 Usage (from backend/):
   uv run python -m scripts.build_relevance_pool --queries ../evaluation/relevance/queries.yaml \\
       --corpus ../evaluation/relevance/corpus.yaml --out ../evaluation/relevance --seed 20261018
-The vector half needs the local encoder (Memory.md §5), loaded by `--encoder module:function`.
+The vector half needs the local encoder (Memory.md §5): by default the pinned one from
+config/models.yaml (`app.memory.embeddings:default_encoder`, which needs the optional `embeddings`
+dependency group: `uv sync --group embeddings`); `--encoder module:function` names another.
+pool.lock records the encoder's model and revision, since the pool depends on them.
 """
 
 import argparse
@@ -27,7 +30,8 @@ from pathlib import Path
 
 import yaml
 
-from app.evaluation.relevance import Encoder, Item, Query, build_pool
+from app.evaluation.relevance import Item, Query, build_pool
+from app.memory.embeddings import Encoder
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "app" / "evaluation" / "label_page.html"
 
@@ -81,6 +85,7 @@ def write_task(
         raise TypeError("payload has no query list")
     summary: dict[str, object] = {
         "pool_sha256": payload["pool_sha256"],
+        "encoder": {"model": encoder.model, "version": encoder.version},
         "seed": seed,
         "depth": depth,
         "queries": len(queries),
@@ -99,7 +104,11 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--depth", type=int, default=15)
-    parser.add_argument("--encoder", required=True, help="module:function returning an Encoder")
+    parser.add_argument(
+        "--encoder",
+        default="app.memory.embeddings:default_encoder",
+        help="module:function returning an Encoder (default: the pinned local encoder)",
+    )
     args = parser.parse_args()
     module, _, name = args.encoder.partition(":")
     encoder: Encoder = getattr(importlib.import_module(module), name)()

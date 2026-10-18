@@ -40,6 +40,12 @@ files = ["app"]
 module = ["yaml"]
 ignore_missing_imports = true
 
+# The local encoder's libraries are in the optional `embeddings` group, which CI does not install;
+# app/memory/embeddings.py imports them only inside LocalEncoder.load.
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "sentence_transformers.*", "huggingface_hub", "huggingface_hub.*"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["app.core.*", "app.agents.*", "app.evaluation.*", "app.api.*", "app.workers.*", "app.models.*", "app.llm.*"]
 strict = true
@@ -57,4 +63,7 @@ dev = [
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
+]
+embeddings = [
+    "sentence-transformers>=6.1.0",
 ]

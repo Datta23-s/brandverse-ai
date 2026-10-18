@@ -88,19 +88,23 @@ tiers:
     id: null
 
 embedding:
-  # Memory.md §5 names text-embedding-004, which shut down 2026-01-14.
-  # gemini-embedding-2 defaults to 3072 dims; output_dimensionality=768 MUST be passed on every
-  # call to match memory_items.embedding vector(768). Verified 2026-10-14 (embeddings page):
-  # "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)", so no manual
-  # normalisation; gemini-embedding-001, by contrast, requires it.
-  # Several inputs in ONE request are aggregated into a SINGLE embedding unless each input is
-  # wrapped in its own Content object — wrap them, or one vector silently stands for many texts.
-  provider: gemini
-  id: gemini-embedding-2
-  status: stable
-  shutdown: null                  # none announced
+  # DECIDED 2026-10-18 (project owner; Memory.md §5): computed LOCALLY by a pinned
+  # sentence-transformer, never by a hosted API. No llm_calls row, no quota, no cost. Replaces
+  # gemini-embedding-2 (hosted; a model that can change under us with no version bump would make
+  # every retrieval number unreproducible). Loaded and checked by backend/app/memory/embeddings.py:
+  # the weights' size and sha256 at this exact revision, a final Normalize module, and the
+  # dimension, which must equal memory_items.embedding vector(768) (asserted by a database test).
+  # Values read from the Hugging Face Hub 2026-10-18.
+  provider: local
+  library: sentence-transformers
+  id: BAAI/bge-base-en-v1.5
+  revision: a5beb1e3e68b9ab74eb54cfd186867f64f240e1a   # a commit, last modified 2024-02-21
+  weights_file: model.safetensors
+  weights_sha256: c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7
+  weights_bytes: 437955512
   dimensions: 768
-  dimension_param: output_dimensionality
-  provider_normalises: true
-  rate_limits: {rpm: 100, tpm: 30000, rpd: 1000}
-  price_per_1m_input_usd: 0.20
+  normalised: true                # the model's pipeline ends in a Normalize module
+  # BAAI's instruction for short retrieval queries; stored items are embedded without it.
+  query_instruction: "Represent this sentence for searching relevant passages: "
+  max_tokens: 512
+  licence: MIT

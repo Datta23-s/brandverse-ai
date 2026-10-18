@@ -194,7 +194,23 @@ thesis says so.
 | Storage | `vector(768)`, cosine distance |
 | Re-embedding | Required if the model changes. Store `embedding_model` and `embedding_version` on each row so a migration is possible. |
 
-**Store the model version from day one.** Projects that omit it discover at Phase 10 that half the corpus is unusable.
+**Store the model version from day one.** Every row records the encoder's id and revision
+(`embedding_model`, `embedding_version`) because a vector embedded by a different model, or a
+different revision of this one, cannot be compared with a vector embedded by this one; and the
+relevance pool is frozen against a specific encoder revision, recorded in `pool.lock`.
+
+**As built (Phase 4 chunk B, 2026-10-18):** `backend/app/memory/embeddings.py`, configured by
+`config/models.yaml` `embedding:` (the only place the model id appears in code, enforced by the
+Rules.md P5 test). Loading refuses unless the weights file at the pinned revision has the recorded
+size and SHA-256 (hashed as raw bytes), the pipeline ends in `Normalize`, and the output dimension
+equals the configured 768; every batch is checked for unit length. `embed_queries` adds the query
+instruction and `embed_documents` does not — separate methods, so one cannot be used for the
+other. A row's `embedding_model` and `embedding_version` are the encoder's id and revision. A
+database test reads the dimension of `memory_items.embedding` and `brands.voice_embedding` from
+the migrated schema and asserts it equals the configured one. `sentence-transformers` is in the
+optional `embeddings` dependency group (approved 2026-10-18), which CI does not install; tests use
+stand-ins, and `scripts/check_encoder.py` checks the real model on the laptop. The relevance pool
+uses the same encoder and records its id and revision in `pool.lock`.
 
 ---
 

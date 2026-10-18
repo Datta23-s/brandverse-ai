@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from app.core.config import REPO_ROOT, get_settings
 from app.llm.gateway import LLMGateway
 from app.llm.registry import Tier, load_registry
+from app.memory.embeddings import load_embedding_config
 from tests.llm_fakes import (
     FakeCompletion,
     FakeLedger,
@@ -112,7 +113,7 @@ CODE_DIRS = ["backend/app", "backend/scripts", "frontend/src", "frontend/e2e", "
 def test_no_model_id_appears_outside_the_registry() -> None:
     """Rules.md P5: code names tiers; only config/models.yaml names models."""
     registry = load_registry(MODELS_YAML)
-    ids = [registry.model(t).id for t in Tier]
+    ids = [registry.model(t).id for t in Tier] + [load_embedding_config(MODELS_YAML).id]
     offenders = []
     for d in CODE_DIRS:
         for path in (REPO_ROOT / d).rglob("*"):

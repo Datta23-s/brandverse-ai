@@ -270,6 +270,12 @@ owner, and asking for Org B returned nothing; revoking Org A's item removed it f
 retrieval, recorded the revoker and `now()` despite a back-dated value sent, and un-revoking was
 refused. `memory_items` held 0 rows before and after.
 
+Chunk B (2026-10-18): the local encoder (`app/memory/embeddings.py`, `Memory.md` §5 as built) —
+pinned revision, weights hash checked on load, `Normalize` and dimension checked, queries and
+documents embedded by separate methods; the configured dimension asserted equal to the vector
+columns'. Embedding pipeline deliverable: the encoder is built; chunking and storing come with
+write-back (chunk C).
+
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming
 the structured-output fix (2026-10-18, before chunk A), the claim classifier cited the verified
