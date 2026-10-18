@@ -279,7 +279,17 @@ The `400`s are a request-format failure on our side (most likely the classifier'
 `$defs`/`$ref`, `additionalProperties`, a nullable `anyOf` — which LiteLLM sends to Gemini
 unchanged; unconfirmed without a call). The script did not stop at the first systematic error, so
 nine calls were spent that could not succeed. Raw log: `evaluation/probes/v2_adversarial_2026-10-18.json`.
-A re-run needs a new approval.
+
+**V2 is deferred to Phase 6 by the project owner's decision on 2026-10-18** — not forgotten. The
+strong-tier re-run was refused, reversing that morning's approval deliberately: V2 names a coupling
+(a generator paraphrases a restricted claim, the classifier mislabels it) that exists end to end
+only once Phase 6's generator produces the paraphrase; hand-written paraphrases test half of it;
+and after a failed attempt, ten more strong-tier calls would buy a result already ruled unable to
+be a rate. In Phase 6 the measurement in item 3 above is made against real generated output. What
+the failed run did yield is bigger than V2: the gateway could not send our structured schema to
+Gemini at all, a defect every later structured call (Phase 5's copy writer, Phase 6's agents) would
+have hit. Its fix — and an offline test of the request body for every structured schema we send —
+was approved instead, with up to 3 cheap-tier calls to confirm it.
 
 **V3 — The eight predatory anti-patterns are checked only by the human approver (recorded
 2026-10-18).** `Rules.md` T5 requires them to be blocked, not warned. No detector exists for any of
@@ -336,6 +346,24 @@ against another model's opinion, a confound every number would carry).
 - **Frozen.** Labels are timestamped and frozen before any ranker tuning. If tuning later suggests
   a label was wrong, **the label stands** and the disagreement is reported.
 - Precision@10 (`Memory.md` §8) is computed against these labels only.
+
+**Who writes what, and in what order (decided 2026-10-18).** Query-and-corpus co-design is the
+dangerous direction, and so is writing queries from a corpus just read — the writer remembers the
+answers, and Precision@10 comes out inflated for a reason no reader could see. So:
+
+1. The developer writes a one-page **brief**: three fictional brands, their sectors, product lines
+   and rough positioning (`evaluation/relevance/brief.md`). The labeller sees the brief.
+2. The developer drafts the **corpus** from the brief, then freezes and hashes it. **The labeller
+   never reads the corpus text before labelling.**
+3. The labeller (Kundan) writes the **50 queries from the brief only** — plausible marketing
+   questions about brands whose shape is known, not questions copied from documents.
+4. **8 of the 50 are unanswerable by design**: written from the brief to have no good answer in the
+   corpus. They are reported separately from the 42 answerable ones. Without them precision is
+   measured only on answerable queries, and a retriever that always returns ten items looks
+   competent when it is not. On the 8, the right behaviour is to return nothing, or only items that
+   score below the reuse band (`Memory.md` §3.2: `M` < 0.65, "perform fresh analysis"); that is a
+   result the `M`-score is judged on.
+5. Then the pool is built, and the labeller labels it blind (above).
 
 **Embeddings — decided 2026-10-18.** Computed locally by a pinned sentence-transformer
 (`BAAI/bge-base-en-v1.5`, revision and weights hash in `Memory.md` §5), never by a hosted API and
