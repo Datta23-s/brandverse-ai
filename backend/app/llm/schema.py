@@ -7,9 +7,17 @@ Pydantic schema: `provider_schema` turns it into a plain one, and `check_provide
 anything outside a small allow-list before a request is built.
 
 - `$ref` is inlined from `$defs`; no `$defs` is sent.
-- A nullable `anyOf` (`[X, {"type": "null"}]`) becomes `X` with `"type": [X's type, "null"]`.
+- A nullable property (`anyOf: [X, {"type": "null"}]`) is sent as plain `X` and taken out of its
+  object's `required`: the model omits it when it has no value, and the Pydantic model's default
+  (None) fills it. Neither `anyOf` nor a `["X", "null"]` type list is sent.
 - `const` becomes a one-value `enum`.
-- `additionalProperties`, `default`, `examples`, `$schema` are dropped.
+- `additionalProperties`, `default`, `examples`, `$schema`, `minItems`, `maxItems` are dropped.
+
+Checked against Gemini on 2026-10-18 with approved cheap-tier calls
+(backend/scripts/schema_confirm.py): the first form (type lists for nullables, `maxItems` kept)
+still returned 400; yesterday's flat smoke request through the same code path succeeded, so the
+environment was fine and the schema's shape was the cause. This form (no type lists, no item
+counts) is the one sent next; its result is recorded in docs/evaluation-plan.md.
 
 Nothing is lost in strictness: the gateway still validates every reply against the full Pydantic
 model (extra fields refused, bounds checked), and repairs once if it does not validate. What the
@@ -27,10 +35,13 @@ from pydantic import BaseModel
 ALLOWED_KEYWORDS = frozenset(
     {
         "type", "properties", "required", "items", "enum", "title", "description",
-        "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems",
+        "minimum", "maximum", "minLength", "maxLength",
     }
 )  # fmt: skip
-_DROPPED = frozenset({"additionalProperties", "default", "examples", "$schema"})
+_DROPPED = frozenset(
+    {"additionalProperties", "default", "examples", "$schema", "minItems", "maxItems"}
+)
+_NULLABLE = "__nullable__"  # internal marker: never sent
 
 
 class SchemaNotSupported(ValueError):
@@ -54,17 +65,33 @@ def _resolve(node: Any, defs: dict[str, Any]) -> Any:
         if len(non_null) != 1 or len(options) != 2 or not isinstance(non_null[0].get("type"), str):
             raise SchemaNotSupported("only a nullable single-type anyOf is supported")
         rest = {k: v for k, v in node.items() if k != "anyOf"}
-        return _resolve({**non_null[0], **rest, "type": [non_null[0]["type"], "null"]}, defs)
+        return {**_resolve({**non_null[0], **rest}, defs), _NULLABLE: True}
     out: dict[str, Any] = {}
+    nullable: set[str] = set()
     for key, value in node.items():
         if key in _DROPPED or key == "$defs":
             continue
         if key == "const":
             out["enum"] = [value]
         elif key == "properties":
-            out[key] = {name: _resolve(sub, defs) for name, sub in value.items()}
+            props = {}
+            for name, sub in value.items():
+                resolved = _resolve(sub, defs)
+                if resolved.pop(_NULLABLE, False):
+                    nullable.add(name)
+                props[name] = resolved
+            out[key] = props
         else:
-            out[key] = _resolve(value, defs)
+            resolved_value = _resolve(value, defs)
+            if isinstance(resolved_value, dict) and resolved_value.get(_NULLABLE):
+                raise SchemaNotSupported(
+                    f"a nullable {key!r} cannot be expressed; make it a property"
+                )
+            out[key] = resolved_value
+    if nullable and "required" in out:
+        out["required"] = [r for r in out["required"] if r not in nullable]
+        if not out["required"]:
+            del out["required"]
     return out
 
 

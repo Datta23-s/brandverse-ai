@@ -38,6 +38,8 @@ from scripts.llm_smoke import CapitalCity
 from tests.db.target_guard import managed_supabase_hosts
 
 AGENT = "schema-confirm"
+# Module-level, so tests/test_llm_request_body.py checks every schema this script can send.
+SCHEMAS: dict[str, type[BaseModel]] = {"control": CapitalCity, "classifier": ExtractedStatements}
 
 CONFIRMATION = "3 cheap-tier calls"
 MAX_CALLS = 3
@@ -117,11 +119,9 @@ async def main(args: argparse.Namespace) -> int:
     if args.variant == "control":
         # Yesterday's working smoke request, unchanged, through today's gateway: isolates the
         # environment from the schema.
-        schema: type[BaseModel] = CapitalCity
         prompt = prompts.get("smoke_capital_city", "v1").render(country="Portugal")
         max_tokens = 128
     else:
-        schema = ExtractedStatements
         prompt = prompts.get(*CLAIM_EXTRACT).render(copy=COPY, claims=CLAIMS)
         max_tokens = 1024
     pool: AsyncConnectionPool[AsyncConnection] = AsyncConnectionPool(
@@ -150,7 +150,7 @@ async def main(args: argparse.Namespace) -> int:
         while True:
             try:
                 result = await gateway.structured(
-                    schema,
+                    SCHEMAS[args.variant],
                     tier=Tier.CHEAP,
                     prompt=prompt,
                     ctx=ctx,

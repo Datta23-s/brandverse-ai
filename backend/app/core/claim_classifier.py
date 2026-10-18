@@ -29,7 +29,7 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.gates import (
     Finding,
@@ -54,8 +54,15 @@ class ExtractedStatement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     quote: str = Field(min_length=1, max_length=2000)
-    claim_id: str | None
+    # Omitted, null or empty all mean "cites no listed claim" — which the claim gate blocks as
+    # unsourced. The provider is sent this field as optional (app/llm/schema.py).
+    claim_id: str | None = None
     labelled_deduction: bool = False
+
+    @field_validator("claim_id")
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
 
 
 class ExtractedStatements(BaseModel):

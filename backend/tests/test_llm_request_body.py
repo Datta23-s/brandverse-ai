@@ -38,15 +38,29 @@ def discovered_schemas() -> dict[str, type[BaseModel]]:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         module = ".".join(path.relative_to(BACKEND).with_suffix("").parts)
         for node in ast.walk(tree):
-            if (
+            if not (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr == "structured"
                 and node.args
-                and isinstance(node.args[0], ast.Name)
             ):
-                cls = getattr(importlib.import_module(module), node.args[0].id)
-                found[f"{module}:{node.args[0].id}"] = cls
+                continue
+            arg, mod = node.args[0], importlib.import_module(module)
+            if isinstance(arg, ast.Name) and isinstance(getattr(mod, arg.id, None), type):
+                found[f"{module}:{arg.id}"] = getattr(mod, arg.id)
+            elif (
+                isinstance(arg, ast.Subscript)
+                and isinstance(arg.value, ast.Name)
+                and isinstance(getattr(mod, arg.value.id, None), dict)
+            ):
+                # A module-level {name: Schema} map indexed at the call: every value is covered.
+                for key, cls in getattr(mod, arg.value.id).items():
+                    found[f"{module}:{arg.value.id}[{key}]"] = cls
+            else:
+                raise AssertionError(
+                    f"{path.name}:{node.lineno}: structured() is called with a schema this test "
+                    "cannot see; pass a module-level schema class or index a module-level dict"
+                )
     return found
 
 
@@ -133,13 +147,22 @@ class Outer(BaseModel):
     kind: str = "x"
 
 
-def test_refs_are_inlined_and_nullables_become_type_lists() -> None:
+def test_refs_are_inlined_and_nullables_become_optional_plain_types() -> None:
     schema = provider_schema(Outer)
     assert "$defs" not in json.dumps(schema) and "$ref" not in json.dumps(schema)
     inner = schema["properties"]["main"]
-    assert inner["properties"]["code"]["type"] == ["string", "null"]
+    assert inner["properties"]["code"]["type"] == "string"  # no ["string", "null"] type list
+    assert "code" not in inner.get("required", [])  # omitted when there is no value
     assert "default" not in inner["properties"]["weight"]
     assert schema["properties"]["items"]["items"] == inner
+    assert "maxItems" not in json.dumps(schema) and "minItems" not in json.dumps(schema)
+
+
+def test_an_omitted_nullable_still_validates_on_our_side() -> None:
+    from app.core.claim_classifier import ExtractedStatement
+
+    assert ExtractedStatement.model_validate({"quote": "x"}).claim_id is None
+    assert ExtractedStatement.model_validate({"quote": "x", "claim_id": ""}).claim_id is None
 
 
 def test_a_construct_the_provider_form_cannot_express_is_refused() -> None:
