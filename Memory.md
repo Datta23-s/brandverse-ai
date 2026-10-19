@@ -212,6 +212,15 @@ optional `embeddings` dependency group (approved 2026-10-18), which CI does not 
 stand-ins, and `scripts/check_encoder.py` checks the real model on the laptop. The relevance pool
 uses the same encoder and records its id and revision in `pool.lock`.
 
+**As built for write-back (Phase 4 chunk C, 2026-10-19), against the Chunking and Normalisation
+rows above.** A memory item is one chunk: content over `writeback.max_item_tokens` (400, counted by
+the encoder's own tokenizer) is refused, not split, so the 15% overlap never arises; nothing is
+merged up to the 200-token floor either. Text is not lowercased: the pinned revision's tokenizer
+lowercases (`"do_lower_case": true` in its `tokenizer_config.json`, read 2026-10-19), so
+lowercasing first would change nothing the model sees, and the stored text keeps its case.
+Whitespace is collapsed and the stored content is exactly the text embedded. Boilerplate stripping
+is not built: a candidate is one statement, not a page.
+
 ---
 
 ## 6. Write-back — step 15
@@ -233,6 +242,19 @@ A fact is written to memory only if **all** hold:
 2. It passed the claim gate (`verified`, or `deduced` with a scored source).
 3. It generalises — it is not specific to one campaign's dates, discount or slogan.
 4. It is not a near-duplicate of an existing item (cosine > 0.95 → update `last_used_at` and raise `confidence` instead of inserting).
+
+**As built (Phase 4 chunk C, 2026-10-19):** `backend/app/memory/writeback.py`; its module
+docstring has each rule, where it is checked (when a candidate is staged, or at commit inside the
+run's terminal transaction) and what is NOT detected. In short: rule 1 is checked at commit, and a
+run without a human-approved campaign has its whole commit refused (the run ends `failed`). Rule 2
+requires a verified, active claim the gate resolved with no finding against it; `deduced` is
+refused until Phase 5 scores sources. Rule 3 and §6.2 are covered only in the forms the screens
+name (prices, discounts, dates, promo codes, email addresses, phone-number-shaped digit runs);
+anything else campaign-specific or personal stays with the approver. Rule 4 is an exact scan
+within the same organisation, brand, kind and encoder revision, seed items excluded; a revoked
+near-duplicate is never written again, and one write-back counts a fact once. Every commit
+writes one `audit_log` row. Tests: `backend/tests/test_writeback.py`,
+`backend/tests/db/test_writeback_commit.py`, `backend/tests/db/test_memory_staging.py`.
 
 ### 6.2 What is never written
 
@@ -259,6 +281,10 @@ if confidence < 0.30: revoked ← true
 ```
 
 This gives memory a cheap, auditable correction mechanism without a retraining loop.
+
+**As built (Phase 4 chunk C, 2026-10-19):** the reuse step above, applied when write-back meets a
+near-duplicate (§6.1 rule 4), with the step and cap in `config/scoring.yaml` `writeback:`. A null
+`confidence` stays null. The flag/edit decrement and the revocation at < 0.30 are not built yet.
 
 ### 6.4 Revocation
 

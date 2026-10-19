@@ -22,9 +22,11 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
-from app.core.budgeted_run import MemoryStage, MemoryWrite, Step, run_steps
+from app.core.budgeted_run import Step, run_steps
 from app.core.infrastructure import classify_infrastructure_failure
 from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, QuotaExhausted
+from app.memory.embeddings import HashingEncoder
+from app.memory.writeback import MemoryStage, MemoryWrite, WritebackRefused
 from tests.db.conftest import Seed
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db]
@@ -48,14 +50,27 @@ async def pool(db_url: str) -> AsyncIterator[AsyncConnectionPool[AsyncConnection
         await p.close()
 
 
-def _run(db_url: str, seed: Seed) -> UUID:
+def _run(db_url: str, seed: Seed, *, approved: bool = True) -> UUID:
+    """A run whose campaign a human approved, unless `approved=False`: so every failure below is
+    a run that would have written memory had it completed (Memory.md §6.1 rule 1)."""
     with psycopg.connect(db_url, autocommit=True) as c:
         row = c.execute(
             "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
             (seed.org_a, seed.product_a),
         ).fetchone()
-    assert row is not None
-    run_id: UUID = row[0]
+        assert row is not None
+        run_id: UUID = row[0]
+        if approved:
+            c.execute(
+                "insert into campaigns (org_id, run_id, status, approved_by, approved_at) "
+                "values (%s, %s, 'approved', %s, now())",
+                (seed.org_a, run_id, seed.users["approver_a"]),
+            )
+        else:
+            c.execute(
+                "insert into campaigns (org_id, run_id, status) values (%s, %s, 'rejected')",
+                (seed.org_a, run_id),
+            )
     return run_id
 
 
@@ -81,13 +96,20 @@ def _steps(
     stage = MemoryStage()
 
     async def stage_memory(_: Mapping[str, BaseModel]) -> BaseModel:
+        # The marker in the content keeps each test's item from being a near-duplicate of
+        # another's (rows are never deleted, and a near-duplicate is reinforced, not inserted).
+        encoder = HashingEncoder()
+        content = f"founder-story copy outperforms spec-sheet copy {marker}"
         stage.stage(
             MemoryWrite(
                 org_id=seed.org_a,
                 brand_id=brand or seed.brand_a,
                 kind="insight",
-                content="founder-story copy outperforms spec-sheet copy",
+                content=content,
                 provenance=marker,
+                embedding=tuple(encoder.embed_documents([content])[0]),
+                embedding_model=encoder.model,
+                embedding_version=encoder.version,
             )
         )
         return Out(step="stage_memory")
@@ -217,6 +239,23 @@ async def test_a_completed_run_commits_its_staged_memory_with_its_status(
     assert outcome.status == "completed"
     assert _memory(db_url, marker) == 1
     assert _status(db_url, run_id) == "completed"
+
+
+async def test_a_completed_run_without_an_approved_campaign_commits_no_memory(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    # The write-back step stages nothing for a rejected campaign; if something was staged anyway,
+    # the commit refuses it, and the 'completed' status rolls back with it.
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed, approved=False)
+
+    async def done() -> BaseModel:
+        return Out(step="done")
+
+    steps, stage = _steps(seed, marker, done)
+    with pytest.raises(WritebackRefused):
+        await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert _memory(db_url, marker) == 0
+    assert _status(db_url, run_id) == "failed"
 
 
 async def test_a_budget_stopped_run_is_a_result_but_commits_no_memory(

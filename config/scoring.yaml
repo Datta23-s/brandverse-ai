@@ -25,6 +25,14 @@ memory:
     creative: 180
     sector: 365
   bands: {reuse: 0.90, adapt: 0.80, support: 0.65}   # Memory.md §3.2
+writeback:
+  # Applied when a run's staged memory commits (backend/app/memory/writeback.py).
+  near_duplicate_cosine: 0.95    # Memory.md §6.1 rule 4: above it, reinforce the existing item
+  reuse_confidence_step: 0.02    # Memory.md §6.3
+  confidence_cap: 0.99           # Memory.md §6.3
+  # One item is one chunk (Memory.md §5: chunks are 200–400 tokens). Longer content is refused,
+  # not split: a memory item is one unit of knowledge, and the encoder truncates past 512 tokens.
+  max_item_tokens: 400
 retrieval:
   # HNSW search depth, set per transaction before app.match_memory (backend/app/memory/retrieval.py)
   # and logged with every retrieval. A parameter of the results: evaluation reports retrieval

@@ -99,7 +99,9 @@ point. `backend/tests/db/test_memory_staging.py` stages a write and then ends th
 of the four infrastructure failures — rate-limit rejection, daily-quota exhaustion, a network
 error, and a process crash (a cancelled attempt, and a worker process killed outright) — and
 asserts `memory_items` is unchanged each time; controls show a completed run commits, a
-budget-stopped run commits nothing, and status and memory land together or not at all. Once a pair
+budget-stopped run commits nothing, a completed run whose campaign no human approved commits
+nothing (its commit is refused and it ends `failed`; `Memory.md` §6.1, as built 2026-10-19), and
+status and memory land together or not at all. Once a pair
 has its primary attempt, the harness disables write-back for any later attempt of that pair.
 
 ## 3. Seed exclusion

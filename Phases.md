@@ -250,7 +250,7 @@ threat V2 in `docs/evaluation-plan.md`.
 **Exit criteria**
 - [ ] Precision@10 measured on the relevance set
 - [x] Cross-tenant memory leak test green (CI; and on the live project 2026-10-18, rolled back)
-- [ ] Near-duplicate detection prevents a second insert at cosine > 0.95
+- [x] Near-duplicate detection prevents a second insert at cosine > 0.95 (CI, `tests/db/test_writeback_commit.py`; no migration involved)
 - [x] Revocation removes an item from retrieval immediately (CI; and on the live project 2026-10-18, rolled back)
 
 **Phase 4 progress.** Decisions recorded 2026-10-18 (`Memory.md` §5, §8; `docs/evaluation-plan.md`
@@ -275,6 +275,23 @@ pinned revision, weights hash checked on load, `Normalize` and dimension checked
 documents embedded by separate methods; the configured dimension asserted equal to the vector
 columns'. Embedding pipeline deliverable: the encoder is built; chunking and storing come with
 write-back (chunk C).
+
+Chunk C (2026-10-19): write-back (`app/memory/writeback.py`, `Memory.md` §6 as built), in two
+halves. Screening, when a candidate is staged: it must rest on a verified, active claim the run's
+gate report resolved with no finding against it (so a V4 flag keeps it out); `deduced` is refused
+until Phase 5 scores sources; prices, discounts, dates, promo codes, email addresses and
+phone-number-shaped digit runs are refused in the forms the screens name, and anything else
+campaign-specific or personal is not detected; content over 400 tokens is refused, not split.
+Eligible candidates are embedded in one batch and staged with the encoder's id and revision.
+Commit, inside the terminal transaction (`end_run`): the run's campaign must be approved by a human,
+or the whole commit is refused and the run ends `failed`; a claim retired since staging drops its
+item; then near-duplicates (cosine > 0.95, exact scan, same organisation, brand, kind and encoder
+revision, seed items excluded) are reinforced, not inserted, a revoked near-duplicate is never
+written again, and one write-back counts a fact once. Write-backs of one organisation are
+serialised by an advisory lock, tested with two concurrent commits. Every commit writes one
+`audit_log` row. The near-duplicate criterion above is ticked from CI; no migration was needed.
+A test found that reinforcing an item with a null confidence set it to the 0.99 cap (`least()`
+ignores nulls); fixed before commit.
 
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming

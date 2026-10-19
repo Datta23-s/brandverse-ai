@@ -28,8 +28,9 @@ is inserted in **the same transaction** that writes the run's terminal status, a
 run ends `completed` (and, for an experiment run, when the Phase 10 primacy check passes inside
 that transaction). Every other ending — `partial`, `failed`, an infrastructure failure
 (app/core/infrastructure.py), cancellation — discards it. A process that dies takes the stage with
-it: it was never anywhere durable. What is eligible to be staged at all (human approval, the claim
-gate, Memory.md §6.1) is the write-back step's business (Phase 4), not this executor's.
+it: it was never anywhere durable. What is eligible to be staged, and what the commit checks
+(human approval, the claim gate, near-duplicates; Memory.md §6.1), is app/memory/writeback.py's
+business, not this executor's: `end_run` hands it the stage inside the terminal transaction.
 """
 
 import asyncio
@@ -45,6 +46,7 @@ from pydantic import BaseModel
 
 from app.core.infrastructure import classify_infrastructure_failure
 from app.errors import BudgetExceeded
+from app.memory.writeback import Committed, MemoryStage, MemoryWrite, commit_memory
 
 log = logging.getLogger(__name__)
 
@@ -55,35 +57,6 @@ StepFn = Callable[[Mapping[str, BaseModel]], Awaitable[BaseModel]]
 class Step:
     name: str
     run: StepFn
-
-
-@dataclass(frozen=True, slots=True)
-class MemoryWrite:
-    """One memory_items row a step wants written if, and only if, the run qualifies at its end."""
-
-    org_id: UUID
-    kind: str
-    content: str
-    provenance: str
-    brand_id: UUID | None = None
-    product_id: UUID | None = None
-    claim_id: UUID | None = None
-    source_url: str | None = None
-    confidence: float | None = None
-
-
-class MemoryStage:
-    """The run's staged memory writes: in this process only, committed by `end_run` or lost."""
-
-    def __init__(self) -> None:
-        self._items: list[MemoryWrite] = []
-
-    def stage(self, item: MemoryWrite) -> None:
-        self._items.append(item)
-
-    @property
-    def items(self) -> tuple[MemoryWrite, ...]:
-        return tuple(self._items)
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,14 +79,6 @@ where r.id = %(run)s
 """
 
 
-_INSERT_MEMORY_SQL = """
-insert into public.memory_items
-  (org_id, brand_id, product_id, claim_id, kind, content, provenance, source_url, confidence)
-values (%(org_id)s, %(brand_id)s, %(product_id)s, %(claim_id)s, %(kind)s, %(content)s,
-        %(provenance)s, %(source_url)s, %(confidence)s)
-"""
-
-
 async def end_run(
     pool: AsyncConnectionPool[AsyncConnection],
     run_id: UUID,
@@ -121,7 +86,7 @@ async def end_run(
     *,
     budget_exhausted: bool,
     memory: Sequence[MemoryWrite] = (),
-) -> None:
+) -> Committed | None:
     """Write the run's terminal status — and, for a completed run only, its staged memory — in one
     transaction: both land or neither does."""
     if memory and status != "completed":
@@ -132,21 +97,9 @@ async def end_run(
         )
         if cur.rowcount != 1:
             raise RuntimeError(f"run {run_id} not found")
-        for item in memory:
-            await conn.execute(
-                _INSERT_MEMORY_SQL,
-                {
-                    "org_id": item.org_id,
-                    "brand_id": item.brand_id,
-                    "product_id": item.product_id,
-                    "claim_id": item.claim_id,
-                    "kind": item.kind,
-                    "content": item.content,
-                    "provenance": item.provenance,
-                    "source_url": item.source_url,
-                    "confidence": item.confidence,
-                },
-            )
+        if memory:
+            return await commit_memory(conn, run_id, memory)
+    return None
 
 
 async def run_steps(

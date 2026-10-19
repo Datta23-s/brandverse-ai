@@ -147,6 +147,10 @@ class LocalEncoder:
     def embed_queries(self, texts: Sequence[str]) -> list[list[float]]:
         return self._encode([self._instruction + t for t in texts])
 
+    def count_tokens(self, text: str) -> int:
+        """Tokens the model's own tokenizer makes of `text` as a document (no special tokens)."""
+        return len(self._st.tokenizer(text, add_special_tokens=False)["input_ids"])
+
 
 def default_encoder() -> LocalEncoder:
     """The configured local encoder (`--encoder app.memory.embeddings:default_encoder`)."""
@@ -181,3 +185,6 @@ class HashingEncoder:
 
     def embed_queries(self, texts: Sequence[str]) -> list[list[float]]:
         return [self._vector(t) for t in texts]
+
+    def count_tokens(self, text: str) -> int:
+        return len(_TOKEN.findall(text))

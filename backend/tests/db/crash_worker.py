@@ -16,7 +16,9 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
-from app.core.budgeted_run import MemoryStage, MemoryWrite, Step, run_steps
+from app.core.budgeted_run import Step, run_steps
+from app.memory.embeddings import HashingEncoder
+from app.memory.writeback import MemoryStage, MemoryWrite
 
 
 class Out(BaseModel):
@@ -29,13 +31,18 @@ async def main(
     stage = MemoryStage()
 
     async def stage_memory(_: Mapping[str, BaseModel]) -> BaseModel:
+        encoder = HashingEncoder()
+        content = f"staged before the crash {marker}"
         stage.stage(
             MemoryWrite(
                 org_id=UUID(org_id),
                 brand_id=UUID(brand_id),
                 kind="insight",
-                content="staged before the crash",
+                content=content,
                 provenance=marker,
+                embedding=tuple(encoder.embed_documents([content])[0]),
+                embedding_model=encoder.model,
+                embedding_version=encoder.version,
             )
         )
         return Out(step="stage_memory")

@@ -90,6 +90,13 @@ class MemoryScoring(_Strict):
     bands: Bands
 
 
+class Writeback(_Strict):
+    near_duplicate_cosine: float = Field(gt=0, lt=1)
+    reuse_confidence_step: float = Field(gt=0, lt=1)
+    confidence_cap: float = Field(gt=0, le=1)
+    max_item_tokens: int = Field(gt=0)
+
+
 class Retrieval(_Strict):
     hnsw_ef_search: int = Field(ge=1, le=1000)  # pgvector's accepted range
 
@@ -97,6 +104,7 @@ class Retrieval(_Strict):
 class ScoringConfig(_Strict):
     version: str
     memory: MemoryScoring
+    writeback: Writeback
     retrieval: Retrieval
 
 
