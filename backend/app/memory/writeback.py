@@ -6,10 +6,12 @@ Write-back has two halves to match:
 
 1. **Screening, when staging** (`stage_writeback`). Each candidate is checked against what the run
    knows — its gate report and its product's truth — and against Memory.md §6.2. A candidate that
-   fails is refused with its reasons and never staged. The rest are embedded as documents in one
-   batch and staged with the encoder's id and revision (Memory.md §5). The stored content is
-   exactly the text embedded: whitespace collapsed, case kept (the pinned model's tokenizer is
-   uncased, so lowercasing would change nothing it sees).
+   fails is refused with its reasons and never staged, and never silently: each refusal is logged
+   (WARNING, bound to the run) and the step-15 node records them in `audit_log`
+   (`record_refusals`), with the content withheld for a candidate refused as personal data. The
+   rest are embedded as documents in one batch and staged with the encoder's id and revision
+   (Memory.md §5). The stored content is exactly the text embedded: whitespace collapsed, case
+   kept (the pinned model's tokenizer lowercases, and so does the lexical index; Memory.md §5).
 2. **Commit, inside the terminal transaction** (`commit_memory`, called by `end_run`). What can
    change between staging and the end is checked against the database there: the run's campaign
    is approved by a human (§6.1 rule 1; the row is locked for share until commit), and each
@@ -28,8 +30,10 @@ Write-back has two halves to match:
   date or a promo code (§6.2's ephemera); campaign-specific in any other way is NOT detected.
 - *Not consumer PII* (staging, partly): refused if it contains an email address or a
   phone-number-shaped digit run; other PII is NOT detected.
-- *Not a raw page body* (staging): refused above `max_item_tokens` (one item is one chunk; longer
-  content is refused, not split).
+- *One fact* (staging): refused above `max_item_tokens`, never split (Memory.md §5, decided
+  2026-10-19): half a fact could be retrieved and cited as if it were whole. The author is to
+  split the content into separate facts upstream, each a candidate of its own. This also keeps a
+  raw page body out (§6.2).
 - *Not a near-duplicate* (commit): below.
 
 **Near-duplicates (§6.1 rule 4).** Within the organisation, the same brand (or both org-level),
@@ -61,6 +65,7 @@ from uuid import UUID
 from psycopg import AsyncConnection
 
 from app.core.gates import GateReport
+from app.core.logging import bind_run_id
 from app.core.truth import ProductTruth
 from app.memory.embeddings import Encoder
 from app.memory.scoring import Writeback, load_scoring
@@ -126,10 +131,33 @@ class Candidate:
     freshness_days: int | None = None
 
 
+_PERSONAL = frozenset({"contains_an_email_address", "contains_a_phone_number"})
+
+
 @dataclass(frozen=True, slots=True)
 class Refusal:
+    """A candidate that will not be remembered, and why. Never silent: each one is logged when
+    screened and recorded in `audit_log` by the step-15 node (`record_refusals`)."""
+
+    kind: str
+    claim_id: str | None
     content: str
     reasons: tuple[str, ...]
+    tokens: int  # the encoder's own count, so a length refusal can be checked against the cap
+
+    def record(self) -> dict[str, object]:
+        """What a log line or an audit row may carry. A candidate refused as personal data has its
+        content withheld — copying it would store the PII the refusal kept out. Content that holds
+        PII in a form the screens do not detect is not withheld (Memory.md §6.1, as built)."""
+        withheld = not _PERSONAL.isdisjoint(self.reasons)
+        return {
+            "kind": self.kind,
+            "claim_id": self.claim_id,
+            "reasons": list(self.reasons),
+            "tokens": self.tokens,
+            "content": None if withheld else self.content,
+            "content_withheld": withheld,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,10 +260,12 @@ async def stage_writeback(
             reasons.append("gate_blocked_the_output")
         reasons += _basis(c, report, truth)
         reasons += content_screens(content)
-        if content and encoder.count_tokens(content) > cfg.max_item_tokens:
-            reasons.append("longer_than_one_item")
+        tokens = encoder.count_tokens(content) if content else 0
+        if tokens > cfg.max_item_tokens:
+            # One fact, never split (Memory.md §5): the author splits it into separate facts.
+            reasons.append("longer_than_one_fact")
         if reasons:
-            refused.append(Refusal(content, tuple(reasons)))
+            refused.append(Refusal(c.kind, c.claim_id, content, tuple(reasons), tokens))
         else:
             eligible.append((c, content))
 
@@ -261,15 +291,31 @@ async def stage_writeback(
         )
         stage.stage(item)
         staged.append(item)
-    log.info(
-        "memory write-back screened",
-        extra={
-            "run_id": str(run_id),
-            "staged": len(staged),
-            "refused": [{"content": r.content[:80], "reasons": list(r.reasons)} for r in refused],
-        },
-    )
+    # Bound here, not passed in `extra`: the handler's filter sets run_id from the binding
+    # (app/core/logging.py), so an unbound caller would log these lines with run_id null.
+    with bind_run_id(str(run_id)):
+        for r in refused:
+            log.warning("memory candidate refused", extra={"candidate": r.record()})
+        log.info(
+            "memory write-back screened", extra={"staged": len(staged), "refused": len(refused)}
+        )
     return Screening(tuple(staged), tuple(refused))
+
+
+async def record_refusals(conn: AsyncConnection, run_id: UUID, refused: Sequence[Refusal]) -> None:
+    """One `audit_log` row naming the run and each refused candidate with its reasons, so a fact
+    that should have been remembered and was not can be found. Not memory: written when the
+    step-15 node runs, whatever the run's ending, and not subject to the attempt rule."""
+    if not refused:
+        return
+    cur = await conn.execute(
+        "insert into public.audit_log (org_id, actor_type, actor_id, action, entity_type, "
+        "entity_id, details) select org_id, 'service', 'write_memory', "
+        "'memory.candidates_refused', 'run', %s, %s from public.runs where id = %s",
+        (str(run_id), json.dumps({"refused": [r.record() for r in refused]}), run_id),
+    )
+    if cur.rowcount != 1:
+        raise RuntimeError(f"run {run_id} not found: its refused candidates were not recorded")
 
 
 # ── Commit ────────────────────────────────────────────────────────────────────────────────────

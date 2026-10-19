@@ -6,13 +6,17 @@ stand-in. The commit half — approval, near-duplicates, the audit row — is in
 tests/db/test_writeback_commit.py.
 """
 
-from collections.abc import Sequence
+import io
+import json
+import logging
+from collections.abc import Iterator, Sequence
 from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
 
 from app.core.gates import Finding, GateReport, Resolution
+from app.core.logging import configure_logging
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
 from app.memory.embeddings import HashingEncoder
@@ -35,6 +39,28 @@ QUANTITY = Claim(str(uuid4()), "Up to 60 hours playback", "verified", "https://e
 DEDUCED = Claim(str(uuid4()), "Suits daily commuting", "deduced", "https://e.invalid/d", False)
 RETIRED = Claim(str(uuid4()), "Weighs 240 g", "verified", "https://e.invalid/r", True)
 TRUTH = ProductTruth(FOOTWEAR, (VERIFIED, UNRESOLVED, QUANTITY, DEDUCED, RETIRED), ())
+
+
+class LogLines:
+    """The production JSON log lines of app.memory.writeback (as tests/test_logging.py)."""
+
+    def __init__(self) -> None:
+        self.stream = io.StringIO()
+
+    def read(self) -> list[dict[str, object]]:
+        entries = [json.loads(line) for line in self.stream.getvalue().splitlines()]
+        return [e for e in entries if e["logger"] == "app.memory.writeback"]
+
+
+@pytest.fixture
+def lines() -> Iterator[LogLines]:
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    captured = LogLines()
+    configure_logging("INFO", stream=captured.stream)
+    yield captured
+    root.handlers[:] = saved_handlers
+    root.setLevel(saved_level)
 
 
 def _resolved(*claims: Claim) -> tuple[Resolution, ...]:
@@ -165,11 +191,44 @@ async def test_nothing_is_staged_from_a_blocked_output() -> None:
     assert _reasons(screening) == [("gate_blocked_the_output",)]
 
 
-async def test_one_item_is_one_chunk_longer_content_is_refused_not_split() -> None:
+async def test_one_item_is_one_fact_longer_content_is_refused_not_split() -> None:
     long = " ".join(["recycled mesh"] * 21)  # 42 tokens > max_item_tokens 40
     screening, stage = await _screen(Candidate("insight", long, VERIFIED.id))
     assert stage.items == ()
-    assert _reasons(screening) == [("longer_than_one_item",)]
+    assert _reasons(screening) == [("longer_than_one_fact",)]
+    [refusal] = screening.refused
+    assert refusal.tokens == 42  # recorded, so the refusal can be checked against the cap
+
+
+async def test_every_refusal_is_logged_naming_the_run_and_the_reason(lines: LogLines) -> None:
+    # A silently dropped candidate is a memory that should exist and does not, and nobody would
+    # find it. The run is named even when the caller did not bind it.
+    long = " ".join(["recycled mesh"] * 21)
+    await _screen(
+        Candidate("insight", long, VERIFIED.id),
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id),
+    )
+    refused = [e for e in lines.read() if e["msg"] == "memory candidate refused"]
+    assert [(e["level"], e["run_id"]) for e in refused] == [("WARNING", str(RUN))]
+    assert refused[0]["candidate"] == {
+        "kind": "insight",
+        "claim_id": VERIFIED.id,
+        "reasons": ["longer_than_one_fact"],
+        "tokens": 42,
+        "content": long,
+        "content_withheld": False,
+    }
+
+
+async def test_a_candidate_refused_as_personal_data_is_logged_without_its_content(
+    lines: LogLines,
+) -> None:
+    await _screen(Candidate("insight", "Ask priya.k@example.com for the deck", VERIFIED.id))
+    [entry] = [e for e in lines.read() if e["msg"] == "memory candidate refused"]
+    candidate = entry["candidate"]
+    assert isinstance(candidate, dict)
+    assert (candidate["content"], candidate["content_withheld"]) == (None, True)
+    assert "priya" not in json.dumps(entry)
 
 
 async def test_an_empty_candidate_is_refused() -> None:

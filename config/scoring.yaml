@@ -30,8 +30,9 @@ writeback:
   near_duplicate_cosine: 0.95    # Memory.md §6.1 rule 4: above it, reinforce the existing item
   reuse_confidence_step: 0.02    # Memory.md §6.3
   confidence_cap: 0.99           # Memory.md §6.3
-  # One item is one chunk (Memory.md §5: chunks are 200–400 tokens). Longer content is refused,
-  # not split: a memory item is one unit of knowledge, and the encoder truncates past 512 tokens.
+  # One memory item is one fact, never split (Memory.md §5, decided 2026-10-19): half a fact can be
+  # retrieved and cited as if it were whole. A candidate over this many tokens (the encoder's own
+  # count) is refused and the refusal recorded; the author splits it into separate facts upstream.
   max_item_tokens: 400
 retrieval:
   # HNSW search depth, set per transaction before app.match_memory (backend/app/memory/retrieval.py)

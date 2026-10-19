@@ -250,7 +250,7 @@ threat V2 in `docs/evaluation-plan.md`.
 **Exit criteria**
 - [ ] Precision@10 measured on the relevance set
 - [x] Cross-tenant memory leak test green (CI; and on the live project 2026-10-18, rolled back)
-- [x] Near-duplicate detection prevents a second insert at cosine > 0.95 (CI, `tests/db/test_writeback_commit.py`; no migration involved)
+- [x] Near-duplicate detection prevents a second insert at cosine > 0.95 (CI, `tests/db/test_writeback_commit.py`; no migration involved). Not checked on the live project. It will be confirmed there incidentally, from the `memory.writeback` audit rows, when real memory rows first land. It cannot be re-run there as a committed test: `memory_items` rows on live can never be deleted (0010, 0011), so every committed test row would be permanent memory. A check in a transaction that is always rolled back, as for the cross-tenant and revocation criteria, remains possible for everything except two concurrent write-backs (which must commit one side), and has not been run.
 - [x] Revocation removes an item from retrieval immediately (CI; and on the live project 2026-10-18, rolled back)
 
 **Phase 4 progress.** Decisions recorded 2026-10-18 (`Memory.md` §5, §8; `docs/evaluation-plan.md`

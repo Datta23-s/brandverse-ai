@@ -189,8 +189,9 @@ thesis says so.
 | Normalisation | The model's own pipeline ends in a `Normalize` module: every vector is unit length, so cosine distance is exact. Short retrieval queries get BAAI's query instruction ("Represent this sentence for searching relevant passages: "); stored items do not. |
 | Where | Computed on the laptop (CPU). No API, no `llm_calls` row, no quota, no cost. Max 512 tokens per input. |
 | ~~Model (superseded 2026-10-18)~~ | ~~`gemini-embedding-2`, called with `output_dimensionality=768` (native output is 3072). **Normalisation verified 2026-10-14** against ai.google.dev/gemini-api/docs/embeddings: "Gemini Embedding 2 also auto-normalizes truncated dimensions (e.g., 768, 1536)" — no manual normalisation (unlike `gemini-embedding-001`, which requires it). Several texts in one request are aggregated into a single embedding unless each is wrapped in its own `Content` object. Free tier: 100 RPM / 30K TPM / 1000 RPD. Model ID lives only in `config/models.yaml`, never here or in an env var.~~ |
-| Chunking | Semantic, 200–400 tokens, 15% overlap |
-| Normalisation | Lowercase, strip boilerplate, collapse whitespace. Never strip numbers or units. |
+| Unit | **One memory item is one fact and is never split.** An item over 400 tokens is refused (`writeback.max_item_tokens`, counted by the encoder's own tokenizer). Decision below, 2026-10-19. |
+| ~~Chunking (superseded 2026-10-19)~~ | ~~Semantic, 200–400 tokens, 15% overlap~~ |
+| Normalisation | Collapse whitespace; never strip numbers or units; the stored text is exactly the text embedded, case kept. Case and accents are then handled by each path's own analyser, which do not fully agree — below. |
 | Storage | `vector(768)`, cosine distance |
 | Re-embedding | Required if the model changes. Store `embedding_model` and `embedding_version` on each row so a migration is possible. |
 
@@ -212,14 +213,32 @@ optional `embeddings` dependency group (approved 2026-10-18), which CI does not 
 stand-ins, and `scripts/check_encoder.py` checks the real model on the laptop. The relevance pool
 uses the same encoder and records its id and revision in `pool.lock`.
 
-**As built for write-back (Phase 4 chunk C, 2026-10-19), against the Chunking and Normalisation
-rows above.** A memory item is one chunk: content over `writeback.max_item_tokens` (400, counted by
-the encoder's own tokenizer) is refused, not split, so the 15% overlap never arises; nothing is
-merged up to the 200-token floor either. Text is not lowercased: the pinned revision's tokenizer
-lowercases (`"do_lower_case": true` in its `tokenizer_config.json`, read 2026-10-19), so
-lowercasing first would change nothing the model sees, and the stored text keeps its case.
-Whitespace is collapsed and the stored content is exactly the text embedded. Boilerplate stripping
-is not built: a candidate is one statement, not a page.
+**Decision 2026-10-19 (project owner): a memory item is one fact and is never split; an item over
+400 tokens is refused.** Chunking with overlap is a document-retrieval technique for prose.
+`memory_items` hold facts, and a fact split across two chunks becomes two half-facts, each
+retrievable and citable on its own: half a fact can be retrieved and cited as if it were whole. A
+qualifier left behind in the other half is V4 (`docs/evaluation-plan.md` §4) again, self-inflicted.
+The 200–400-token chunking row above is superseded for memory. A refusal is never silent (§6.1):
+it is logged and recorded in `audit_log` against the run, and the author splits the content into
+separate facts upstream. Boilerplate stripping is not built: a candidate is one statement, not a
+page.
+
+**Normalisation by path (checked 2026-10-19).** The stored text keeps its case; each path that
+reads it applies its own analyser, checked on the pinned versions rather than assumed:
+
+| Path | Analyser | Case | Accents |
+|---|---|---|---|
+| Vector half of `match_memory`, and near-duplicate detection (§6.1 rule 4, cosine on the same vectors) | the pinned tokenizer: `BertTokenizer`, `"do_lower_case": true`, `strip_accents` unset (so it follows lowercasing) in the revision's `tokenizer_config.json` | insensitive: "Induction-Safe pan" and "induction-safe pan" give identical token ids | insensitive: "Café crème" and "cafe creme" give identical token ids |
+| Lexical half of `match_memory` (0022): `to_tsvector('english', content) @@ websearch_to_tsquery('english', query)` | PostgreSQL 17.11 `english` text search configuration | insensitive: identical lexemes, and the query matches either way | **sensitive**: `'café'` and `'cafe'` are different lexemes; neither matches the other |
+
+So the two halves agree that "Induction-Safe" and "induction-safe" are the same string, and
+lowercasing before either would change nothing. They disagree on accents: for "café" the vector
+half finds "cafe" and the lexical half does not, so RRF fuses a match in one list with a miss in
+the other. **Open, not fixed:** making the lexical half accent-insensitive means the `unaccent`
+extension, a text search configuration built on it, and the GIN index rebuilt on that
+configuration (a migration; the index built `CONCURRENTLY`, Rules.md §3.3); waiting on the
+owner's ruling. There is no duplicate hash: near-duplicates are found by cosine on the encoder's vectors, so they follow the
+vector row.
 
 ---
 
@@ -242,6 +261,15 @@ A fact is written to memory only if **all** hold:
 2. It passed the claim gate (`verified`, or `deduced` with a scored source).
 3. It generalises — it is not specific to one campaign's dates, discount or slogan.
 4. It is not a near-duplicate of an existing item (cosine > 0.95 → update `last_used_at` and raise `confidence` instead of inserting).
+5. It is **one fact, at most 400 tokens** (§5, decided 2026-10-19). Write-back never splits a
+   candidate. Content that holds more than one fact, or runs over the limit, must be split by its
+   author — the agent or step that proposes it — into separate facts upstream, each a candidate
+   of its own that meets rules 1–4. Write-back refuses anything else and records the refusal.
+
+Every refused candidate is visible: a WARNING log line naming the run and the reasons when it is
+screened, and one `audit_log` row per run (`memory.candidates_refused`) listing each refused
+candidate with its reasons and token count. A candidate refused as personal data has its content
+withheld from both, since copying it would store the PII the refusal kept out.
 
 **As built (Phase 4 chunk C, 2026-10-19):** `backend/app/memory/writeback.py`; its module
 docstring has each rule, where it is checked (when a candidate is staged, or at commit inside the
@@ -252,7 +280,9 @@ refused until Phase 5 scores sources. Rule 3 and §6.2 are covered only in the f
 name (prices, discounts, dates, promo codes, email addresses, phone-number-shaped digit runs);
 anything else campaign-specific or personal stays with the approver. Rule 4 is an exact scan
 within the same organisation, brand, kind and encoder revision, seed items excluded; a revoked
-near-duplicate is never written again, and one write-back counts a fact once. Every commit
+near-duplicate is never written again, and one write-back counts a fact once. Rule 5 is checked
+when a candidate is staged (reason `longer_than_one_fact`, with the token count); that a candidate
+under the limit holds only one fact is NOT detected, and stays with its author. Every commit
 writes one `audit_log` row. Tests: `backend/tests/test_writeback.py`,
 `backend/tests/db/test_writeback_commit.py`, `backend/tests/db/test_memory_staging.py`.
 

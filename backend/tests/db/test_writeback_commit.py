@@ -17,7 +17,14 @@ import pytest
 from psycopg import AsyncConnection
 
 from app.memory.embeddings import HashingEncoder
-from app.memory.writeback import MemoryWrite, WritebackRefused, commit_memory, vector_literal
+from app.memory.writeback import (
+    MemoryWrite,
+    Refusal,
+    WritebackRefused,
+    commit_memory,
+    record_refusals,
+    vector_literal,
+)
 from tests.db.conftest import Seed
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db]
@@ -323,3 +330,30 @@ async def test_concurrent_write_backs_of_one_organisation_cannot_both_insert_a_f
         await first.rollback()
         await second.close()
         await first.close()
+
+
+# ── Refusals are recorded, not dropped ───────────────────────────────────────────────────────
+
+
+async def test_refused_candidates_are_recorded_against_the_run(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    run_id = await _run(conn, seed, "rejected")  # recorded whatever the campaign's outcome
+    long = Refusal("insight", None, "too long", ("longer_than_one_fact",), 812)
+    personal = Refusal("persona", None, "mail a@b.co", ("contains_an_email_address",), 4)
+    await record_refusals(conn, run_id, [long, personal])
+    org, action, details = await _one(
+        conn,
+        "select org_id, action, details from audit_log where entity_type = 'run' and "
+        "entity_id = %s",
+        (str(run_id),),
+    )
+    assert (org, action) == (seed.org_a, "memory.candidates_refused")
+    assert details == {"refused": [long.record(), personal.record()]}
+    assert "a@b.co" not in json.dumps(details)
+
+
+async def test_recording_refusals_for_an_unknown_run_fails_loudly(conn: AsyncConnection) -> None:
+    refusal = Refusal("insight", None, "too long", ("longer_than_one_fact",), 812)
+    with pytest.raises(RuntimeError, match="not recorded"):
+        await record_refusals(conn, uuid4(), [refusal])

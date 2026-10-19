@@ -33,6 +33,13 @@ pytestmark = [pytest.mark.anyio, pytest.mark.db]
 
 BACKEND = Path(__file__).resolve().parents[2]
 
+# How long the crash worker may take to start and stage. It bounds a worker that hangs before
+# staging and nothing else: a worker that dies is caught at once by proc.poll(). Its imports
+# (litellm, via app.core.infrastructure) take 12-15 s warm on the laptop, and a whole run of these
+# tests was seen to slow ~15x under machine load (2026-10-19: 8m49s against 35 s), about 225 s for
+# the imports. 60 s failed spuriously there; 600 s cannot be reached by load alone.
+WORKER_READY_SECONDS = 600
+
 
 class Out(BaseModel):
     step: str
@@ -209,10 +216,12 @@ def test_a_killed_process_mid_run_leaves_memory_unchanged(
         stderr=subprocess.STDOUT,
     )
     try:
-        deadline = time.monotonic() + 60
+        deadline = time.monotonic() + WORKER_READY_SECONDS
         while not ready.exists():
             assert proc.poll() is None, proc.stdout.read().decode() if proc.stdout else ""
-            assert time.monotonic() < deadline, "worker did not stage within 60 s"
+            assert time.monotonic() < deadline, (
+                f"worker did not stage within {WORKER_READY_SECONDS} s"
+            )
             time.sleep(0.05)
         proc.kill()
         proc.wait(timeout=30)
