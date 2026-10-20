@@ -94,6 +94,8 @@ class Writeback(_Strict):
     near_duplicate_cosine: float = Field(gt=0, lt=1)
     reuse_confidence_step: float = Field(gt=0, lt=1)
     confidence_cap: float = Field(gt=0, le=1)
+    correction_step: float = Field(gt=0, lt=1)
+    revoke_below: float = Field(gt=0, lt=1)
     max_item_tokens: int = Field(gt=0)
 
 

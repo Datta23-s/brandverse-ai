@@ -11,19 +11,30 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import date
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
 
+from app.core.gates import GateReport, Resolution
+from app.core.truth import Claim, ProductTruth
 from app.memory.embeddings import HashingEncoder
 from app.memory.writeback import (
+    Candidate,
+    MemoryStage,
     MemoryWrite,
     Refusal,
+    Reuse,
+    Screening,
+    StagedMemory,
     WritebackRefused,
     commit_memory,
     record_refusals,
     vector_literal,
+    write_memory,
 )
 from tests.db.conftest import Seed
 
@@ -135,6 +146,10 @@ async def _count(conn: AsyncConnection, content: str) -> int:
     return n
 
 
+def _staged(*items: MemoryWrite) -> StagedMemory:
+    return StagedMemory(items=items)
+
+
 def _fact() -> str:
     return f"Founder-story copy outperforms spec-sheet copy {uuid4().hex}"
 
@@ -146,7 +161,7 @@ async def test_a_new_fact_is_inserted_with_its_encoder_and_audited(
     conn: AsyncConnection, seed: Seed
 ) -> None:
     run_id, fact = await _run(conn, seed), _fact()
-    done = await commit_memory(conn, run_id, [_item(seed, fact, claim=seed.claim_a)])
+    done = await commit_memory(conn, run_id, _staged(_item(seed, fact, claim=seed.claim_a)))
     [inserted] = done.inserted
     assert done.reinforced == done.skipped == []
     row = await _one(
@@ -177,7 +192,7 @@ async def test_a_near_duplicate_of_a_live_item_reinforces_it_instead_of_insertin
     fact = _fact()
     existing = await _existing(conn, seed, fact, confidence=0.5)
     run_id = await _run(conn, seed)
-    done = await commit_memory(conn, run_id, [_item(seed, fact.upper())])
+    done = await commit_memory(conn, run_id, _staged(_item(seed, fact.upper())))
     assert done.inserted == []
     assert done.reinforced == [
         {"content": fact.upper(), "near": str(existing), "cosine": 1.0, "confidence": 0.52}
@@ -197,7 +212,7 @@ async def test_reinforcement_stops_at_the_cap_and_a_null_confidence_stays_null(
 ) -> None:
     fact = _fact()
     await _existing(conn, seed, fact, confidence=before)
-    done = await commit_memory(conn, await _run(conn, seed), [_item(seed, fact)])
+    done = await commit_memory(conn, await _run(conn, seed), _staged(_item(seed, fact)))
     assert [r["confidence"] for r in done.reinforced] == [after]
 
 
@@ -209,7 +224,7 @@ async def test_a_near_duplicate_of_a_revoked_item_is_never_written_again(
     fact = _fact()
     await _existing(conn, seed, fact)
     revoked = await _existing(conn, seed, fact, revoked=True)
-    done = await commit_memory(conn, await _run(conn, seed), [_item(seed, fact)])
+    done = await commit_memory(conn, await _run(conn, seed), _staged(_item(seed, fact)))
     assert done.inserted == done.reinforced == []
     assert [(s["near"], s["reason"]) for s in done.skipped] == [
         (str(revoked), "near_duplicate_of_a_revoked_item")
@@ -223,7 +238,9 @@ async def test_one_write_back_counts_a_fact_once(conn: AsyncConnection, seed: Se
     done = await commit_memory(
         conn,
         await _run(conn, seed),
-        [_item(seed, new), _item(seed, new.lower()), _item(seed, old), _item(seed, old.lower())],
+        _staged(
+            _item(seed, new), _item(seed, new.lower()), _item(seed, old), _item(seed, old.lower())
+        ),
     )
     assert len(done.inserted) == 1
     assert [r["confidence"] for r in done.reinforced] == [0.52]  # +0.02 once, not twice
@@ -256,7 +273,7 @@ async def test_only_items_of_the_same_brand_kind_and_encoder_revision_are_compar
         version="0" if difference == "other_encoder_revision" else ENCODER.version,
         is_seed=difference == "seed_item",
     )
-    done = await commit_memory(conn, await _run(conn, seed), [_item(seed, fact)])
+    done = await commit_memory(conn, await _run(conn, seed), _staged(_item(seed, fact)))
     assert len(done.inserted) == 1
     assert done.reinforced == done.skipped == []
 
@@ -284,7 +301,9 @@ async def test_a_claim_retired_since_staging_is_skipped(conn: AsyncConnection, s
     await conn.execute("reset role")
     assert isinstance(claim, UUID)
     fact = _fact()
-    done = await commit_memory(conn, await _run(conn, seed), [_item(seed, fact, claim=claim)])
+    done = await commit_memory(
+        conn, await _run(conn, seed), _staged(_item(seed, fact, claim=claim))
+    )
     assert done.inserted == done.reinforced == []
     assert [s["reason"] for s in done.skipped] == ["claim_no_longer_verified"]
     assert await _count(conn, fact) == 0
@@ -296,7 +315,7 @@ async def test_a_campaign_not_approved_by_a_human_refuses_the_whole_commit(
 ) -> None:
     fact = _fact()
     with pytest.raises(WritebackRefused, match="no approved campaign"):
-        await commit_memory(conn, await _run(conn, seed, status), [_item(seed, fact)])
+        await commit_memory(conn, await _run(conn, seed, status), _staged(_item(seed, fact)))
 
 
 async def test_an_item_naming_another_organisation_refuses_the_whole_commit(
@@ -304,7 +323,7 @@ async def test_an_item_naming_another_organisation_refuses_the_whole_commit(
 ) -> None:
     foreign = replace(_item(seed, _fact()), org_id=seed.org_b)
     with pytest.raises(WritebackRefused, match="names org"):
-        await commit_memory(conn, await _run(conn, seed), [_item(seed, _fact()), foreign])
+        await commit_memory(conn, await _run(conn, seed), _staged(_item(seed, _fact()), foreign))
 
 
 async def test_concurrent_write_backs_of_one_organisation_cannot_both_insert_a_fact(
@@ -317,8 +336,8 @@ async def test_concurrent_write_backs_of_one_organisation_cannot_both_insert_a_f
     second = await AsyncConnection.connect(db_url)
     try:
         run_1, run_2 = await _run(first, seed), await _run(second, seed)
-        done_1 = await commit_memory(first, run_1, [_item(seed, fact, confidence=0.5)])
-        waiting = asyncio.create_task(commit_memory(second, run_2, [_item(seed, fact)]))
+        done_1 = await commit_memory(first, run_1, _staged(_item(seed, fact, confidence=0.5)))
+        waiting = asyncio.create_task(commit_memory(second, run_2, _staged(_item(seed, fact))))
         await asyncio.sleep(0.5)
         assert not waiting.done()  # blocked on the lock, not racing
         await first.commit()
@@ -357,3 +376,110 @@ async def test_recording_refusals_for_an_unknown_run_fails_loudly(conn: AsyncCon
     refusal = Refusal("insight", None, "too long", ("longer_than_one_fact",), 812)
     with pytest.raises(RuntimeError, match="not recorded"):
         await record_refusals(conn, uuid4(), [refusal])
+
+
+# ── The step-15 node ─────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+async def pool(db_url: str) -> AsyncIterator[AsyncConnectionPool[AsyncConnection]]:
+    p: AsyncConnectionPool[AsyncConnection] = AsyncConnectionPool(
+        db_url, min_size=0, max_size=2, open=False
+    )
+    await p.open()
+    try:
+        yield p
+    finally:
+        await p.close()
+
+
+def _committed_run(db_url: str, seed: Seed) -> UUID:
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(
+            "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
+            (seed.org_a, seed.product_a),
+        ).fetchone()
+    assert row is not None
+    run_id: UUID = row[0]
+    return run_id
+
+
+def _node_inputs(seed: Seed) -> dict[str, object]:
+    claim = Claim(
+        str(seed.claim_a), "Upper made of recycled mesh", "verified", "https://e/s", False
+    )
+    report = GateReport(
+        findings=(),
+        resolutions=(Resolution(claim.text, "verified", claim.id, claim.evidence_url),),
+        sector="footwear",
+        superlatives_version="test",
+        checked_on=date(2026, 10, 19),
+    )
+    return {
+        "org_id": seed.org_a,
+        "brand_id": seed.brand_a,
+        "product_id": seed.product_a,
+        "report": report,
+        "truth": ProductTruth(None, (claim,), ()),
+        "encoder": ENCODER,
+    }
+
+
+async def test_the_node_stages_an_approved_campaigns_memory_and_records_its_refusals(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    run_id, stage, item = _committed_run(db_url, seed), MemoryStage(), uuid4()
+    screening = await write_memory(
+        pool,
+        stage,
+        run_id=run_id,
+        approved=True,
+        candidates=[
+            Candidate("insight", _fact(), str(seed.claim_a)),
+            Candidate("insight", " ".join(["mesh"] * 401), str(seed.claim_a)),
+        ],
+        reused=[Reuse(item, 0.92)],
+        **_node_inputs(seed),  # type: ignore[arg-type]
+    )
+    assert len(stage.items) == 1
+    assert stage.all().reuses == (Reuse(item, 0.92),)
+    with psycopg.connect(db_url) as c:
+        rows = c.execute(
+            "select action, details from audit_log where entity_id = %s", (str(run_id),)
+        ).fetchall()
+    assert rows == [
+        ("memory.candidates_refused", {"refused": [r.record() for r in screening.refused]})
+    ]
+    assert screening.refused[0].reasons == ("longer_than_one_fact",)
+
+
+async def test_the_node_stages_nothing_that_adds_trust_for_an_unapproved_campaign(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    run_id, stage = _committed_run(db_url, seed), MemoryStage()
+    screening = await write_memory(
+        pool,
+        stage,
+        run_id=run_id,
+        approved=False,
+        candidates=[Candidate("insight", _fact(), str(seed.claim_a))],
+        reused=[Reuse(uuid4(), 0.95)],
+        **_node_inputs(seed),  # type: ignore[arg-type]
+    )
+    assert screening == Screening((), ())
+    assert not stage.all()
+
+
+async def test_the_node_refuses_a_reuse_below_the_band(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    with pytest.raises(ValueError, match="below the 0.9 band"):
+        await write_memory(
+            pool,
+            MemoryStage(),
+            run_id=_committed_run(db_url, seed),
+            approved=True,
+            candidates=[],
+            reused=[Reuse(uuid4(), 0.89)],
+            **_node_inputs(seed),  # type: ignore[arg-type]
+        )

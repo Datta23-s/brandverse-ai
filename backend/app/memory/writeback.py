@@ -1,8 +1,13 @@
 """Memory write-back, step 15 (Memory.md §6): what may be written, and how it lands.
 
 A run's memory is staged in this process and committed only in the transaction that writes the
-run's terminal status, for a completed run (app/core/budgeted_run.py; docs/evaluation-plan.md §2).
-Write-back has two halves to match:
+run's terminal status (app/core/budgeted_run.py; docs/evaluation-plan.md §2). **Approval gates
+what adds trust, never what reduces it** (Memory.md §6, decided 2026-10-19). Additions — new
+items, reuse bumps, near-duplicate reinforcement — commit only for a `completed` run with a
+human-approved campaign. Corrections — §6.3's decrements and the revocations by decay below the
+threshold — commit at every ending that is not an infrastructure failure, `failed` included: a run
+that ends `failed` because its additions were refused is still the primary attempt, and its
+corrections commit. Write-back has two halves to match:
 
 1. **Screening, when staging** (`stage_writeback`). Each candidate is checked against what the run
    knows — its gate report and its product's truth — and against Memory.md §6.2. A candidate that
@@ -13,14 +18,17 @@ Write-back has two halves to match:
    (Memory.md §5). The stored content is exactly the text embedded: whitespace collapsed, case
    kept (the pinned model's tokenizer lowercases, and so does the lexical index; Memory.md §5).
 2. **Commit, inside the terminal transaction** (`commit_memory`, called by `end_run`). What can
-   change between staging and the end is checked against the database there: the run's campaign
-   is approved by a human (§6.1 rule 1; the row is locked for share until commit), and each
-   backing claim is still verified and active. Then near-duplicates (§6.1 rule 4).
+   change between staging and the end is checked against the database there: when anything adds
+   trust, the run's campaign is approved by a human (§6.1 rule 1; the row is locked for share
+   until commit), and each backing claim is still verified and active. Corrections apply first
+   (§6.3: confidence − step; below the threshold, revoked by rule with the decay record migration
+   0024 requires), then reuse bumps, then new items with their near-duplicates (§6.1 rule 4).
 
 **Eligibility as built (Memory.md §6.1, §6.2):**
 
-- *Campaign approved by a human* (commit): the run has a campaign with `status = 'approved'`;
-  else the commit is refused, the transaction rolls back and the run ends `failed`.
+- *Campaign approved by a human* (commit, when anything adds trust): the run has a campaign with
+  `status = 'approved'`; else the commit is refused, the transaction rolls back and the run ends
+  `failed` — and its corrections then commit with that status (app/core/budgeted_run.py).
 - *Passed the claim gate* (staging): the candidate rests on a claim the run's gate report resolved
   as `verified`, with no finding against that claim (so a V4 `unrepeated_quantity` flag keeps it
   out), in a report that did not block.
@@ -59,16 +67,18 @@ import logging
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from decimal import Decimal
+from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
 
-from app.core.gates import GateReport
+from app.core.gates import FindingKind, GateReport
 from app.core.logging import bind_run_id
 from app.core.truth import ProductTruth
 from app.memory.embeddings import Encoder
-from app.memory.scoring import Writeback, load_scoring
+from app.memory.scoring import Bands, Writeback, load_scoring
 
 log = logging.getLogger(__name__)
 
@@ -103,18 +113,89 @@ class MemoryWrite:
     freshness_days: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class Reuse:
+    """A retrieved item that appears in the run's campaign, retrieved at `m` (Memory.md §6.3)."""
+
+    item_id: UUID
+    m: float
+
+
+@dataclass(frozen=True, slots=True)
+class Correction:
+    """Memory.md §6.3's decrement: an item flagged by the validation engine, or edited out by a
+    human reviewer. `detail` is the finding kind, or the reviewer's user id; with the run, it is
+    what a decay revocation's reason records (migration 0024)."""
+
+    item_id: UUID
+    cause: Literal["validation_flag", "reviewer_edit"]
+    detail: str
+
+    def __post_init__(self) -> None:
+        # Checked here, not first at commit: 0024's constraint would refuse a malformed reason
+        # only when the correction happens to revoke, and the whole terminal transaction with it.
+        if self.cause == "validation_flag" and self.detail not in get_args(FindingKind):
+            raise ValueError(f"not a finding kind: {self.detail!r}")
+        if self.cause == "reviewer_edit" and str(UUID(self.detail)) != self.detail:
+            raise ValueError(f"not a user id: {self.detail!r}")
+
+    @classmethod
+    def flagged(cls, item_id: UUID, finding: FindingKind) -> "Correction":
+        return cls(item_id, "validation_flag", finding)
+
+    @classmethod
+    def edited_out(cls, item_id: UUID, reviewer: UUID) -> "Correction":
+        return cls(item_id, "reviewer_edit", str(reviewer))
+
+
+@dataclass(frozen=True, slots=True)
+class StagedMemory:
+    """What a run's end hands the commit. Additions — new items and reuse bumps — add or reinforce
+    trust; corrections reduce it. The two are committed under different rules (module docstring)."""
+
+    items: tuple[MemoryWrite, ...] = ()
+    reuses: tuple[Reuse, ...] = ()
+    corrections: tuple[Correction, ...] = ()
+
+    @property
+    def adds_trust(self) -> bool:
+        return bool(self.items or self.reuses)
+
+    def __bool__(self) -> bool:
+        return self.adds_trust or bool(self.corrections)
+
+
 class MemoryStage:
     """The run's staged memory writes: in this process only, committed by `end_run` or lost."""
 
     def __init__(self) -> None:
         self._items: list[MemoryWrite] = []
+        self._reuses: list[Reuse] = []
+        self._corrections: list[Correction] = []
 
     def stage(self, item: MemoryWrite) -> None:
         self._items.append(item)
 
+    def reuse(self, reuse: Reuse) -> None:
+        self._reuses.append(reuse)
+
+    def correct(self, correction: Correction) -> None:
+        """Called where the correction is observed: the validation step (11) or the reviewer's
+        edit at approval (12)."""
+        self._corrections.append(correction)
+
     @property
     def items(self) -> tuple[MemoryWrite, ...]:
         return tuple(self._items)
+
+    def all(self) -> StagedMemory:
+        """For a completed run: everything staged."""
+        return StagedMemory(tuple(self._items), tuple(self._reuses), tuple(self._corrections))
+
+    def corrections_only(self) -> StagedMemory:
+        """For any other ending that is not an infrastructure failure: corrections commit,
+        additions are discarded."""
+        return StagedMemory(corrections=tuple(self._corrections))
 
 
 # ── Screening ─────────────────────────────────────────────────────────────────────────────────
@@ -323,6 +404,8 @@ async def record_refusals(conn: AsyncConnection, run_id: UUID, refused: Sequence
 
 @dataclass(frozen=True, slots=True)
 class Committed:
+    corrected: list[dict[str, object]] = field(default_factory=list)
+    reused: list[dict[str, object]] = field(default_factory=list)
     inserted: list[str] = field(default_factory=list)
     reinforced: list[dict[str, object]] = field(default_factory=list)
     skipped: list[dict[str, object]] = field(default_factory=list)
@@ -362,38 +445,158 @@ returning confidence
 """
 
 
+_ITEM_SQL = """
+select org_id, revoked, confidence from public.memory_items where id = %s for update
+"""
+
+_DECREMENT_SQL = """
+update public.memory_items
+set confidence = %(after)s,
+    revoked = %(revoke)s,
+    revoked_reason = case when %(revoke)s then %(reason)s end
+where id = %(id)s
+"""
+
+
+def decay_reason(
+    before: Decimal, after: Decimal, threshold: Decimal, c: Correction, run_id: UUID
+) -> str:
+    """The revocation record migration 0024 requires of a revocation by rule."""
+    return (
+        f"confidence_decay: confidence {before:.2f} -> {after:.2f} below {threshold:.2f}; "
+        f"cause {c.cause}:{c.detail}; run {run_id}"
+    )
+
+
+async def _item_of(
+    conn: AsyncConnection, item_id: UUID, org_id: UUID
+) -> tuple[bool, Decimal | None]:
+    """Lock a staged correction's or reuse's item. An item of another organisation, or none at
+    all, is a defect upstream: the whole commit is refused, never skipped."""
+    row = await (await conn.execute(_ITEM_SQL, (item_id,))).fetchone()
+    if row is None or row[0] != org_id:
+        raise WritebackRefused(f"memory item {item_id} is not an item of org {org_id}")
+    return bool(row[1]), row[2]
+
+
+async def _correct(
+    conn: AsyncConnection,
+    run_id: UUID,
+    org_id: UUID,
+    corrections: Sequence[Correction],
+    cfg: Writeback,
+    done: Committed,
+) -> set[UUID]:
+    """Memory.md §6.3: confidence − step; below the threshold, revoked by rule (0024)."""
+    corrected: set[UUID] = set()
+    step, threshold = Decimal(str(cfg.correction_step)), Decimal(str(cfg.revoke_below))
+    for c in corrections:
+        revoked, before = await _item_of(conn, c.item_id, org_id)
+        entry: dict[str, object] = {"item": str(c.item_id), "cause": c.cause, "detail": c.detail}
+        if revoked:
+            done.skipped.append(entry | {"reason": "already_revoked"})
+            continue
+        if c.item_id in corrected:
+            # One run is one judgement of an item: its first correction counts; the rest are
+            # kept in the audit row.
+            done.skipped.append(entry | {"reason": "already_corrected_in_this_run"})
+            continue
+        corrected.add(c.item_id)
+        if before is None:
+            # Nothing to lower. Recorded, not silent: an item with no confidence cannot decay.
+            done.skipped.append(entry | {"reason": "no_confidence_to_lower"})
+            continue
+        after = before - step
+        revoke = after < threshold
+        await conn.execute(
+            _DECREMENT_SQL,
+            {
+                "id": c.item_id,
+                "after": after,
+                "revoke": revoke,
+                "reason": decay_reason(before, after, threshold, c, run_id),
+            },
+        )
+        done.corrected.append(
+            entry | {"before": float(before), "after": float(after), "revoked": revoke}
+        )
+    return corrected
+
+
+async def _reinforce(conn: AsyncConnection, item_id: UUID, cfg: Writeback) -> float | None:
+    cur = await conn.execute(
+        _REINFORCE_SQL,
+        {"id": item_id, "cap": cfg.confidence_cap, "step": cfg.reuse_confidence_step},
+    )
+    updated = await cur.fetchone()
+    if updated is None:
+        raise RuntimeError(f"memory item {item_id} vanished inside the write-back")
+    return None if updated[0] is None else float(updated[0])
+
+
+def _config(cfg: Writeback | None, bands: Bands | None) -> tuple[Writeback, Bands]:
+    if cfg is not None and bands is not None:
+        return cfg, bands
+    scoring = load_scoring()
+    return cfg or scoring.writeback, bands or scoring.memory.bands
+
+
 async def commit_memory(
     conn: AsyncConnection,
     run_id: UUID,
-    items: Sequence[MemoryWrite],
+    staged: StagedMemory,
     cfg: Writeback | None = None,
+    bands: Bands | None = None,
 ) -> Committed:
-    """Write the staged items, inside the caller's terminal transaction."""
-    cfg = cfg or load_scoring().writeback
+    """Write the staged memory, inside the caller's terminal transaction.
+
+    Corrections first, then reuse bumps, then new items, so an item corrected in this run is
+    neither bumped nor reinforced by it. A human-approved campaign is required only when something
+    adds trust; corrections alone commit without one."""
+    cfg, bands = _config(cfg, bands)
     cur = await conn.execute("select org_id from public.runs where id = %s", (run_id,))
     row = await cur.fetchone()
     if row is None:
         raise WritebackRefused(f"run {run_id} not found")
     org_id: UUID = row[0]
-    cur = await conn.execute(
-        "select id from public.campaigns where run_id = %s and org_id = %s "
-        "and status = 'approved' order by approved_at, id limit 1 for share",
-        (run_id, org_id),
-    )
-    campaign = await cur.fetchone()
-    if campaign is None:
-        raise WritebackRefused(
-            f"run {run_id} has no approved campaign: memory is written only from a campaign a "
-            "human approved (Memory.md §6.1)"
+    campaign = None
+    if staged.adds_trust:
+        cur = await conn.execute(
+            "select id from public.campaigns where run_id = %s and org_id = %s "
+            "and status = 'approved' order by approved_at, id limit 1 for share",
+            (run_id, org_id),
         )
+        campaign = await cur.fetchone()
+        if campaign is None:
+            raise WritebackRefused(
+                f"run {run_id} has no approved campaign: memory that adds trust is written only "
+                "from a campaign a human approved (Memory.md §6.1)"
+            )
     await conn.execute(
         "select pg_advisory_xact_lock(hashtextextended('memory_items:' || %s::text, 0))",
         (org_id,),
     )
 
     done = Committed()
+    corrected = await _correct(conn, run_id, org_id, staged.corrections, cfg, done)
     touched: set[UUID] = set()
-    for item in items:
+    for r in staged.reuses:
+        revoked, _ = await _item_of(conn, r.item_id, org_id)
+        entry: dict[str, object] = {"item": str(r.item_id), "m": round(r.m, 4)}
+        if r.m < bands.reuse:
+            done.skipped.append(entry | {"reason": "below_the_reuse_band"})
+        elif revoked:
+            done.skipped.append(entry | {"reason": "revoked"})
+        elif r.item_id in corrected:
+            done.skipped.append(entry | {"reason": "corrected_in_this_run"})
+        elif r.item_id in touched:
+            done.skipped.append(entry | {"reason": "counted_once_in_this_run"})
+        else:
+            confidence = await _reinforce(conn, r.item_id, cfg)
+            touched.add(r.item_id)
+            done.reused.append(entry | {"confidence": confidence})
+
+    for item in staged.items:
         if item.org_id != org_id:
             raise WritebackRefused(f"a staged item names org {item.org_id}, the run's is {org_id}")
         if item.claim_id is not None:
@@ -422,26 +625,21 @@ async def commit_memory(
         nearest = await cur.fetchone()
         if nearest is not None:
             near_id, revoked, cosine = nearest
-            entry: dict[str, object] = {
+            near: dict[str, object] = {
                 "content": item.content,
                 "near": str(near_id),
                 "cosine": round(float(cosine), 4),
             }
             if revoked:
-                done.skipped.append(entry | {"reason": "near_duplicate_of_a_revoked_item"})
+                done.skipped.append(near | {"reason": "near_duplicate_of_a_revoked_item"})
+            elif near_id in corrected:
+                done.skipped.append(near | {"reason": "near_duplicate_corrected_in_this_run"})
             elif near_id in touched:
-                done.skipped.append(entry | {"reason": "duplicate_within_this_writeback"})
+                done.skipped.append(near | {"reason": "duplicate_within_this_writeback"})
             else:
-                cur = await conn.execute(
-                    _REINFORCE_SQL,
-                    {"id": near_id, "cap": cfg.confidence_cap, "step": cfg.reuse_confidence_step},
-                )
-                updated = await cur.fetchone()
-                if updated is None:
-                    raise RuntimeError(f"memory item {near_id} vanished inside the write-back")
+                confidence = await _reinforce(conn, near_id, cfg)
                 touched.add(near_id)
-                confidence = None if updated[0] is None else float(updated[0])
-                done.reinforced.append(entry | {"confidence": confidence})
+                done.reinforced.append(near | {"confidence": confidence})
             continue
         cur = await conn.execute(
             _INSERT_SQL,
@@ -469,8 +667,10 @@ async def commit_memory(
         done.inserted.append(str(inserted[0]))
 
     details = {
-        "campaign_id": str(campaign[0]),
+        "campaign_id": str(campaign[0]) if campaign else None,
         "near_duplicate_cosine": cfg.near_duplicate_cosine,
+        "corrected": done.corrected,
+        "reused": done.reused,
         "inserted": done.inserted,
         "reinforced": done.reinforced,
         "skipped": done.skipped,
@@ -481,5 +681,66 @@ async def commit_memory(
         "%s, %s)",
         (org_id, str(run_id), json.dumps(details)),
     )
-    log.info("memory write-back committed", extra={"run_id": str(run_id), **details})
+    with bind_run_id(str(run_id)):
+        log.info("memory write-back committed", extra=details)
     return done
+
+
+# ── Step 15 ───────────────────────────────────────────────────────────────────────────────────
+
+
+async def write_memory(
+    pool: AsyncConnectionPool[AsyncConnection],
+    stage: MemoryStage,
+    *,
+    run_id: UUID,
+    org_id: UUID,
+    brand_id: UUID,
+    product_id: UUID,
+    approved: bool,
+    candidates: Sequence[Candidate],
+    reused: Sequence[Reuse],
+    report: GateReport,
+    truth: ProductTruth,
+    encoder: WritebackEncoder,
+    cfg: Writeback | None = None,
+    bands: Bands | None = None,
+) -> Screening:
+    """The step-15 node (Architecture.md §5.1). It stages; it never writes memory — `end_run`
+    commits at the run's end. Corrections are not staged here: steps 11 and 12 stage them where
+    they are observed. `approved` is the human decision from step 12; the commit checks it again
+    against the database.
+
+    For an unapproved campaign nothing that adds trust is staged, and nothing is recorded as
+    refused: §6.2 says nothing from a rejected campaign is written, so no fact is lost. For an
+    approved one, candidates are screened and staged, each refusal is recorded in `audit_log`, and
+    the campaign's reused items are staged for their bump."""
+    if not approved:
+        with bind_run_id(str(run_id)):
+            log.info(
+                "campaign not approved: no memory staged that adds trust",
+                extra={"candidates": len(candidates), "reused": len(reused)},
+            )
+        return Screening((), ())
+    cfg, bands = _config(cfg, bands)
+    below = [str(r.item_id) for r in reused if r.m < bands.reuse]
+    if below:
+        # A defect upstream: only an item retrieved at M ≥ the reuse band is bumped (§6.3).
+        raise ValueError(f"reuse below the {bands.reuse} band: {below}")
+    screening = await stage_writeback(
+        stage,
+        candidates,
+        run_id=run_id,
+        org_id=org_id,
+        brand_id=brand_id,
+        product_id=product_id,
+        report=report,
+        truth=truth,
+        encoder=encoder,
+        cfg=cfg,
+    )
+    for r in reused:
+        stage.reuse(r)
+    async with pool.connection() as conn:
+        await record_refusals(conn, run_id, screening.refused)
+    return screening

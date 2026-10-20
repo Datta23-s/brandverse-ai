@@ -20,16 +20,14 @@ from app.core.logging import configure_logging
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
 from app.memory.embeddings import HashingEncoder
-from app.memory.scoring import Writeback
+from app.memory.scoring import load_scoring
 from app.memory.writeback import Candidate, MemoryStage, Screening, content_screens, stage_writeback
 
 pytestmark = pytest.mark.anyio
 
 RUN, ORG, BRAND, PRODUCT = uuid4(), uuid4(), uuid4(), uuid4()
 FOOTWEAR = Sector("footwear", regulated=False)
-CFG = Writeback(
-    near_duplicate_cosine=0.95, reuse_confidence_step=0.02, confidence_cap=0.99, max_item_tokens=40
-)
+CFG = load_scoring().writeback.model_copy(update={"max_item_tokens": 40})
 
 VERIFIED = Claim(
     str(uuid4()), "Upper made of recycled mesh", "verified", "https://e.invalid/v", False

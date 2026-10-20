@@ -293,6 +293,17 @@ serialised by an advisory lock, tested with two concurrent commits. Every commit
 A test found that reinforcing an item with a null confidence set it to the 0.99 cap (`least()`
 ignores nulls); fixed before commit.
 
+Chunk D (2026-10-19/20): §6.3 and the step-15 node (`Memory.md` §6, §6.3, §6.4 as built). Owner's
+rulings 2026-10-19: approval gates what adds trust, never what reduces it; corrections commit at
+every ending that is not an infrastructure failure, `failed` included; a revocation by decay is
+the system's act, recorded with a constrained reason, and how items died is an evaluation count
+(`docs/evaluation-plan.md` §4). Built: decrements and revocation by rule below 0.30, reuse bumps,
+the step-15 node `write_memory` (stages; `end_run` commits), the attempt rule split by trust in
+`budgeted_run.py`, `app/evaluation/memory_revocations.py`. Migration 0024 (decay revocation
+record): CI green; live application waits on the owner's approval of the rolled-back live dry
+run. What feeds these — the validation step's flags against memory items, the reviewer's
+edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6.
+
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming
 the structured-output fix (2026-10-18, before chunk A), the claim classifier cited the verified

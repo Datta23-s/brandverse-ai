@@ -23,14 +23,28 @@ which is not built yet, so here it fails the run.
 is the primary result is known only when it ends (docs/evaluation-plan.md §2: the first attempt
 that terminates without infrastructure failure), and memory_items rows can never be deleted
 (0010, 0011) — so nothing may reach memory_items before the end. Steps never write memory
-themselves: they append to the run's `MemoryStage`, which exists only in this process. The stage
-is inserted in **the same transaction** that writes the run's terminal status, and only when the
-run ends `completed` (and, for an experiment run, when the Phase 10 primacy check passes inside
-that transaction). Every other ending — `partial`, `failed`, an infrastructure failure
-(app/core/infrastructure.py), cancellation — discards it. A process that dies takes the stage with
-it: it was never anywhere durable. What is eligible to be staged, and what the commit checks
-(human approval, the claim gate, near-duplicates; Memory.md §6.1), is app/memory/writeback.py's
-business, not this executor's: `end_run` hands it the stage inside the terminal transaction.
+themselves: they append to the run's `MemoryStage`, which exists only in this process. What is
+staged commits in **the same transaction** that writes the run's terminal status (and, for an
+experiment run, only when the Phase 10 primacy check passes inside that transaction), split by
+what it does to trust (Memory.md §6, decided 2026-10-19):
+
+- **Additions** — new items, reuse bumps — add or reinforce trust. They commit only when the run
+  ends `completed` (and the commit finds a human-approved campaign). Every other ending discards
+  them.
+- **Corrections** — §6.3's decrements, and revocations by decay — reduce trust. They commit at
+  every ending that is not an infrastructure failure: `completed`, `partial`, and `failed` for any
+  other reason. **`failed` does not mean "not the primary attempt".** The attempt rule asks only
+  whether the attempt terminated without infrastructure failure, so a run that ends `failed`
+  because its commit was refused (no approved campaign) is still the primary attempt, and its
+  corrections commit with that status. A reviewer who edits an item out and rejects the campaign
+  must still lower that item's confidence.
+- An infrastructure failure (app/core/infrastructure.py), cancellation included, discards both:
+  that attempt is not the primary result. A process that dies takes the stage with it: it was
+  never anywhere durable.
+
+What is eligible to be staged, and what the commit checks (human approval, the claim gate,
+near-duplicates; Memory.md §6.1), is app/memory/writeback.py's business, not this executor's:
+`end_run` hands it the stage inside the terminal transaction.
 """
 
 import asyncio
@@ -46,7 +60,7 @@ from pydantic import BaseModel
 
 from app.core.infrastructure import classify_infrastructure_failure
 from app.errors import BudgetExceeded
-from app.memory.writeback import Committed, MemoryStage, MemoryWrite, commit_memory
+from app.memory.writeback import Committed, MemoryStage, StagedMemory, commit_memory
 
 log = logging.getLogger(__name__)
 
@@ -85,12 +99,13 @@ async def end_run(
     status: Literal["completed", "partial", "failed", "blocked"],
     *,
     budget_exhausted: bool,
-    memory: Sequence[MemoryWrite] = (),
+    memory: StagedMemory | None = None,
 ) -> Committed | None:
-    """Write the run's terminal status — and, for a completed run only, its staged memory — in one
-    transaction: both land or neither does."""
-    if memory and status != "completed":
-        raise ValueError("staged memory is committed only for a completed run")
+    """Write the run's terminal status and its staged memory in one transaction: both land or
+    neither does. Additions only with `completed`; corrections with any status the caller passes
+    them for (the attempt rule is applied in `run_steps`)."""
+    if memory and memory.adds_trust and status != "completed":
+        raise ValueError("memory that adds trust is committed only for a completed run")
     async with pool.connection() as conn, conn.transaction():
         cur = await conn.execute(
             _END_RUN_SQL, {"status": status, "exhausted": budget_exhausted, "run": run_id}
@@ -122,8 +137,14 @@ async def run_steps(
                     "run budget exhausted; partial result",
                     extra={"run_id": str(run_id), "step": step.name, "reason": str(e)},
                 )
-                # A partial run is a result, but it never reached write-back: stage discarded.
-                await end_run(pool, run_id, "partial", budget_exhausted=True)
+                # A partial run is a result: its additions are discarded, its corrections commit.
+                await end_run(
+                    pool,
+                    run_id,
+                    "partial",
+                    budget_exhausted=True,
+                    memory=memory.corrections_only() if memory else None,
+                )
                 return RunOutcome("partial", outputs, not_run, True, str(e))
         # Inside the try: if committing the status and the staged memory fails, the run ends
         # 'failed' below rather than being left unterminated.
@@ -132,18 +153,40 @@ async def run_steps(
             run_id,
             "completed",
             budget_exhausted=False,
-            memory=memory.items if memory else (),
+            memory=memory.all() if memory else None,
         )
     except BaseException as e:
-        # Cancellation included: mark the run failed, discard staged memory, then propagate.
+        # Cancellation included: mark the run failed and propagate. A run that failed without an
+        # infrastructure failure is still the primary attempt, so its corrections commit — even
+        # when what failed was the commit itself (e.g. additions without an approved campaign).
+        infrastructure = classify_infrastructure_failure(e)
+        corrections = memory.corrections_only() if memory and infrastructure is None else None
         log.warning(
-            "run failed; staged memory discarded",
+            "run failed; staged additions discarded",
             extra={
                 "run_id": str(run_id),
-                "infrastructure_failure": classify_infrastructure_failure(e),
+                "infrastructure_failure": infrastructure,
                 "staged_memory": len(memory.items) if memory else 0,
+                "corrections_committed": len(corrections.corrections) if corrections else 0,
             },
         )
-        await asyncio.shield(end_run(pool, run_id, "failed", budget_exhausted=False))
+        await asyncio.shield(_end_failed(pool, run_id, corrections))
         raise
     return RunOutcome("completed", outputs, [], False, None)
+
+
+async def _end_failed(
+    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID, corrections: StagedMemory | None
+) -> None:
+    """End the run `failed`, with its corrections if it has any. If committing them fails too, the
+    run still ends `failed` — without them, and logged: an unterminated run would be worse."""
+    if corrections:
+        try:
+            await end_run(pool, run_id, "failed", budget_exhausted=False, memory=corrections)
+            return
+        except Exception:
+            log.exception(
+                "run failed; its corrections could not be committed",
+                extra={"run_id": str(run_id), "corrections": len(corrections.corrections)},
+            )
+    await end_run(pool, run_id, "failed", budget_exhausted=False)

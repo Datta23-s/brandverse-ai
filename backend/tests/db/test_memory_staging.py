@@ -26,7 +26,7 @@ from app.core.budgeted_run import Step, run_steps
 from app.core.infrastructure import classify_infrastructure_failure
 from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, QuotaExhausted
 from app.memory.embeddings import HashingEncoder
-from app.memory.writeback import MemoryStage, MemoryWrite, WritebackRefused
+from app.memory.writeback import Correction, MemoryStage, MemoryWrite, WritebackRefused
 from tests.db.conftest import Seed
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db]
@@ -97,9 +97,39 @@ def _status(db_url: str, run_id: UUID) -> str:
     return str(row[0])
 
 
+def _live_item(db_url: str, seed: Seed, confidence: float = 0.50) -> UUID:
+    """A committed memory item a run can correct."""
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(
+            "insert into memory_items (org_id, brand_id, kind, content, provenance, confidence) "
+            "values (%s, %s, 'insight', %s, 'human', %s) returning id",
+            (seed.org_a, seed.brand_a, f"live item {uuid4()}", confidence),
+        ).fetchone()
+    assert row is not None
+    item: UUID = row[0]
+    return item
+
+
+def _confidence(db_url: str, item: UUID) -> tuple[str, bool]:
+    with psycopg.connect(db_url) as c:
+        row = c.execute(
+            "select confidence::text, revoked from memory_items where id = %s", (item,)
+        ).fetchone()
+    assert row is not None
+    return str(row[0]), bool(row[1])
+
+
 def _steps(
-    seed: Seed, marker: str, then: Callable[[], Awaitable[BaseModel]], *, brand: UUID | None = None
+    seed: Seed,
+    marker: str,
+    then: Callable[[], Awaitable[BaseModel]],
+    *,
+    brand: UUID | None = None,
+    add: bool = True,
+    correct: UUID | None = None,
 ) -> tuple[list[Step], MemoryStage]:
+    """An early step stages a new item (`add`) and, given `correct`, a reviewer's edit-out of
+    that item; then `then` runs."""
     stage = MemoryStage()
 
     async def stage_memory(_: Mapping[str, BaseModel]) -> BaseModel:
@@ -107,6 +137,10 @@ def _steps(
         # another's (rows are never deleted, and a near-duplicate is reinforced, not inserted).
         encoder = HashingEncoder()
         content = f"founder-story copy outperforms spec-sheet copy {marker}"
+        if correct is not None:
+            stage.correct(Correction.edited_out(correct, seed.users["approver_a"]))
+        if not add:
+            return Out(step="stage_memory")
         stage.stage(
             MemoryWrite(
                 org_id=seed.org_a,
@@ -161,19 +195,21 @@ async def test_an_infrastructure_failure_mid_run_leaves_memory_unchanged(
     exc: BaseException,
 ) -> None:
     assert classify_infrastructure_failure(exc) == kind
-    marker, run_id = f"test-{uuid4()}", _run(db_url, seed)
-    steps, stage = _steps(seed, marker, _raise(exc))
+    marker, run_id, item = f"test-{uuid4()}", _run(db_url, seed), _live_item(db_url, seed)
+    steps, stage = _steps(seed, marker, _raise(exc), correct=item)
     with pytest.raises(type(exc)):
         await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
     assert len(stage.items) == 1  # it was staged ...
     assert _memory(db_url, marker) == 0  # ... and never reached memory_items
+    # Not the primary attempt: its correction is discarded with its additions.
+    assert _confidence(db_url, item) == ("0.50", False)
     assert _status(db_url, run_id) == "failed"
 
 
 async def test_a_cancelled_attempt_leaves_memory_unchanged(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
 ) -> None:
-    marker, run_id = f"test-{uuid4()}", _run(db_url, seed)
+    marker, run_id, item = f"test-{uuid4()}", _run(db_url, seed), _live_item(db_url, seed)
     started = asyncio.Event()
 
     async def hang() -> BaseModel:
@@ -181,7 +217,7 @@ async def test_a_cancelled_attempt_leaves_memory_unchanged(
         await asyncio.sleep(3600)
         return Out(step="never")
 
-    steps, stage = _steps(seed, marker, hang)
+    steps, stage = _steps(seed, marker, hang, correct=item)
     task = asyncio.create_task(run_steps(steps, pool=pool, run_id=run_id, memory=stage))
     await started.wait()
     task.cancel()
@@ -189,6 +225,7 @@ async def test_a_cancelled_attempt_leaves_memory_unchanged(
         await task
     assert classify_infrastructure_failure(cancelled.value) == "process_crash"
     assert _memory(db_url, marker) == 0
+    assert _confidence(db_url, item) == ("0.50", False)
     assert _status(db_url, run_id) == "failed"
 
 
@@ -305,3 +342,85 @@ async def test_status_and_memory_land_together_or_not_at_all(
         await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
     assert _memory(db_url, marker) == 0
     assert _status(db_url, run_id) == "failed"
+
+
+# ── Corrections and the attempt rule (Memory.md §6, 2026-10-19) ──────────────────────────────
+# Approval gates what adds trust; corrections that reduce it commit at every ending that is not
+# an infrastructure failure. 'failed' is not "not the primary attempt".
+
+
+async def done_step() -> BaseModel:
+    return Out(step="done")
+
+
+async def test_a_rejected_campaign_still_lowers_the_item_its_reviewer_edited_out(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    # The reviewer edits an item out and rejects the campaign. Something that adds trust was
+    # staged too, so the commit is refused and the run ends 'failed'. That attempt terminated
+    # without infrastructure failure: it is the primary attempt, and its decrement commits.
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed, approved=False)
+    item = _live_item(db_url, seed, confidence=0.50)
+    steps, stage = _steps(seed, marker, done_step, correct=item)
+    with pytest.raises(WritebackRefused):
+        await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert _status(db_url, run_id) == "failed"
+    assert _memory(db_url, marker) == 0  # the addition: refused
+    assert _confidence(db_url, item) == ("0.35", False)  # the correction: present
+
+
+async def test_a_rejected_campaign_with_only_corrections_completes_and_commits_them(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    # What the step-15 node stages for a rejected campaign: nothing that adds trust.
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed, approved=False)
+    item = _live_item(db_url, seed, confidence=0.40)
+    steps, stage = _steps(seed, marker, done_step, add=False, correct=item)
+    outcome = await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert outcome.status == "completed"
+    assert _confidence(db_url, item) == ("0.25", True)  # below 0.30: revoked by rule
+
+
+async def test_a_budget_stopped_run_commits_its_corrections_not_its_additions(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed)
+    item = _live_item(db_url, seed, confidence=0.50)
+    steps, stage = _steps(seed, marker, _raise(BudgetExceeded("call cap")), correct=item)
+    outcome = await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert outcome.status == "partial"
+    assert _memory(db_url, marker) == 0
+    assert _confidence(db_url, item) == ("0.35", False)
+
+
+async def test_a_run_failed_by_any_other_error_commits_its_corrections(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed)
+    item = _live_item(db_url, seed, confidence=0.50)
+    steps, stage = _steps(seed, marker, _raise(ValueError("a bug")), correct=item)
+    with pytest.raises(ValueError):
+        await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert _status(db_url, run_id) == "failed"
+    assert _memory(db_url, marker) == 0
+    assert _confidence(db_url, item) == ("0.35", False)
+
+
+async def test_a_failed_run_whose_corrections_cannot_commit_still_ends_failed(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str, seed: Seed
+) -> None:
+    # A correction of another organisation's item refuses its commit; the run must not be left
+    # unterminated because of it.
+    marker, run_id = f"test-{uuid4()}", _run(db_url, seed)
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute(
+            "insert into memory_items (org_id, kind, content, provenance, confidence) "
+            "values (%s, 'insight', %s, 'human', 0.5) returning id",
+            (seed.org_b, f"org B item {uuid4()}"),
+        ).fetchone()
+    assert row is not None
+    steps, stage = _steps(seed, marker, _raise(ValueError("a bug")), correct=row[0])
+    with pytest.raises(ValueError):
+        await run_steps(steps, pool=pool, run_id=run_id, memory=stage)
+    assert _status(db_url, run_id) == "failed"
+    assert _confidence(db_url, row[0]) == ("0.50", False)

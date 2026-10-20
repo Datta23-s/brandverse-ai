@@ -253,6 +253,26 @@ reviewer's edit lowers `confidence` (§6.3), and revocation removes the item (§
 scores exist (Phase 5) `E` is left out of `M`, so `confidence` does not yet affect retrieval; the
 compounding starts then. Hence the eligibility rules below.
 
+**The governing principle — decided 2026-10-19 (project owner): approval gates what adds trust,
+never what reduces it.** Human approval gates anything that ADDS or REINFORCES trust in memory:
+new facts, reuse bumps (§6.3), the reinforcement of a near-duplicate (§6.1 rule 4). Corrections
+that REDUCE trust — confidence decrements and revocations — commit regardless of the campaign's
+outcome. A case not listed here is decided by which side of that line it falls on. The reason is
+the asymmetry of the two errors: trust added without approval is how memory gets poisoned (§9);
+a correction withheld because the campaign was rejected leaves in memory the very item that
+misled it, and a rejected campaign is where an edit-out matters most.
+
+**Corrections and the attempt rule.** Corrections are still bound by the attempt rule
+(`docs/evaluation-plan.md` §2): they commit at the end of any attempt that terminated without
+infrastructure failure, whatever its status. **A run whose status is `failed` is not thereby
+"not the primary attempt".** A run that ends `failed` because its commit was refused — something
+adding trust was staged and no campaign was approved — terminated without infrastructure failure,
+so it is the primary attempt and its corrections commit with the `failed` status. The same holds
+for `partial` (stopped by the budget) and `failed` by any other error. Only an infrastructure
+failure (rate limit, quota, network, process crash or cancellation) discards corrections, as it
+discards everything. Built in `backend/app/core/budgeted_run.py`; tested end to end in
+`backend/tests/db/test_memory_staging.py`.
+
 ### 6.1 Eligibility
 
 A fact is written to memory only if **all** hold:
@@ -274,7 +294,8 @@ withheld from both, since copying it would store the PII the refusal kept out.
 **As built (Phase 4 chunk C, 2026-10-19):** `backend/app/memory/writeback.py`; its module
 docstring has each rule, where it is checked (when a candidate is staged, or at commit inside the
 run's terminal transaction) and what is NOT detected. In short: rule 1 is checked at commit, and a
-run without a human-approved campaign has its whole commit refused (the run ends `failed`). Rule 2
+run without a human-approved campaign has its whole commit refused (the run ends `failed`; its
+corrections still commit, per the principle above). Rule 2
 requires a verified, active claim the gate resolved with no finding against it; `deduced` is
 refused until Phase 5 scores sources. Rule 3 and §6.2 are covered only in the forms the screens
 name (prices, discounts, dates, promo codes, email addresses, phone-number-shaped digit runs);
@@ -312,13 +333,47 @@ if confidence < 0.30: revoked ← true
 
 This gives memory a cheap, auditable correction mechanism without a retraining loop.
 
-**As built (Phase 4 chunk C, 2026-10-19):** the reuse step above, applied when write-back meets a
-near-duplicate (§6.1 rule 4), with the step and cap in `config/scoring.yaml` `writeback:`. A null
-`confidence` stays null. The flag/edit decrement and the revocation at < 0.30 are not built yet.
+**As built (Phase 4, 2026-10-19):** `backend/app/memory/writeback.py`, the numbers in
+`config/scoring.yaml` `writeback:`. Inside the run's terminal transaction, corrections apply first,
+then reuse bumps, then new items, so an item corrected in a run is neither bumped nor reinforced by
+it.
+
+- *Reuse bump* — an addition: staged by the step-15 node for each retrieved item the approved
+  campaign used, at `M ≥ 0.90` (the node refuses one below the band; the commit skips it), and the
+  same bump applies when write-back meets a near-duplicate. One run bumps an item once. Which
+  retrieved items a campaign used is recorded by campaign assembly (Phase 6); the bump takes that
+  list as given.
+- *Decrement* — a correction: staged where it is observed (`Correction.flagged` at validation,
+  `Correction.edited_out` at approval, Phase 6 wiring). One run corrects an item once; further
+  corrections of it in that run, and corrections of an already revoked item, are skipped and kept
+  in the run's `memory.writeback` audit row.
+- *Revocation below 0.30* — a revocation by rule (§6.4): `revoked_by` null, and `revoked_reason`
+  the decay record migration 0024 requires.
+- A null `confidence` stays null: it is neither bumped nor lowered, and a correction of such an
+  item is recorded as skipped (`no_confidence_to_lower`), not applied. **Consequence, stated:** an
+  item written with no confidence cannot decay out; only a person can revoke it.
 
 ### 6.4 Revocation
 
 `revoked = true` removes an item from all retrieval permanently. Rows are never hard-deleted — the audit trail is part of the contribution. **Stated limitation (2026-10-14):** since migrations 0010 and 0011 no application role can delete or truncate `memory_items`, delete the organisation that would cascade into it, or delete a brand that has memory items (`memory_items.brand_id` is `on delete no action`). What remains is the table owner: nothing in the database binds `postgres` on managed Supabase. The audit trail is tamper-resistant for application code, not tamper-proof. See `Architecture.md` §9, "Stated limitation". A brand manager must be able to revoke from the UI, and the system must record who revoked what and when.
+
+**Revocation by rule — decided 2026-10-19 (project owner), migration 0024.** An item revoked by
+§6.3's decay was not revoked by a person, and naming one would be made up. Such a revocation has
+`revoked_by` null and a constrained `revoked_reason`:
+
+```
+confidence_decay: confidence <before> -> <after> below <threshold>; cause <cause>; run <run id>
+```
+
+`<cause>` is `validation_flag:<finding kind>` or `reviewer_edit:<reviewer's user id>`; `<after>`
+must equal the row's `confidence`, and be below `<threshold>`. So every decayed item records the
+confidence at revocation, what caused the crossing and the run it happened in — why that item
+died, answerable later from the row alone. The database enforces it: `revoked_by` is null if and
+only if the reason is a well-formed decay record (so a revocation is by rule or by a person, never
+both and never unattributed), the confidence of a decayed item is frozen with its revocation, and
+a signed-in user cannot write a decay record. `revoked_at` is set by the server for both kinds
+(0023). How many items died each way is an evaluation result: `docs/evaluation-plan.md` §4,
+"Memory revocations by kind".
 
 ---
 

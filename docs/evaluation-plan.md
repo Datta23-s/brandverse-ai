@@ -91,17 +91,28 @@ campaigns wrote (`Memory.md` §6). Only the primary attempt may write back. Prim
 when an attempt ends, and `memory_items` rows can never be deleted (0010, 0011), so the rule is
 enforced by the mechanism, not by timing: **memory writes are staged within the run and committed
 in one step at termination, only for an attempt that qualifies** (`backend/app/core/budgeted_run.py`,
-2026-10-17). Steps append to an in-process `MemoryStage`; it is inserted in the same transaction
-that writes the run's terminal status, and only when the run ends `completed` (for an experiment
-run, also only if the Phase 10 primacy check passes inside that transaction). Every other ending
-discards it; a process that dies takes it with it. Nothing reaches `memory_items` before that
-point. `backend/tests/db/test_memory_staging.py` stages a write and then ends the attempt with each
+2026-10-17). Steps append to an in-process `MemoryStage`; it commits in the same transaction that
+writes the run's terminal status (for an experiment run, also only if the Phase 10 primacy check
+passes inside that transaction), split by what it does to trust (`Memory.md` §6, decided
+2026-10-19). **Additions** — new items, reuse bumps — commit only when the run ends `completed`
+with a human-approved campaign. **Corrections** — confidence decrements and revocations by decay
+— commit at every ending that is not an infrastructure failure: `completed`, `partial`, or
+`failed` for any other reason. The rule asks only whether the attempt terminated without
+infrastructure failure, so **an attempt that ends `failed` because its commit was refused (no
+approved campaign) is still the primary attempt, and its corrections commit**: a reviewer who
+edits an item out and rejects the campaign still lowers that item's confidence. An
+infrastructure failure discards both; a process that dies takes the stage with it. Nothing
+reaches `memory_items` before that point. `backend/tests/db/test_memory_staging.py` stages a write and then ends the attempt with each
 of the four infrastructure failures — rate-limit rejection, daily-quota exhaustion, a network
 error, and a process crash (a cancelled attempt, and a worker process killed outright) — and
 asserts `memory_items` is unchanged each time; controls show a completed run commits, a
 budget-stopped run commits nothing, a completed run whose campaign no human approved commits
 nothing (its commit is refused and it ends `failed`; `Memory.md` §6.1, as built 2026-10-19), and
-status and memory land together or not at all. Once a pair
+status and memory land together or not at all. For corrections, the same file stages a
+reviewer's edit-out with each ending: discarded on every infrastructure failure; committed on a
+`partial` run, a run `failed` by any other error, a rejected campaign that completes, and a
+rejected campaign whose refused commit ends the run `failed` (the decrement is present in
+`memory_items`). Once a pair
 has its primary attempt, the harness disables write-back for any later attempt of that pair.
 
 ## 3. Seed exclusion
@@ -152,6 +163,24 @@ Reported additionally, broken down by campaign position (1st / 2nd / 3rd per bra
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
 coverage, reuse depth (`Memory.md` §8). Strong-tier calls per arm are reported as a result
 (threat V1, below).
+
+**Memory revocations by kind — named 2026-10-19, before any data exists.** How memory items
+died is a result about the memory system, not a schema detail: an item revoked by rule and an
+item revoked by a person are different events. Reported for the Proposed arm's evaluation
+organisations over the evaluation period, seed items excluded (§3), as three counts:
+
+| Count | Meaning | How it is read |
+|---|---|---|
+| `decay_validation_flag` | revoked by rule: validation-engine flags lowered its confidence below 0.30 (`Memory.md` §6.3) | `revoked_by` null and the decay record's cause is `validation_flag` |
+| `decay_reviewer_edit` | revoked by rule: a reviewer's edit-out lowered its confidence below 0.30 | `revoked_by` null and the cause is `reviewer_edit` |
+| `review` | revoked by a person, by choice (`Memory.md` §6.4) | `revoked_by` not null |
+
+"By decay" is the sum of the first two. The split is a property of the row, never a reading of
+free text: migration 0024 makes `revoked_by` null if and only if `revoked_reason` is a
+well-formed decay record (the confidence before and after, the threshold, the cause — finding
+kind or reviewer — and the run), and a person cannot write one. Each decayed item's record says
+why that item died. Read by `backend/app/evaluation/memory_revocations.py`; tested in
+`backend/tests/db/test_memory_corrections.py`. Zero counts are reported, not omitted.
 
 **Cost is measured in tokens; actual spend is zero.** Every service runs on a free tier
 (`Rules.md` §4, C0), so no money is paid for any run. Tokens (input + output, per call, from
