@@ -228,8 +228,8 @@ def test_users_cannot_write_llm_calls(tx: Tx) -> None:
 
 def _memory_item(tx: Tx) -> object:
     rows = tx.execute(
-        "insert into memory_items (org_id, brand_id, kind, content, provenance) "
-        "values (%s, %s, 'insight', 'x', 'human') returning id",
+        "insert into memory_items (org_id, brand_id, kind, content, provenance, confidence) "
+        "values (%s, %s, 'insight', 'x', 'human', 0.5) returning id",
         (tx.seed.org_a, tx.seed.brand_a),
     )
     return rows[0][0]
@@ -276,8 +276,8 @@ def test_deleting_product_nulls_only_memory_product_id(tx: Tx) -> None:
         (tx.seed.org_a, tx.seed.brand_a),
     )[0][0]
     item = tx.execute(
-        "insert into memory_items (org_id, product_id, kind, content, provenance) "
-        "values (%s, %s, 'insight', 'y', 'human') returning id",
+        "insert into memory_items (org_id, product_id, kind, content, provenance, confidence) "
+        "values (%s, %s, 'insight', 'y', 'human', 0.5) returning id",
         (tx.seed.org_a, product),
     )[0][0]
     tx.execute("delete from products where id = %s", (product,))
@@ -739,8 +739,8 @@ def test_owner_cannot_delete_a_brand_that_has_memory(tx: Tx) -> None:
         "insert into brands (org_id, name) values (%s, 'remembered') returning id", (tx.seed.org_a,)
     )[0][0]
     tx.execute(
-        "insert into memory_items (org_id, brand_id, kind, content, provenance) "
-        "values (%s, %s, 'insight', 'kept', 'human')",
+        "insert into memory_items (org_id, brand_id, kind, content, provenance, confidence) "
+        "values (%s, %s, 'insight', 'kept', 'human', 0.5)",
         (tx.seed.org_a, brand),
     )
     tx.as_user("owner_a")
@@ -756,8 +756,8 @@ def test_table_owner_deleting_an_organisation_still_removes_its_memory(tx: Tx) -
         0
     ][0]
     tx.execute(
-        "insert into memory_items (org_id, brand_id, kind, content, provenance) "
-        "values (%s, %s, 'insight', 'x', 'human')",
+        "insert into memory_items (org_id, brand_id, kind, content, provenance, confidence) "
+        "values (%s, %s, 'insight', 'x', 'human', 0.5)",
         (org, brand),
     )
     tx.execute("delete from organisations where id = %s", (org,))

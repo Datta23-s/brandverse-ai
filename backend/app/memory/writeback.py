@@ -54,7 +54,7 @@ nearest item with cosine similarity above `near_duplicate_cosine` decides:
 - a live near-duplicate this write-back already inserted or reinforced: skipped, so one campaign
   counts once.
 - any other live near-duplicate: **reinforced** instead of inserted — `last_used_at = now()`,
-  `confidence = min(cap, confidence + step)` (§6.3's numbers; a null confidence stays null).
+  `confidence = min(cap, confidence + step)` (§6.3's numbers; confidence is never null, 0025).
 
 The search is exact (a filtered scan, not the approximate HNSW index), so a near-duplicate is
 never missed because the index did not visit it. Write-backs of one organisation are serialised by
@@ -104,12 +104,12 @@ class MemoryWrite:
     embedding: tuple[float, ...]
     embedding_model: str
     embedding_version: str
+    confidence: float  # required, as in the table (0025): an item with none could never decay
     brand_id: UUID | None = None
     product_id: UUID | None = None
     claim_id: UUID | None = None
     sector: str | None = None
     source_url: str | None = None
-    confidence: float | None = None
     freshness_days: int | None = None
 
 
@@ -208,7 +208,7 @@ class Candidate:
     kind: MemoryKind
     content: str
     claim_id: str | None
-    confidence: float | None = None
+    confidence: float  # stated by whoever proposes the fact; there is no default (0025)
     freshness_days: int | None = None
 
 
@@ -437,9 +437,7 @@ returning id
 
 _REINFORCE_SQL = """
 update public.memory_items
-set last_used_at = now(),
-    -- least() ignores nulls: unguarded, a null confidence would jump to the cap.
-    confidence = case when confidence is not null then least(%(cap)s, confidence + %(step)s) end
+set last_used_at = now(), confidence = least(%(cap)s, confidence + %(step)s)
 where id = %(id)s
 returning confidence
 """
@@ -468,15 +466,16 @@ def decay_reason(
     )
 
 
-async def _item_of(
-    conn: AsyncConnection, item_id: UUID, org_id: UUID
-) -> tuple[bool, Decimal | None]:
+async def _item_of(conn: AsyncConnection, item_id: UUID, org_id: UUID) -> tuple[bool, Decimal]:
     """Lock a staged correction's or reuse's item. An item of another organisation, or none at
     all, is a defect upstream: the whole commit is refused, never skipped."""
     row = await (await conn.execute(_ITEM_SQL, (item_id,))).fetchone()
     if row is None or row[0] != org_id:
         raise WritebackRefused(f"memory item {item_id} is not an item of org {org_id}")
-    return bool(row[1]), row[2]
+    revoked, confidence = row[1], row[2]
+    if not isinstance(confidence, Decimal):  # not null since 0025; numeric arrives as Decimal
+        raise RuntimeError(f"memory item {item_id} has confidence {confidence!r}")
+    return bool(revoked), confidence
 
 
 async def _correct(
@@ -502,10 +501,6 @@ async def _correct(
             done.skipped.append(entry | {"reason": "already_corrected_in_this_run"})
             continue
         corrected.add(c.item_id)
-        if before is None:
-            # Nothing to lower. Recorded, not silent: an item with no confidence cannot decay.
-            done.skipped.append(entry | {"reason": "no_confidence_to_lower"})
-            continue
         after = before - step
         revoke = after < threshold
         await conn.execute(
@@ -523,7 +518,7 @@ async def _correct(
     return corrected
 
 
-async def _reinforce(conn: AsyncConnection, item_id: UUID, cfg: Writeback) -> float | None:
+async def _reinforce(conn: AsyncConnection, item_id: UUID, cfg: Writeback) -> float:
     cur = await conn.execute(
         _REINFORCE_SQL,
         {"id": item_id, "cap": cfg.confidence_cap, "step": cfg.reuse_confidence_step},
@@ -531,7 +526,7 @@ async def _reinforce(conn: AsyncConnection, item_id: UUID, cfg: Writeback) -> fl
     updated = await cur.fetchone()
     if updated is None:
         raise RuntimeError(f"memory item {item_id} vanished inside the write-back")
-    return None if updated[0] is None else float(updated[0])
+    return float(updated[0])
 
 
 def _config(cfg: Writeback | None, bands: Bands | None) -> tuple[Writeback, Bands]:

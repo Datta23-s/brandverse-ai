@@ -43,6 +43,7 @@ async def main(
                 embedding=tuple(encoder.embed_documents([content])[0]),
                 embedding_model=encoder.model,
                 embedding_version=encoder.version,
+                confidence=0.5,
             )
         )
         return Out(step="stage_memory")

@@ -374,9 +374,14 @@ it.
   in the run's `memory.writeback` audit row.
 - *Revocation below 0.30* — a revocation by rule (§6.4): `revoked_by` null, and `revoked_reason`
   the decay record migration 0024 requires.
-- A null `confidence` stays null: it is neither bumped nor lowered, and a correction of such an
-  item is recorded as skipped (`no_confidence_to_lower`), not applied. **Consequence, stated:** an
-  item written with no confidence cannot decay out; only a person can revoke it.
+- **Every item has a confidence — decided 2026-10-20 (project owner), migration 0025.** An item
+  with none would have nothing to lower, so it could never decay out: immortal by omission,
+  exempt from the mechanism meant to cover every item. The exemption is made impossible rather
+  than remembered: `memory_items.confidence` is `NOT NULL` in the database, with no default (a
+  default would be a guessed value standing in for a missing one), so no path can write such an
+  item; and write-back's `Candidate.confidence` is required, stated by whoever proposes the fact.
+  Done while `memory_items` held 0 rows on the live project: once data exists, a backfill would be
+  a decision about what the missing values were, which nobody would know.
 
 ### 6.4 Revocation
 

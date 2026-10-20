@@ -40,8 +40,8 @@ def item(
     brand_id = tx.seed.brand_a if brand == "a" else brand
     rows = tx.execute(
         "insert into memory_items (org_id, brand_id, kind, content, embedding, embedding_model, "
-        "embedding_version, provenance, approved, is_seed) values (%s, %s, %s, %s, %s::vector, "
-        "%s, %s, 'test', %s, %s) returning id",
+        "embedding_version, provenance, confidence, approved, is_seed) values (%s, %s, %s, %s, "
+        "%s::vector, %s, %s, 'test', 0.5, %s, %s) returning id",
         (
             org,
             brand_id,
@@ -200,7 +200,7 @@ def test_a_product_whose_claim_backs_memory_cannot_be_deleted(tx: Tx) -> None:
     tx.execute("reset role")
     tx.execute(
         "insert into memory_items (org_id, brand_id, claim_id, kind, content, provenance, "
-        "approved) values (%s, %s, %s, 'claim', 'IPX7 rated', 'test', true)",
+        "confidence, approved) values (%s, %s, %s, 'claim', 'IPX7 rated', 'test', 0.5, true)",
         (tx.seed.org_a, tx.seed.brand_a, claim),
     )
     tx.as_user("owner_a")

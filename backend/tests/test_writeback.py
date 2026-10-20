@@ -138,9 +138,9 @@ async def test_an_eligible_candidate_is_embedded_and_staged_with_its_provenance(
 async def test_refused_candidates_are_never_embedded_and_the_rest_go_in_one_batch() -> None:
     encoder = CountingEncoder()
     screening, stage = await _screen(
-        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id),
-        Candidate("insight", "no basis at all", None),
-        Candidate("claim", "Playback lasts a full day and more", QUANTITY.id),
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, 0.7),
+        Candidate("insight", "no basis at all", None, 0.7),
+        Candidate("claim", "Playback lasts a full day and more", QUANTITY.id, 0.7),
         encoder=encoder,
     )
     assert len(stage.items) == 2
@@ -162,7 +162,9 @@ async def test_refused_candidates_are_never_embedded_and_the_rest_go_in_one_batc
 async def test_a_candidate_must_rest_on_a_verified_claim_the_gate_resolved(
     claim: str | None, reason: str
 ) -> None:
-    screening, stage = await _screen(Candidate("insight", "Recycled mesh reads as premium", claim))
+    screening, stage = await _screen(
+        Candidate("insight", "Recycled mesh reads as premium", claim, 0.7)
+    )
     assert stage.items == ()
     assert _reasons(screening) == [(reason,)]
 
@@ -172,8 +174,8 @@ async def test_a_gate_finding_against_the_claim_keeps_it_out() -> None:
     # still keeps the claim's fact out of memory.
     flag = Finding("unrepeated_quantity", "60 hours not repeated", (QUANTITY.id,))
     screening, stage = await _screen(
-        Candidate("claim", "Lasts all week", QUANTITY.id),
-        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id),
+        Candidate("claim", "Lasts all week", QUANTITY.id, 0.7),
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, 0.7),
         report=_report(flag),
     )
     assert [i.claim_id for i in stage.items] == [UUID(VERIFIED.id)]
@@ -183,7 +185,8 @@ async def test_a_gate_finding_against_the_claim_keeps_it_out() -> None:
 async def test_nothing_is_staged_from_a_blocked_output() -> None:
     block = Finding("unsourced_claim", "an unsourced statement elsewhere in the copy")
     screening, stage = await _screen(
-        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id), report=_report(block)
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, 0.7),
+        report=_report(block),
     )
     assert stage.items == ()
     assert _reasons(screening) == [("gate_blocked_the_output",)]
@@ -191,7 +194,7 @@ async def test_nothing_is_staged_from_a_blocked_output() -> None:
 
 async def test_one_item_is_one_fact_longer_content_is_refused_not_split() -> None:
     long = " ".join(["recycled mesh"] * 21)  # 42 tokens > max_item_tokens 40
-    screening, stage = await _screen(Candidate("insight", long, VERIFIED.id))
+    screening, stage = await _screen(Candidate("insight", long, VERIFIED.id, 0.7))
     assert stage.items == ()
     assert _reasons(screening) == [("longer_than_one_fact",)]
     [refusal] = screening.refused
@@ -203,8 +206,8 @@ async def test_every_refusal_is_logged_naming_the_run_and_the_reason(lines: LogL
     # find it. The run is named even when the caller did not bind it.
     long = " ".join(["recycled mesh"] * 21)
     await _screen(
-        Candidate("insight", long, VERIFIED.id),
-        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id),
+        Candidate("insight", long, VERIFIED.id, 0.7),
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, 0.7),
     )
     refused = [e for e in lines.read() if e["msg"] == "memory candidate refused"]
     assert [(e["level"], e["run_id"]) for e in refused] == [("WARNING", str(RUN))]
@@ -221,7 +224,7 @@ async def test_every_refusal_is_logged_naming_the_run_and_the_reason(lines: LogL
 async def test_a_candidate_refused_as_personal_data_is_logged_without_its_content(
     lines: LogLines,
 ) -> None:
-    await _screen(Candidate("insight", "Ask priya.k@example.com for the deck", VERIFIED.id))
+    await _screen(Candidate("insight", "Ask priya.k@example.com for the deck", VERIFIED.id, 0.7))
     [entry] = [e for e in lines.read() if e["msg"] == "memory candidate refused"]
     candidate = entry["candidate"]
     assert isinstance(candidate, dict)
@@ -230,12 +233,12 @@ async def test_a_candidate_refused_as_personal_data_is_logged_without_its_conten
 
 
 async def test_an_empty_candidate_is_refused() -> None:
-    screening, _ = await _screen(Candidate("insight", " \n\t", VERIFIED.id))
+    screening, _ = await _screen(Candidate("insight", " \n\t", VERIFIED.id, 0.7))
     assert _reasons(screening) == [("empty",)]
 
 
 async def test_every_reason_is_reported_not_only_the_first() -> None:
-    screening, _ = await _screen(Candidate("insight", "Flat 500 off, write to a@b.co", None))
+    screening, _ = await _screen(Candidate("insight", "Flat 500 off, write to a@b.co", None, 0.7))
     assert _reasons(screening) == [
         ("no_claim_basis", "states_a_discount", "contains_an_email_address")
     ]

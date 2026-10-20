@@ -1,0 +1,16 @@
+-- 0025: every memory item has a confidence (Memory.md §6.3).
+--
+-- Decay is how memory corrects itself: a flag or a reviewer's edit-out lowers an item's
+-- confidence, and below the threshold it is revoked by rule (0024). An item with no confidence
+-- has nothing to lower, so it could never decay out — immortal by omission, exempt from a
+-- mechanism that was meant to cover every item. Decision 2026-10-20 (project owner): make the
+-- exemption impossible rather than remembered, in the database and not only in the write-back
+-- path, while it is free. memory_items held 0 rows on the live project when this was written
+-- (read 2026-10-20 after 0024); once data exists, a backfill would be a decision about what the
+-- missing values were, which nobody would know.
+--
+-- No default: a default would be a guessed value standing in for a missing one. Whoever writes a
+-- memory item states its confidence.
+--
+-- Down: alter table memory_items alter column confidence drop not null;
+alter table memory_items alter column confidence set not null;

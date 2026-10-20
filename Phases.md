@@ -302,7 +302,9 @@ the step-15 node `write_memory` (stages; `end_run` commits), the attempt rule sp
 `budgeted_run.py`, `app/evaluation/memory_revocations.py`. Migration 0024 (decay revocation
 record): live dry run 2026-10-20, approved by the owner, applied 2026-10-20 10:42 UTC (posture
 54/54 after; `Architecture.md` §11). What feeds these — the validation step's flags against memory items, the reviewer's
-edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6.
+edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6. Migration 0025
+(2026-10-20, owner's ruling): `memory_items.confidence` is `NOT NULL`, no default, so no item can be
+exempt from decay by having no confidence; its own dry run and approval, separate from 0024.
 
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming

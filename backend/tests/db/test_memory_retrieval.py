@@ -52,8 +52,8 @@ async def test_the_configured_depth_is_applied_and_reported(
 ) -> None:
     await conn.execute(
         "insert into memory_items (org_id, brand_id, kind, content, embedding, embedding_model, "
-        "embedding_version, provenance, approved) values (%s, %s, 'insight', 'rain sells', "
-        "%s::vector, 'test', 'test', 'test', true)",
+        "embedding_version, provenance, confidence, approved) values (%s, %s, 'insight', "
+        "'rain sells', %s::vector, 'test', 'test', 'test', 0.5, true)",
         (seed.org_a, seed.brand_a, UNIT),
     )
     await act_as(conn, seed, "owner_a")

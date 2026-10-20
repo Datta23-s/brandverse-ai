@@ -83,7 +83,7 @@ def _item(
     kind: str = "insight",
     brand: UUID | None = None,
     claim: UUID | None = None,
-    confidence: float | None = None,
+    confidence: float = 0.5,
 ) -> MemoryWrite:
     return MemoryWrite(
         org_id=seed.org_a,
@@ -108,7 +108,7 @@ async def _existing(
     brand: UUID | None = None,
     kind: str = "insight",
     version: str = ENCODER.version,
-    confidence: float | None = 0.5,
+    confidence: float = 0.5,
     revoked: bool = False,
     is_seed: bool = False,
 ) -> UUID:
@@ -206,9 +206,9 @@ async def test_a_near_duplicate_of_a_live_item_reinforces_it_instead_of_insertin
     assert (float(str(confidence)), used) == (0.52, True)
 
 
-@pytest.mark.parametrize(("before", "after"), [(0.98, 0.99), (0.99, 0.99), (None, None)])
-async def test_reinforcement_stops_at_the_cap_and_a_null_confidence_stays_null(
-    conn: AsyncConnection, seed: Seed, before: float | None, after: float | None
+@pytest.mark.parametrize(("before", "after"), [(0.98, 0.99), (0.99, 0.99)])
+async def test_reinforcement_stops_at_the_cap(
+    conn: AsyncConnection, seed: Seed, before: float, after: float
 ) -> None:
     fact = _fact()
     await _existing(conn, seed, fact, confidence=before)
@@ -435,8 +435,8 @@ async def test_the_node_stages_an_approved_campaigns_memory_and_records_its_refu
         run_id=run_id,
         approved=True,
         candidates=[
-            Candidate("insight", _fact(), str(seed.claim_a)),
-            Candidate("insight", " ".join(["mesh"] * 401), str(seed.claim_a)),
+            Candidate("insight", _fact(), str(seed.claim_a), 0.7),
+            Candidate("insight", " ".join(["mesh"] * 401), str(seed.claim_a), 0.7),
         ],
         reused=[Reuse(item, 0.92)],
         **_node_inputs(seed),  # type: ignore[arg-type]
@@ -462,7 +462,7 @@ async def test_the_node_stages_nothing_that_adds_trust_for_an_unapproved_campaig
         stage,
         run_id=run_id,
         approved=False,
-        candidates=[Candidate("insight", _fact(), str(seed.claim_a))],
+        candidates=[Candidate("insight", _fact(), str(seed.claim_a), 0.7)],
         reused=[Reuse(uuid4(), 0.95)],
         **_node_inputs(seed),  # type: ignore[arg-type]
     )

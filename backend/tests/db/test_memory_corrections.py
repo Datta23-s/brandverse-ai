@@ -113,13 +113,11 @@ async def test_one_run_corrects_an_item_once_and_records_the_rest(
 ) -> None:
     item = await _existing(conn, seed, _fact(), confidence=0.80)
     revoked = await _existing(conn, seed, _fact(), revoked=True)
-    unknown = await _existing(conn, seed, _fact(), confidence=None)
     staged = StagedMemory(
         corrections=(
             Correction.flagged(item, "unrepeated_quantity"),
             Correction.edited_out(item, seed.users["approver_a"]),
             Correction.flagged(revoked, "unsourced_claim"),
-            Correction.flagged(unknown, "unsourced_claim"),
         )
     )
     done = await commit_memory(conn, await _run(conn, seed), staged)
@@ -127,8 +125,27 @@ async def test_one_run_corrects_an_item_once_and_records_the_rest(
     assert [s["reason"] for s in done.skipped] == [
         "already_corrected_in_this_run",
         "already_revoked",
-        "no_confidence_to_lower",
     ]
+
+
+async def test_no_memory_item_can_be_written_without_a_confidence(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    # 0025: an item with no confidence could never decay out, so none can exist — whoever writes
+    # it, by whatever path, and there is no default to fill the gap.
+    for insert in [
+        "insert into memory_items (org_id, kind, content, provenance) "
+        "values (%s, 'insight', 'no confidence', 'human')",
+        "insert into memory_items (org_id, kind, content, provenance, confidence) "
+        "values (%s, 'insight', 'null confidence', 'human', null)",
+    ]:
+        await conn.execute("savepoint s")
+        with pytest.raises(psycopg.errors.NotNullViolation):
+            await conn.execute(insert, (seed.org_a,))
+        await conn.execute("rollback to savepoint s")
+    item = await _existing(conn, seed, _fact(), confidence=0.5)
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        await conn.execute("update memory_items set confidence = null where id = %s", (item,))
 
 
 async def test_an_item_corrected_in_a_run_is_not_reinforced_by_it(
