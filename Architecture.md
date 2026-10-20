@@ -873,6 +873,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0021_sector_rules_provenance.sql` | `fb5f2cf` | | Rule provenance per sector; the synthetic regulated-sector rules |
 | `supabase/migrations/0022_match_memory.sql` | `af4dd3a` | `771eba0` | `app.match_memory`, hybrid retrieval fused by RRF (`Memory.md` §4.2) |
 | `supabase/migrations/0023_memory_trust.sql` | `af4dd3a` | | Revocation recorded by the server and one-way; claim-backed memory keeps its claim |
+| `supabase/migrations/0024_memory_decay_revocation.sql` | `bd8be17` | | A revocation by decay recorded as the system's act: `revoked_by` null iff a constrained decay record (`Memory.md` §6.4) |
 
 A new migration adds its row here in the same commit, by direct edit.
 
