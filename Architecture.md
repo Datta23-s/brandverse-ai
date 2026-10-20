@@ -1165,6 +1165,20 @@ through 0023; the post-apply read matched and the full posture comparison found 
 checks). The two Phase 4 criteria were then checked on the project itself, rolled back
 (`Phases.md` Phase 4).
 
+**0024 (decay revocation record).** Dry run 2026-10-20 with `live_migration_dry_run.py` on a fresh
+backend as `postgres` (not a superuser): the only catalog changes were
+`app.memory_items_revocation`'s body (owner, invoker, `search_path=""` and ACL unchanged) and
+`memory_items_check1` replaced by `memory_items_revocation_recorded`. Exercised inside the
+rolled-back transaction with E2E Org A: a well-formed decay record accepted with no revoker and
+`revoked_at` set by the server; five malformed records refused (no reason, free text, no run,
+after ≠ confidence, a decay record with a revoker), a decayed item's confidence change refused, a
+signed-in user's decay record refused by the trigger, a person's own revocation still recorded in
+their name; the evaluation count excluded E2E Org A (`is_test`). After the rollback the catalog
+equalled the snapshot; `memory_items` held 0 rows. Approved by the owner, CI green on `b553c30`,
+pushed with the CLI **2026-10-20 10:42 UTC**; `migration list` identical through 0024; the
+post-apply read found the new constraint and the function body hash the dry run predicted, and the
+full posture comparison found no mismatch (54 checks).
+
 ### Live project — permanent footprint
 
 What the live Supabase project holds that is not evaluation data, and why. Application roles

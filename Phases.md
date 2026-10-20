@@ -300,8 +300,8 @@ the system's act, recorded with a constrained reason, and how items died is an e
 (`docs/evaluation-plan.md` §4). Built: decrements and revocation by rule below 0.30, reuse bumps,
 the step-15 node `write_memory` (stages; `end_run` commits), the attempt rule split by trust in
 `budgeted_run.py`, `app/evaluation/memory_revocations.py`. Migration 0024 (decay revocation
-record): CI green; live application waits on the owner's approval of the rolled-back live dry
-run. What feeds these — the validation step's flags against memory items, the reviewer's
+record): live dry run 2026-10-20, approved by the owner, applied 2026-10-20 10:42 UTC (posture
+54/54 after; `Architecture.md` §11). What feeds these — the validation step's flags against memory items, the reviewer's
 edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6.
 
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**

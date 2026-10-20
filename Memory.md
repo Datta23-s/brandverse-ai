@@ -234,10 +234,35 @@ reads it applies its own analyser, checked on the pinned versions rather than as
 So the two halves agree that "Induction-Safe" and "induction-safe" are the same string, and
 lowercasing before either would change nothing. They disagree on accents: for "café" the vector
 half finds "cafe" and the lexical half does not, so RRF fuses a match in one list with a miss in
-the other. **Open, not fixed:** making the lexical half accent-insensitive means the `unaccent`
-extension, a text search configuration built on it, and the GIN index rebuilt on that
-configuration (a migration; the index built `CONCURRENTLY`, Rules.md §3.3); waiting on the
-owner's ruling. There is no duplicate hash: near-duplicates are found by cosine on the encoder's vectors, so they follow the
+the other.
+
+**Open, and inert for the relevance-set results by a checked condition — ruled 2026-10-20 (project
+owner).** The gap is left open. It changes a result only if an accented character occurs in the
+text the result is computed from:
+
+- *Relevance set (Precision@10 and the rest of §8's relevance figures).* Scanned 2026-10-20 for
+  every character whose canonical decomposition carries a combining mark (what the tokenizer's
+  accent stripping removes): none in `evaluation/relevance/brief.md`, `evaluation/test_set.yaml`,
+  `evaluation/tuning_brands.yaml` or the V2 probe file (their only non-ASCII characters are em
+  dashes and section signs). The corpus and the 50-query set do not exist yet, so the claim is
+  not yet true of them; `backend/tests/test_evaluation_text_unaccented.py` makes it a checked
+  fact rather than a remembered one. It scans everything under `evaluation/` and fails on any
+  accented character, so the corpus and the query set are covered the moment they are committed.
+  While it passes, the gap is **demonstrably inert for every relevance-set result, because no
+  accented character appears in the corpus or the query set**. If it fails, the owner decides
+  before the corpus or the pool goes further.
+- *The main experiment's memory.* Items written during evaluation runs come from model output,
+  not from a committed file, so the test cannot cover them in advance. Whether any accented
+  character reached `memory_items.content` in the evaluation organisations is checked after the
+  runs and reported with the results; until then the claim is not made for them.
+
+**If it is ever fixed, it is fixed before the relevance pool is built, never after.** The fix is
+the `unaccent` extension, a text search configuration built on it, and the GIN index rebuilt on
+that configuration (a migration; the index built `CONCURRENTLY`, Rules.md §3.3). That changes
+what the lexical half retrieves, and the frozen pool is tied to retrieval behaviour: each query's
+candidates are drawn from the union of lexical and vector retrieval (`docs/evaluation-plan.md`
+§7, "Pool"; frozen in `pool.lock`), so a pool built before the change would no longer be the pool
+the system retrieves against. There is no duplicate hash: near-duplicates are found by cosine on the encoder's vectors, so they follow the
 vector row.
 
 ---
