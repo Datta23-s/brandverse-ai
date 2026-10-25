@@ -71,6 +71,17 @@ so the rule can be changed later without refetching anything. Build order: the s
 (`app/research/source_scoring.py`, standalone), then the migration, then `app.match_memory`
 returning the stored score, then the caller in Phase 6.
 
+**Two named weaknesses of the source model (recorded 2026-10-25).** (1) *The authority prior is an
+untuned judgement of the developer*: the classes and their values (`config/scoring.yaml` `source:`)
+have no citation behind them. The evaluation reports its headline result with the prior as
+configured and with it flattened to 0.5 for every host, so that the prior cannot carry the claim
+unseen (`docs/evaluation-plan.md` V5). (2) *A brand's own domain is scored as an ordinary unknown
+host (0.50), above forum posts (0.25), although it is the least independent source possible for a
+claim about that brand's own product.* A system whose purpose is verifying marketing claims should
+not treat the marketer's own site as neutral evidence about itself. This is not solved here
+(`docs/evaluation-plan.md` V6); Phase 6 checks whether a brand's own domain can end up backing a
+claim about that brand, and if it can, the owner rules before any evaluation run.
+
 ### 3.2 Reuse decision bands
 
 | `M` | Decision | Behaviour |

@@ -408,6 +408,29 @@ strong tier at 20 calls a day it cannot run at that volume; and the gate would t
 same class of model it exists to constrain, so the check meant to catch a model's overstatement
 would itself be a model's judgement.
 
+**V5 — The authority prior is the developer's untuned judgement (recorded 2026-10-25).** A
+page's source score includes an authority factor read from its host: 0.95 for government and
+regulator hosts, 0.85 for academic, 0.25 for social and user-generated, 0.50 for every other host
+(`config/scoring.yaml` `source:`). The classes, the suffixes in each and the four values were
+chosen by the developer. **There is no citation behind the specific values and no calibration.**
+The score feeds `E`, which feeds `M`. *Mitigation: the evaluation must not depend on it.* When
+Phase 10 runs, the headline result is reported **twice**: with the authority prior as configured,
+and with it flattened to 0.5 for every host. These two settings are the whole sweep and are fixed
+now, before any data. If the comparison between arms survives flattening, the prior is not
+carrying the claim, and one sentence says so; if it does not survive, that is a finding to have
+before a viva, not during one. (Flattening changes only the authority factor; recency and
+specificity are unchanged, and `E` is still the maximum across an item's sources.)
+
+**V6 — The source model does not treat a brand's own domain as non-independent (recorded
+2026-10-25).** A host in none of the configured classes scores 0.50 for authority, the same as an
+unknown blog. But the brand's own domain is the least independent source possible for a claim about
+that brand's own product, and this system exists to verify marketing claims. A manufacturer saying
+something about itself is not neutral evidence of it, yet the model rates it as an unknown host,
+above the 0.25 given to forum posts. This is worse than a missing refinement for *this* system, and
+it is **not solved**. Open check, at Phase 6: whether any brand's own domain can in fact end up
+backing a claim about that brand. If it can, the project owner rules on it before any evaluation
+run. (`Memory.md` §3.1; `Phases.md` Phase 6.)
+
 ## 5. Statistics
 
 - Mean and SD per metric per arm.

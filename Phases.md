@@ -437,6 +437,9 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 - [ ] A real end-to-end campaign is produced and approved
 - [ ] A killed worker mid-run resumes from its checkpoint
 - [ ] Forcing an agent to fail still yields a campaign with a declared gap
+- [ ] **Open check (recorded 2026-10-25):** establish whether any brand's own domain can end up backing a
+  claim about that brand (source scoring treats it as an ordinary unknown host: `Memory.md` §3.1,
+  `docs/evaluation-plan.md` V6). If it can, the owner rules on it before any evaluation run
 
 ---
 
