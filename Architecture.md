@@ -1088,9 +1088,11 @@ npx supabase@2.120.0 db push --db-url "$DATABASE_URL"
 `migration list` must show local and remote identical after every push, and
 `uv run python scripts/live_posture.py --url "$DATABASE_URL"` (read-only; below) must report every posture
 check matching. **This check is manual on purpose, not by oversight:** running it from CI would put
-the live project's credentials in a workflow, which `Rules.md` P1 (no secret, key or token
-committed) forbids; do not add it to CI, and do not give CI a service key to do so. It is run by
-the owner's session after each live migration and periodically. The full database suite
+the live project's credentials in a workflow, which `Rules.md` P16 forbids (no credentials for the
+live project in CI, in any workflow, for any purpose): a live key in CI is reachable by every
+workflow change and every unattended run on every push, and the live project is the single record
+of the schema and, later, the data. Do not add this check to CI, and do not give CI a key to do so.
+It is run from the laptop after each live migration and periodically. The full database suite
 passes on CI's pgvector image before a push, never after.
 
 **What a posture count covers (corrected 2026-10-25).** Reports above that say "N checks, no
