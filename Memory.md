@@ -389,13 +389,19 @@ it.
   written at 0.20 was live and retrievable until some correction found it: exempt from the
   mechanism by how it entered, the pattern of the previous bullet. Now `memory_items` refuses
   `confidence` outside [0, 1] and refuses a live item below 0.30 (`revoked or confidence >=
-  0.30`; the number is `writeback.revoke_below`, and a test fails if the two differ, so raising
-  the threshold takes a migration that first revokes what it would strand). Write-back refuses a
-  candidate below the threshold at staging (`confidence_below_the_revocation_threshold`,
+  0.30`; the number is `writeback.revoke_below`, and a test fails if the two differ). Write-back
+  refuses a candidate below the threshold at staging (`confidence_below_the_revocation_threshold`,
   recorded like any refusal), treats a confidence outside [0, 1] as a defect, and clamps a
   decrement at 0 — a confidence below zero is not a quantity, whatever happens to the item
   afterwards. Migration 0027 removes the optional minus from 0024's decay pattern, which only
   the unclamped decrement could have needed.
+  **Consequence: raising the threshold after calibration is a migration, in this order** — first
+  revoke, by rule, every live item the new value would strand (recording each as a decay), then
+  replace `memory_items_live_confidence` with the new number, and change `revoke_below` in the same
+  commit; the test that compares the two fails otherwise. That is the price of making "live" and
+  "above the threshold" one fact in the schema: a decrement below the threshold cannot land
+  without the revocation in the same statement. Lowering it needs only the constraint and the
+  config.
 
 ### 6.4 Revocation
 
