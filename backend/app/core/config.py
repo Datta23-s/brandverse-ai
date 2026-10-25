@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     # Development, tests and smoke calls never reach it; set it only for evaluation runs.
     llm_allow_strong_tier: bool = False
 
+    # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────
+    # The self-hosted SearXNG JSON API on the laptop (Architecture.md §11). Unset means search is
+    # unavailable and research degrades to a partial result.
+    searxng_url: HttpUrl | None = None
+    search_timeout_s: float = Field(default=10.0, gt=0)
+
     # Browser origins allowed to call the API: the local Next.js app (Phases.md Phase 1, amended).
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 

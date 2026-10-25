@@ -59,3 +59,18 @@ class StructuredOutputInvalid(LLMError):
 class StrongTierDisabled(CallRefused):
     """The strong tier is switched off (llm_allow_strong_tier is false): development, tests and
     smoke calls never spend its 20 requests/day."""
+
+
+# ── Research (Phase 5) ───────────────────────────────────────────────────────────────────────
+
+
+class SearchError(BrandverseError):
+    """A search could not be completed. Research turns it into a partial result, never a crash."""
+
+
+class SearchUnavailable(SearchError):
+    """The search engine cannot be reached or did not answer with a result list."""
+
+
+class SearchRateLimited(SearchError):
+    """The search engine asked the caller to slow down."""

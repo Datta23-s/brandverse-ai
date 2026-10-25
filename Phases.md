@@ -365,6 +365,14 @@ Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds 
 - [ ] No raw page body exists in Postgres after a run
 - [ ] Rate-limit failures degrade to partial results, not a crash
 
+**Phase 5 progress.** Started 2026-10-25, in dependency order. *Search abstraction* built:
+`app/research/search.py` (`SearchProvider`; `SearxngSearch` over the JSON API; `OfflineSearch` for
+CI; typed `SearchUnavailable` / `SearchRateLimited`; `normalise_query`, the key Rules.md C7's cache
+will share), 39 contract tests run against both providers over a mock transport, no network. No
+exit criterion is ticked: none can be shown until SearXNG runs (Docker, not yet started), the
+cache exists and the planner drives a 20-search run. The "degrade to partial" criterion needs the
+code that catches these errors, which is the query planner's job and is not written.
+
 ---
 
 ## Phase 6 — Agent MVP
