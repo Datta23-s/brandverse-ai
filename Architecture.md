@@ -875,6 +875,8 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0023_memory_trust.sql` | `af4dd3a` | | Revocation recorded by the server and one-way; claim-backed memory keeps its claim |
 | `supabase/migrations/0024_memory_decay_revocation.sql` | `bd8be17` | | A revocation by decay recorded as the system's act: `revoked_by` null iff a constrained decay record (`Memory.md` §6.4) |
 | `supabase/migrations/0025_memory_confidence_required.sql` | `3c3c869` | | `memory_items.confidence` NOT NULL, no default: no item can be exempt from decay (`Memory.md` §6.3) |
+| `supabase/migrations/0026_memory_confidence_bounds.sql` | `219d5c7` | | Confidence within [0, 1]; a live item never below the revocation threshold (`Memory.md` §6.3) |
+| `supabase/migrations/0027_memory_decay_record_nonnegative.sql` | `219d5c7` | | The decay record pattern drops the negative confidence (`Memory.md` §6.4) |
 
 A new migration adds its row here in the same commit, by direct edit.
 
