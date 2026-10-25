@@ -878,7 +878,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0025_memory_confidence_required.sql` | `3c3c869` | | `memory_items.confidence` NOT NULL, no default: no item can be exempt from decay (`Memory.md` §6.3) |
 | `supabase/migrations/0026_memory_confidence_bounds.sql` | `219d5c7` | | Confidence within [0, 1]; a live item never below the revocation threshold (`Memory.md` §6.3) |
 | `supabase/migrations/0027_memory_decay_record_nonnegative.sql` | `219d5c7` | | The decay record pattern drops the negative confidence (`Memory.md` §6.4) |
-| `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Written and dry-run, not applied |
+| `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
 
 A new migration adds its row here in the same commit, by direct edit.
 
@@ -1108,9 +1108,12 @@ that signed-in members can still read their organisation's `llm_calls`. The scri
 earlier live reads was not kept, so whether those reads also ran any of the 57 is not recorded;
 read the earlier figures as the 54 and no more. The first run of all 111 against the live project
 was after 0027 (2026-10-25): 111 of 111, with `backend/scripts/live_posture.py` from
-2026-10-25 on (read-only, refuses any statement that is not a read). CI runs all 111 on every push,
-but against a throwaway database built from the migrations, so it verifies what the migrations
-produce, not drift on the project (a dashboard change, a platform change).
+2026-10-25 on (read-only, refuses any statement that is not a read). CI runs the whole suite on
+every push (111 until 0028), but against a throwaway database built from the migrations, so it
+verifies what the migrations produce, not drift on the project (a dashboard change, a platform
+change). **Since 0028 the suite is 120 checks:** 15 tables x 3 roles = 45 (two new tables, +6), 18
+`app.*` functions (three new, +3), and the same 57 others. Read on the live project after 0028
+(2026-10-25, 17:51 UTC): 120 of 120.
 
 **Before pushing a migration that creates or changes an `app.*` function** (the lesson above):
 run the migration file against the project inside a transaction that is always rolled back —
@@ -1207,6 +1210,19 @@ equalled the snapshot; `memory_items` held 0 rows. Approved by the owner, CI gre
 pushed with the CLI **2026-10-20 10:42 UTC**; `migration list` identical through 0024; the
 post-apply read found the new constraint and the function body hash the dry run predicted, and the
 table and function posture comparison found no mismatch (54 of the suite's 111 checks).
+
+**Migration 0028 (source evidence; `Memory.md` §3.1) — applied 2026-10-25 17:51 UTC.** Live dry run
+as `postgres` (not a superuser) on a fresh backend, pgvector not loaded: the catalog changes were the
+two tables, three trigger functions (invoker, `search_path` pinned), five triggers, the constraints
+and grants stated in the migration; inside the transaction, scores 0.4, 0.8 and 0.6 gave aggregates
+0.4, 0.8, 0.8; a hand-set `source_score`, an update, a delete and a truncate were all refused; after
+the rollback the catalog equalled the snapshot. Approved by the owner, CI green on `939903e`, pushed
+with the CLI; `migration list` identical through 0028; the live posture read matched, **120 of
+120**. Known posture, not widened here (owner, 2026-10-25): `anon` holds table-level INSERT and
+UPDATE on `memory_items.source_score`, as on every `memory_items` column since 0006, blocked by
+row-level security (no `anon` policy) and the derivation guard trigger but not by a revoke. The
+owner wants it revoked, as making the exemption impossible rather than defended in depth: 0029,
+with its own dry run.
 
 ### Live project — permanent footprint
 

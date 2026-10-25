@@ -392,6 +392,10 @@ recency (half-life from the page's own date) and specificity (query words found 
 and an accept threshold in `config/scoring.yaml`, all untuned defaults; a missing factor is left out
 and named. An item backed by several pages takes the maximum. Nothing calls it and nothing is stored:
 the migration, `app.match_memory` and the Phase 6 caller follow, so `E` is still left out of `M`.
+Migration 0028 (`sources`, `memory_item_sources`, the derived `memory_items.source_score`; per-source
+scores stored, the item's value the maximum) was applied 2026-10-25 17:51 UTC after a live dry run
+and the owner's approval; live posture 120 of 120 (`Architecture.md` §11). Next: 0029 (revoke `anon`'s
+write privileges on `memory_items`, owner's ruling), then `app.match_memory` returning the score.
 
 ---
 
