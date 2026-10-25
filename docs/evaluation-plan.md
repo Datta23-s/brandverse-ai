@@ -515,9 +515,16 @@ froze the queries, from the brief, with the 50 queries in view.
 `brief.md` only. Its instructions named the constraint explicitly (read nothing outside that
 directory, follow no path the brief mentions, report every path opened) and did not mention the
 queries' content, the pool, the unanswerable queries, the claim gate, or any particular
-claim-sensitive topic. Its report lists two paths, `brief.md` and its own output. **That list is
-the whole evidence of what it read**: its transcript was not retained, so isolation is shown by its
-own report and by the instructions it was given, not by an audit of its tool calls. The
+claim-sensitive topic. Its report lists two paths, `brief.md` and its own output. Its transcript
+was not retained, so what it read cannot be audited from its tool calls. **The blinding is
+evidenced by measurement instead, and the measurement is better evidence than a transcript would
+have been**: a transcript would show only which files were opened, not whether the writing was
+shaped by what was seen. A session that had read the queries would be expected to write the way
+the first, query-aware drafting did, with a best-item coverage near its 0.835. This one landed at
+0.639, with the difference clearly separated from zero (below), and the phrase measure points the
+same way. That is consistent with a session that never saw the queries. It is not proof of it:
+0.639 is not zero, the two corpora differ in session and style as well as in blinding, and this
+is one comparison on 42 queries. The
 Zarvik sector items were written from the brief's note that the brand is in a regulated sector
 (plus the drafter's own general knowledge of supplement marketing norms); the sector items for
 Mettlepan and Nookwell were invented by the drafter, as general norms and not legal citations.
@@ -559,20 +566,46 @@ blind corpus is labelled.
   may judge some of them 'partial'; the eight are reported separately for that reason.
   `tests/test_relevance_corpus.py` holds each reading as a reviewed exception and fails on any new
   or stale one.
-- *The claim-sensitive queries (q27, q28): a result, not a defect.* q28 (magnesium powder and
-  sleep) has material that bears directly on it: the powder's description and the statement that
-  it is not a treatment for sleeplessness (`zv-23`), the rule against implying better sleep
-  (`zv-37`), the medical-advice limit (`zv-38`), the general ban on disease claims (`zv-35`). q27
-  (plant protein and recovery) has boundaries but no answer: `zv-35` says wording about sleep,
-  immunity or recovery 'has to stay within permitted nutritional descriptions', `zv-27` says the
-  brand does not claim plant protein is better than whey, and `zv-19` describes the blend's amino
-  acid profile. **No item states what may be said about recovery**, no item records the evidence
-  that exists, and no item is a past rejection of an over-reaching sentence. The first corpus held
-  all three, written because the queries asked. So q27 is answerable only partly, and the blind
-  corpus offers the claim gate less to bite on than the first did: `zv-19` (a 'broader amino acid
-  profile') and `zv-23` (contributes to normal magnesium intake) would overstate if cited loosely
-  for recovery and for sleep, but no item was written as a trap. Neither query is fixed or
-  dropped; the labeller's judgments on them are reported as they come.
+- *The claim-sensitive queries (q27, q28).* q28 (magnesium powder and sleep) has material that
+  bears directly on it: the powder's description and the statement that it is not a treatment for
+  sleeplessness (`zv-23`), the rule against implying better sleep (`zv-37`), the medical-advice
+  limit (`zv-38`), the general ban on disease claims (`zv-35`). The corpus has no item written as a
+  trap: `zv-19` (a 'broader amino acid profile') and `zv-23` (contributes to normal magnesium
+  intake) would overstate if cited loosely for recovery and for sleep, but they are ordinary brand
+  material (stated in `Phases.md`, Phase 3, as it bears on the claim gate).
+- *A third kind of query, not two.* The eight (q43 to q50) were **designed** unanswerable. The
+  other 42 were written to be answerable, by a labeller who had not seen the corpus. Comparing the
+  two corpora query by query shows that some of the 42 are a third kind: **reasonable questions
+  the brand's standing knowledge, as the blind drafter wrote it, does not answer.** They are
+  reported as their own category, neither folded into the eight nor dropped, and none is edited
+  into the corpus.
+  - *q27 (what can we say about plant protein and recovery)* is the clearest case, and a reader
+    can check it. The first corpus held three items for it: the evidence file (one study of
+    lean mass and strength, which did not measure recovery), the permitted wording, and a past
+    rejection of 'helps you recover faster' (`zv-26`, `zv-27`, `zv-28` in that corpus's
+    numbering, under `superseded/reversed-order/`). The blind corpus holds none of the three. It
+    has boundaries (`zv-35`: wording about recovery 'has to stay within permitted nutritional
+    descriptions'; `zv-27`: no claim that plant protein beats whey) and the blend's amino acid
+    profile (`zv-19`), and no item says what may be said about recovery. **Those three items
+    existed in the first corpus only because the query asked for them.** That single case is
+    better evidence of what the reversed order was doing than the aggregate figures are.
+  - *q13 and q42 (how formal are we, and do we use exclamation marks / how casual).* The same
+    signature, found by the per-query comparison and not by looking for it: the first corpus had a
+    dedicated item for each (`mp-31`, `nw-27` in its numbering: 'exclamation marks are rare';
+    'fine ... no more than one a post'); the blind corpus has nothing on exclamation marks or
+    formality, and the best item's coverage of their terms falls from 1.00 to 0.00 (q42) and from
+    0.67 to 0.00 (q13). The voice items (`mp-12`, `nw-12`) bear on the 'casual' half, so these two
+    are half unanswerable, not wholly.
+  - *Not a claim of completeness.* These three come from the query-by-query comparison and from
+    the drafter reading each answerable query's top candidates. The reading is the drafter's
+    judgement, not the labeller's, and it does not say no other query is thin; the labels will
+    show that. Q27 is not 'a category of one'; it is the clearest of at least three.
+  - *Expected behaviour and provenance.* For q27 the right behaviour is the same as for the eight:
+    return nothing, or only items below the reuse band (`Memory.md` §3.2). For q13 and q42, the
+    voice items only. The provenance differs, and the thesis says so: the eight are unanswerable
+    by design; these are unanswerable because the brand's own standing knowledge, written without
+    sight of the question, does not contain the answer. Nothing changes about the labelling: the
+    labeller labels blind and is not told which query is which.
 - *Accents.* No accented character in any file under `evaluation/` (`Memory.md` §5).
 
 **The pool.** `pool.lock`: the union of the top 15 of BM25 and of the pinned encoder's cosine

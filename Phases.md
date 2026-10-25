@@ -217,6 +217,20 @@ classifier, `claim_extract@v1`; 2026-10-18): §8.3, mocked model only — zero r
 is built but cannot exit**: criteria 2–5 stay provisional until a generator (Phase 6) produces real
 output that passes the gates.
 
+> **How the claim gate is exercised against memory material — stated 2026-10-25.** The relevance
+> corpus (Phase 4, `evaluation/relevance/corpus.yaml`) was redrafted blind, from the brief alone,
+> and **contains no purpose-built overstatement traps**: no item was written to be cited loosely
+> and caught. The claim gate and the reuse bands are therefore exercised against ordinary brand
+> material, in which an overstatement is possible but was not planted (for example `zv-19`, a
+> 'broader amino acid profile', which would overstate if cited as recovery). That is **more
+> realistic**, because real memory is not written to be caught, and **less thorough**, because
+> nothing guarantees that a loose citation exists to be caught. The first corpus did hold such
+> items (an evidence file that measured lean mass and not recovery; a rejected 'recover faster'
+> post; approved magnesium wording about tiredness, not sleep); they were written because the
+> queries asked for them, and went with that corpus (`docs/evaluation-plan.md` §7). If the thesis
+> needs the gate tested against planted traps (threat V4), they must be authored separately and
+> reported as planted, not drawn from this corpus.
+
 > **Specified, not implemented: detectors for the eight predatory anti-patterns (`Rules.md` T5;
 > decided 2026-10-18).** `Architecture.md` §8 specifies them for the risk gate. None is built, so
 > none is in the gates' outcome table — listing them as blocking would claim enforcement that does
