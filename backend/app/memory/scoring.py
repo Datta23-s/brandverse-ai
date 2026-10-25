@@ -103,11 +103,16 @@ class Retrieval(_Strict):
     hnsw_ef_search: int = Field(ge=1, le=1000)  # pgvector's accepted range
 
 
+class Research(_Strict):
+    search_cache_ttl_s: int = Field(ge=1)  # a parameter of the results, never a constant
+
+
 class ScoringConfig(_Strict):
     version: str
     memory: MemoryScoring
     writeback: Writeback
     retrieval: Retrieval
+    research: Research
 
 
 def load_scoring(path: Path = SCORING_PATH) -> ScoringConfig:

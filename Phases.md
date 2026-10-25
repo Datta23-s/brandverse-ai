@@ -372,6 +372,11 @@ will share), 39 contract tests run against both providers over a mock transport,
 exit criterion is ticked: none can be shown until SearXNG runs (Docker, not yet started), the
 cache exists and the planner drives a 20-search run. The "degrade to partial" criterion needs the
 code that catches these errors, which is the query planner's job and is not written.
+*Search cache* built (`app/research/search_cache.py`): results by normalised query, TTL from
+`config/scoring.yaml` `research.search_cache_ttl_s` (a parameter beside the M-score weights; an
+entry older than the TTL in force is a miss), a per-run ledger of the TTL, each search's outcome
+and each reused entry's age, and a report of evidence fetched versus reused. Whether evaluation
+runs use it is proposed, not decided: `docs/evaluation-plan.md` §8, awaiting the owner's ruling.
 
 ---
 

@@ -759,6 +759,47 @@ checked on 2026-10-14 by comparing normalised real brand names, not pseudonyms. 
 and requests for the tuning set are not yet researched. Parent-company overlap is not yet checked
 (RQ2b, blocking).
 
+### Web evidence during evaluation: do runs use the search cache? — PROPOSED 2026-10-25, awaiting ruling
+
+**The problem.** If arm A runs on Monday and arm C on Wednesday against one cache, they saw
+different web snapshots and the comparison carries that difference silently. A normal TTL cache
+makes it worse: which arm gets reused evidence, and how old, depends on run order and timing, not
+on the arm. The cache (`app/research/search_cache.py`) records the mode, the TTL in force, and for
+every search whether it was fetched or reused and the age of the entry used, so the difference
+would at least be *visible* in the report. Visible is not controlled.
+
+**Options.**
+
+| Option | What the arms see | Why it fails or holds |
+|---|---|---|
+| 1. Shared TTL cache (the development behaviour) | Evidence whose freshness and reuse depend on run order | Confounds arm with time and order. Rejected for evaluation. |
+| 2. Bypass the cache | Every search is live | Identical queries from two arms still see different web states, and now nothing can be re-examined afterwards. Also puts the full search load on upstream engines, which rate-limit. Controls nothing it claims to. |
+| 3. **One frozen snapshot, recorded then replayed** | Identical results for an identical normalised query, whichever arm asks | Removes the time difference where queries coincide; see the residual below. |
+
+**Proposal: option 3.** Evaluation runs use a dedicated snapshot namespace in which an entry is
+written on the first miss and **never expires and is never overwritten** for the duration of the
+evaluation; the TTL does not apply to it. Every arm that issues the same normalised query gets the
+same results. A query no earlier arm issued (the planner's queries differ by arm) is fetched live
+once and recorded, so later arms issuing it see the same thing. The D0 arm searches nothing and is
+unaffected.
+
+*Residual, stated now.* A query first issued late in the evaluation was fetched later than one
+issued early, so the snapshot spans a date range, not a single instant. Two measures: all arms for
+all 30 requests run inside a short fixed window (proposed: 7 days), and every arm's report states
+the snapshot's earliest and latest fetch dates and what share of its evidence was replayed versus
+fetched live. Option 3 narrows the confound; it does not remove it, and the dissertation says so.
+
+*Consequences if ruled.* (a) A `snapshot` cache mode is built (write-once, no expiry, namespaced);
+until then the cache has only `use` and `bypass`. (b) The evaluation harness refuses to start an
+evaluation run in any other mode, as it refuses a tuning brand in the evaluation set (D1).
+(c) Development, tuning and calibration runs use the ordinary TTL cache. (d) The snapshot must
+survive a Redis flush: it is exported to a file after the window closes. Whether that file is
+committed is a separate question, because it holds third-party result snippets; I propose keeping
+it outside the repository and committing only its hash and its date range.
+
+**Not decided.** The project owner rules between options 2 and 3, and on the window and on where
+the exported snapshot lives. Nothing is built for the snapshot mode before the ruling.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the

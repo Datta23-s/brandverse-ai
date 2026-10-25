@@ -48,7 +48,7 @@ def normalise_query(query: str) -> str:
     return re.sub(r"\s+", " ", query).strip().casefold()
 
 
-def _check(query: str, limit: int) -> str:
+def check_arguments(query: str, limit: int) -> str:
     text = query.strip()
     if not text:
         raise ValueError("a search query must not be blank")
@@ -65,7 +65,7 @@ class SearxngSearch:
         self._client = client
 
     async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
-        text = _check(query, limit)
+        text = check_arguments(query, limit)
         try:
             response = await self._client.get(self._endpoint, params={"q": text, "format": "json"})
         except httpx.HTTPError as e:  # connect, timeout, protocol: the laptop service is down
@@ -122,7 +122,7 @@ class OfflineSearch:
         self.calls: list[tuple[str, int]] = []
 
     async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
-        text = _check(query, limit)
+        text = check_arguments(query, limit)
         self.calls.append((text, limit))
         if self._fail_with is not None:
             raise self._fail_with

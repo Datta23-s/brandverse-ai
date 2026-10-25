@@ -43,3 +43,10 @@ retrieval:
   # it also truncates the vector branch (limit 60) to ef_search rows, since iterative index scans
   # are off; a sweep below 60 measures that too.
   hnsw_ef_search: 100                                  # Memory.md §4.3
+research:
+  # How long a cached search result may be reused (backend/app/research/search_cache.py, Rules.md
+  # C7). A parameter of the results, not a constant: search results change, the thesis measures
+  # freshness, and an entry reused across days changes what a run saw. Every run records the TTL
+  # in force and the age of each entry it reused. DEFAULT, NOT TUNED. An entry older than the TTL
+  # in force is a miss even if Redis still holds it, so lowering this takes effect immediately.
+  search_cache_ttl_s: 86400                            # one day
