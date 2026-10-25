@@ -32,6 +32,7 @@ EXPECTED: dict[str, dict[str, tuple[bool, bool]]] = {
     "brands": OWNER_AND_BACKEND_DELETE,  # not once it has memory items or runs (FKs)
     "campaigns": NONE,  # 0010
     "llm_calls": NONE,  # raw logs, Rules.md A1 (0011)
+    "memory_item_sources": NONE,  # append-only evidence (0028)
     "memory_items": NONE,  # never hard-deleted, Memory.md §6.4 (0010)
     "org_members": NONE,  # revoked, never deleted (0010)
     "organisations": NONE,  # manual postgres procedure only (0010)
@@ -40,6 +41,7 @@ EXPECTED: dict[str, dict[str, tuple[bool, bool]]] = {
     "runs": NONE,  # raw logs, Rules.md A1 (0010)
     "sector_constraints": NONE,  # retired, never deleted (0011)
     "sectors": NONE,  # registry keys (0011)
+    "sources": NONE,  # append-only evidence (0028)
 }
 
 POSTURE = """
@@ -113,6 +115,11 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "match_memory": (False, "migration", frozenset({"authenticated", "service_role"})),
     # 0023: revocation recorded by the server, one-way.
     "memory_items_revocation": (False, "migration", ALL_API),
+    # 0028: source evidence. Trigger functions, SECURITY INVOKER: append-only, the stamp and the
+    # derived aggregate, and the guard that keeps memory_items.source_score derived.
+    "evidence_append_only": (False, "migration", ALL_API),
+    "memory_item_sources_record": (False, "migration", ALL_API),
+    "memory_items_source_score_derived": (False, "migration", ALL_API),
 }
 
 
