@@ -105,6 +105,8 @@ class Retrieval(_Strict):
 
 class Research(_Strict):
     search_cache_ttl_s: int = Field(ge=1)  # a parameter of the results, never a constant
+    extraction_min_chars: int = Field(ge=1)
+    extraction_max_chars: int = Field(ge=1)
 
 
 class ScoringConfig(_Strict):

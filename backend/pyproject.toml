@@ -42,6 +42,12 @@ ignore_missing_imports = true
 
 # The local encoder's libraries are in the optional `embeddings` group, which CI does not install;
 # app/memory/embeddings.py imports them only inside LocalEncoder.load.
+# trafilatura is in the optional `extraction` group, which CI does not install; the module imports it
+# only inside trafilatura_extract.
+[[tool.mypy.overrides]]
+module = ["trafilatura", "trafilatura.*"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["sentence_transformers", "sentence_transformers.*", "huggingface_hub", "huggingface_hub.*"]
 ignore_missing_imports = true
@@ -66,4 +72,10 @@ dev = [
 ]
 embeddings = [
     "sentence-transformers>=6.1.0",
+]
+# Page-content extraction (Phase 5). Optional like `embeddings`: CI never installs it and tests
+# extraction against recorded outputs (tests/fixtures/extraction). trafilatura approved explicitly
+# by the project owner 2026-10-25; it resolves to 11 packages including lxml (a compiled wheel).
+extraction = [
+    "trafilatura==2.3.1",
 ]

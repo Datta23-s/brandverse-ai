@@ -50,3 +50,9 @@ research:
   # in force and the age of each entry it reused. DEFAULT, NOT TUNED. An entry older than the TTL
   # in force is a miss even if Redis still holds it, so lowering this takes effect immediately.
   search_cache_ttl_s: 86400                            # one day
+  # Page-content extraction (backend/app/research/extraction.py). Main text shorter than the
+  # minimum is no content (a login wall, a listing): the page is refused rather than passed on as
+  # evidence. Longer than the maximum is cut at a paragraph boundary and flagged `truncated`, so no
+  # single page fills an agent's context. DEFAULTS, NOT TUNED.
+  extraction_min_chars: 200
+  extraction_max_chars: 20000

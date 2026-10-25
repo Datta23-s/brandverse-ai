@@ -1,0 +1,13 @@
+{
+  "html_sha256": "0dcb98380a511841759ef633121403ba4bfff17f62f4fad08d1e5851805a8b7b",
+  "trafilatura": "2.3.1",
+  "url": "https://fixtures.example.test/article_with_boilerplate.html",
+  "raw": {
+    "title": "How to season cast iron",
+    "author": "Asha Rao",
+    "date": "2026-03-14",
+    "sitename": "Example Cookware Journal",
+    "language": null,
+    "text": "How to season cast iron\nSeasoning is a thin layer of polymerised oil that protects cast iron from rust and gives the pan its non-stick surface. Apply a very thin coat of oil all over the pan and bake it upside down at 230 degrees Celsius for one hour.\nRepeat the process three or four times when the pan is new. Avoid soaking the pan in water, and dry it on the stove after washing so no moisture is left in the pores of the metal.\nWhen to re-season\nIf food starts to stick or the surface looks dull and grey, the seasoning has worn thin and the pan needs another round. Acidic sauces simmered for a long time are the usual cause."
+  }
+}

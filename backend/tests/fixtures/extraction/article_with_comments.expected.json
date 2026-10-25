@@ -1,0 +1,13 @@
+{
+  "html_sha256": "b1042ea3afd0929cfcb4bcc44038862b2308441ad6f1d4537a41f63ec9e1fd71",
+  "trafilatura": "2.3.1",
+  "url": "https://fixtures.example.test/article_with_comments.html",
+  "raw": {
+    "title": "Choosing a mattress for a small flat",
+    "author": "Dev Malhotra",
+    "date": "2026-02-02",
+    "sitename": "Sleep Notes",
+    "language": null,
+    "text": "Choosing a mattress for a small flat\nA small flat changes the mattress decision in two ways: the bed has to arrive through a narrow stairwell, and it often has to double as a sofa during the day. Compressed mattresses delivered in a box solve the first problem, and firmer foam models cope better with the second.\nBuyers who compare firmness first and price second end up returning fewer mattresses than those who start from price, because firmness is the property that cannot be judged from a photograph.\nA trial period of at least one hundred nights is the practical safeguard; most people need three to four weeks to adjust to a new mattress."
+  }
+}

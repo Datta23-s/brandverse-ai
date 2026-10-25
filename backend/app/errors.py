@@ -74,3 +74,7 @@ class SearchUnavailable(SearchError):
 
 class SearchRateLimited(SearchError):
     """The search engine asked the caller to slow down."""
+
+
+class ExtractionFailed(BrandverseError):
+    """A page yielded no usable main content (a login wall, a listing, boilerplate only)."""

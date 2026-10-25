@@ -1,0 +1,13 @@
+{
+  "html_sha256": "619c58ca4bc65e47b32fba593be94a983370cac74929dee4eef10385c12b874e",
+  "trafilatura": "2.3.1",
+  "url": "https://fixtures.example.test/article_no_date.html",
+  "raw": {
+    "title": "Why first-time buyers choose starter sets",
+    "author": null,
+    "date": null,
+    "sitename": "fixtures.example.test",
+    "language": null,
+    "text": "Why first-time buyers choose starter sets\nPeople setting up their first kitchen rarely know which pieces they will use daily. A starter set removes that guesswork by bundling a frying pan, a saucepan and a lid sized to work together, usually at a lower price than buying the pieces one at a time.\nSurveys of new renters consistently show that price and storage space decide the purchase more than brand. Sets that nest inside each other are favoured in small flats, where cupboard space is the limit.\nRetailers report that the most common reason for returning a set is an induction hob that does not work with the base of the pan, so compatibility is worth stating clearly on the page."
+  }
+}

@@ -378,6 +378,12 @@ entry older than the TTL in force is a miss), a per-run ledger of the TTL, each 
 and each reused entry's age, and a report of evidence fetched versus reused. Whether evaluation
 runs use it is ruled (2026-10-25): one frozen record-and-replay snapshot, arms of a request within
 3 days of its first fetch; `docs/evaluation-plan.md` §8. The snapshot mode is not built yet.
+*Extraction* built (`app/research/extraction.py`): trafilatura 2.3.1 in the optional `extraction`
+group (CI off it), behind `Extractor`, which refuses a page with too little main text and cuts an
+overlong one at a paragraph, both limits in `config/scoring.yaml`. Tested in CI against recorded
+library output for five saved pages (boilerplate and comments stripped, spec table kept, a login
+wall refused); the same assertions run against the live library where it is installed. The page
+fetcher, which supplies the HTML, is not written.
 
 ---
 
