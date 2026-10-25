@@ -653,6 +653,32 @@ never billed: a recorded revision and a weights hash checked on load, which a ho
 does not give; no quota competition with the strong tier, and not the
 contribution — the encoder is a parameter of the retrieval results and is reported as such.
 
+### The first labelling sitting, 2026-10-25: export discarded, Precision@10 not reported
+
+A labelling sitting was attempted on 2026-10-25 and its export failed validity checks. The
+export was discarded; it is not committed, was not frozen, and **no figure was computed from it**.
+The diagnostics, which are the record:
+
+- **Coverage:** 1,005 of 1,340 judgments; 41 of 55 sittings complete, 14 untouched, none partial.
+- **One value:** 1,003 of 1,005 (99.8%) were "relevant", 2 "partial", 0 "not relevant".
+- **Unanswerable queries:** 120 candidates across five queries verified to have no answer in the
+  corpus (q43, q46, q48, q49, q50) were marked "relevant".
+- **Speed:** the median interval between consecutive judgments was 0.89 s (p10 0.60 s, p90
+  2.53 s); 57% of intervals were 1 s or less.
+- **Repeats:** 4 of the 5 hidden repeats were labelled; 99 of 99 pairs agreed, which is
+  uninformative because every one of the 198 judgments was "relevant".
+
+*Page defect found in review.* `label.html` had no default-selected judgment, but keys 1/2/3
+judged and advanced in one action and did not ignore auto-repeat or modifier chords, so a held key
+would have labelled the rest of a sitting. The recorded intervals (minimum 0.44 s) are too slow
+for auto-repeat, so this defect is not shown to have caused the sitting's result; the cause is not
+established. The page now ignores repeated keydowns and chords (`label_page.html` and the derived
+`label.html`; a test pins it). Rapid repeated presses of "1" remain possible by design.
+
+**Consequence:** Precision@10 on the relevance set is **not reported**. The protocol artifacts
+(queries, corpus, pool, locks, the superseded corpus, `label.html`, the freeze script) are kept as
+the evidence the protocol was real and so a later sitting can still be run on the same pool.
+
 ## 8. Decisions
 
 | # | Decision | Agreed |

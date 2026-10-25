@@ -141,7 +141,8 @@ document.getElementById("prev").addEventListener("click", () => go(-1));
 document.getElementById("next").addEventListener("click", () => go(1));
 
 document.addEventListener("keydown", (e) => {
-  if (e.target === labeller) return;
+  // A held key or a chord must never record a judgment: one press, one judgment.
+  if (e.target === labeller || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
   const q = P.queries[state.position];
   if (["1", "2", "3"].includes(e.key)) {
     mark(q.id, q.candidates[current].id, ORDER[Number(e.key) - 1]);

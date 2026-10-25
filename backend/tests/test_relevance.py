@@ -249,3 +249,13 @@ def test_the_task_is_written_once_and_frozen_labels_are_never_overwritten(tmp_pa
     assert record["self_consistency"]["candidates_judged_twice"] > 0  # type: ignore[index]
     with pytest.raises(NotFreezable, match="never overwritten"):
         freeze(export, tmp_path)
+
+
+def test_a_held_key_or_chord_cannot_record_a_judgment() -> None:
+    # Keys 1/2/3 judge and advance in one action, so auto-repeat would label the rest of a sitting.
+    from scripts.build_relevance_pool import TEMPLATE
+
+    template = TEMPLATE.read_text(encoding="utf-8")
+    guard = next(line for line in template.splitlines() if "e.repeat" in line)
+    assert "return" in guard and all(k in guard for k in ("ctrlKey", "altKey", "metaKey"))
+    assert template.index("e.repeat") < template.index('["1", "2", "3"].includes(e.key)')
