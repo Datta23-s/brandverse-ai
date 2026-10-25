@@ -56,3 +56,37 @@ research:
   # single page fills an agent's context. DEFAULTS, NOT TUNED.
   extraction_min_chars: 200
   extraction_max_chars: 20000
+source:
+  # Source scoring (backend/app/research/source_scoring.py; Architecture.md §6.2): how far one web
+  # page is trusted as evidence, in [0, 1]. DEFAULTS, NOT TUNED: every number here is a parameter of
+  # the results and is reported (Rules.md A5). Three factors; CORROBORATION IS NOT MODELLED (decided
+  # 2026-10-25, Memory.md §3.1): it would need a bonus with no principled value. An item backed by
+  # several pages takes the MAXIMUM of their scores, so adding a source can never lower it.
+  #
+  # A factor that cannot be computed (a page that states no date has no recency) is left out and the
+  # remaining weights renormalised, as in the M-score; the score names what was left out.
+  weights: {authority: 0.40, recency: 0.25, specificity: 0.35}
+  # Authority is a PRIOR about the kind of publisher, read from the host alone. It is not a
+  # judgement of whether the page is right, and it does not tell a manufacturer's own site from an
+  # independent one. The longest matching suffix wins; a host matching none scores `unknown`.
+  authority:
+    unknown: 0.50
+    classes:
+      - name: government_or_regulator
+        score: 0.95
+        suffixes: [gov, gov.in, gov.uk, gov.au, europa.eu]
+      - name: academic
+        score: 0.85
+        suffixes: [edu, edu.in, edu.au, ac.in, ac.uk]
+      - name: social_or_user_generated
+        score: 0.25
+        suffixes: [reddit.com, quora.com, facebook.com, instagram.com, x.com, twitter.com, pinterest.com, tiktok.com, youtube.com]
+  # Recency halves every this many days from the page's own stated date: 0.5 ** (age / half_life).
+  recency_half_life_days: 365
+  # Specificity: the share of the query's distinct content words found, as whole words, in the
+  # page's title and text. English function words are ignored; language detection is unverified
+  # (Phases.md Phase 5), so this is an English-only default.
+  specificity_min_word_chars: 3
+  specificity_ignore_words: [the, and, for, are, was, were, with, that, this, from, how, what, why, when, where, who, which, our, your, their, can, could, should, would, does, did, has, have, had, not, but, you, its, any, all]
+  # A page scoring below this is discarded before it reaches an agent (Phases.md Phase 5 exit).
+  accept_at_or_above: 0.40

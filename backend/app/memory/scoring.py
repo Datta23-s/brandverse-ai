@@ -109,12 +109,57 @@ class Research(_Strict):
     extraction_max_chars: int = Field(ge=1)
 
 
+class SourceWeights(_Strict):
+    authority: float = Field(ge=0)
+    recency: float = Field(ge=0)
+    specificity: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _sum_to_one(self) -> "SourceWeights":
+        if abs(sum(self.model_dump().values()) - 1.0) > 1e-9:
+            raise ValueError("source-score weights must sum to 1")
+        return self
+
+
+class AuthorityClass(_Strict):
+    name: str = Field(min_length=1)
+    score: float = Field(ge=0, le=1)
+    suffixes: list[str] = Field(min_length=1)
+
+
+class Authority(_Strict):
+    unknown: float = Field(ge=0, le=1)
+    classes: list[AuthorityClass]
+
+    @model_validator(mode="after")
+    def _no_suffix_in_two_classes(self) -> "Authority":
+        seen: set[str] = set()
+        for c in self.classes:
+            for suffix in c.suffixes:
+                if suffix != suffix.casefold().strip(".") or suffix in seen:
+                    raise ValueError(
+                        f"authority suffix {suffix!r} is not lower-case bare or repeats"
+                    )
+                seen.add(suffix)
+        return self
+
+
+class SourceScoring(_Strict):
+    weights: SourceWeights
+    authority: Authority
+    recency_half_life_days: float = Field(gt=0)
+    specificity_min_word_chars: int = Field(ge=1)
+    specificity_ignore_words: list[str]
+    accept_at_or_above: float = Field(ge=0, le=1)
+
+
 class ScoringConfig(_Strict):
     version: str
     memory: MemoryScoring
     writeback: Writeback
     retrieval: Retrieval
     research: Research
+    source: SourceScoring
 
 
 def load_scoring(path: Path = SCORING_PATH) -> ScoringConfig:

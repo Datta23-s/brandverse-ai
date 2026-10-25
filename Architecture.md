@@ -478,7 +478,7 @@ Default weights `wₙ=0.30, wᵤ=0.25, w_f=0.20, wₛ=0.15, wₑ=0.10`. **Weight
 
 `query planning → SearXNG (JSON) → dedupe by canonical URL → fetch → Trafilatura extract → source scoring → chunk → embed → stage as findings`
 
-**Source scoring** combines domain authority, recency, specificity to the query, and corroboration count. Findings below threshold are discarded, not passed to agents — unscored sources are how hallucinated authority enters a system.
+**Source scoring** combines domain authority, recency and specificity to the query (`backend/app/research/source_scoring.py`, weights and threshold in `config/scoring.yaml` `source:`). **Corroboration count is not modelled** (decided 2026-10-25, `Memory.md` §3.1): it would need a bonus with no principled value, and is future work. An item backed by several pages carries the maximum of their scores. Findings below threshold are discarded, not passed to agents — unscored sources are how hallucinated authority enters a system.
 
 **Zero-retention.** Raw fetched page bodies live in Redis with a TTL and are never written to Postgres. Only extracted, scored, attributed findings persist. This is the implementable core of the paper's privacy boundary.
 

@@ -354,7 +354,7 @@ Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds 
 | SearXNG self-hosted | On the developer's laptop in Docker (decided 2026-10-14, `Architecture.md` §11); JSON API reachable from the worker |
 | Search abstraction | One interface; SearXNG and the offline CI mock implement it. No paid SERP — the project spends nothing (`Rules.md` C0) |
 | Trafilatura extraction | Main content extracted, boilerplate stripped |
-| Source scoring | Authority, recency, specificity, corroboration |
+| Source scoring | Authority, recency, specificity (corroboration not modelled: decided 2026-10-25, `Memory.md` §3.1) |
 | Provenance capture | Every finding carries its URL and score |
 | Zero-retention cache | Raw bodies in Redis with TTL only |
 | Query planner | Gaps converted into targeted queries |
@@ -387,6 +387,11 @@ fetcher, which supplies the HTML, is not written.
 A publisher name equal to the page's host is read as NOT STATED (trafilatura fills it in when the page
 names none). Language detection is UNVERIFIED (empty on all five fixtures): nothing may depend on it
 until it works on real fetched pages.
+*Source scoring* built, standalone (`app/research/source_scoring.py`): authority (a prior from the host),
+recency (half-life from the page's own date) and specificity (query words found in the page), weights
+and an accept threshold in `config/scoring.yaml`, all untuned defaults; a missing factor is left out
+and named. An item backed by several pages takes the maximum. Nothing calls it and nothing is stored:
+the migration, `app.match_memory` and the Phase 6 caller follow, so `E` is still left out of `M`.
 
 ---
 
