@@ -469,8 +469,8 @@ against another model's opinion, a confound every number would carry).
 
 ### Limitation of the relevance set: how the 50 queries were written — recorded 2026-10-25
 
-**The 50 queries were drafted with AI assistance, from `brief.md` alone, and then reviewed and
-edited by Kundan.** The AI never saw the corpus: it did not exist when the queries were written.
+**The 50 queries were drafted with AI assistance, from `brief.md` alone, and then reviewed by
+Kundan, who read all 50 on 2026-10-25 and accepted them without changes.** The AI never saw the corpus: it did not exist when the queries were written.
 They are therefore not purely the labeller's own unaided wording, and every Precision@10 figure
 computed on this set carries that fact. Stated plainly, as a limitation of the set:
 
@@ -481,10 +481,11 @@ computed on this set carries that fact. Stated plainly, as a limitation of the s
   of phrasing (length, vocabulary, the way a question is shaped) that a set written unaided would not,
   and a retrieval encoder is itself a trained language model. Whether that makes this set easier or
   harder for the pinned encoder than a human-written one would be is not measured, and no
-  adjustment for it is made. Kundan's review and edits reduce the risk and cannot be shown to
-  remove it.
-- *What was not recorded.* Which queries Kundan changed, and how, was not kept. The set as frozen
-  is the only record.
+  adjustment for it is made. Kundan's review reduces the risk and cannot be shown to
+  remove it; it changed no query, so the wording is the AI draft as written.
+- *What the review did.* Kundan read all 50 queries on 2026-10-25 and accepted them without
+  changes. No query was edited, so there is no edit history to record; the set as frozen is the
+  AI draft.
 
 **Order of events — an incident, recorded 2026-10-25.** The protocol (brief, then corpus, then
 queries) exists so the corpus cannot be shaped by the queries. On 2026-10-25 the order was
@@ -636,8 +637,8 @@ hidden repeats), 1,340 judgments, seed 20261025.
    never reads the corpus text before labelling.**
 3. The labeller (Kundan) writes the **50 queries from the brief only** — plausible marketing
    questions about brands whose shape is known, not questions copied from documents.
-   *(Amended 2026-10-25: the queries were drafted with AI assistance and reviewed and edited by
-   Kundan; see the limitation above.)*
+   *(Amended 2026-10-25: the queries were drafted with AI assistance and reviewed by Kundan,
+   who accepted them without changes; see the limitation above.)*
 4. **8 of the 50 are unanswerable by design**: written from the brief to have no good answer in the
    corpus. They are reported separately from the 42 answerable ones. Without them precision is
    measured only on answerable queries, and a retriever that always returns ten items looks
