@@ -5,6 +5,12 @@ secret therefore stops the build until the diff that adds it also adds a line he
 is fine, where review sees both. The same holds for a pooler or project host, which no workflow
 needs: CI builds its own database and plays Supabase Auth itself (.github/workflows/ci.yml).
 
+A pasted literal key is caught by prefix, for the two formats Supabase keys take: legacy keys are
+JWTs and begin "eyJ"; this project's own keys (.env.example) begin "sb_secret_" (the publishable
+"sb_publishable_" placeholders CI uses are not secret and are not matched). That is deliberately
+NOT a general secret scanner: a credential of another shape pasted into a workflow passes this
+test. It covers the credential that matters here, and nobody should read it as complete.
+
 The guard is shown to fail on synthetic fragments below, so it is known to work, not assumed.
 """
 
@@ -22,6 +28,7 @@ ALLOWED_SECRETS: dict[str, str] = {
 
 _EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
 _NAMED = re.compile(r"""\bsecrets\.(\w+)|\bsecrets\[\s*['"]([^'"]+)['"]\s*\]""")
+_LITERAL_KEY = re.compile(r"eyJ|sb_secret_")
 _HOST = re.compile(r"[\w.-]*supabase\.(?:co|com|net|in)\b", re.IGNORECASE)
 
 
@@ -40,6 +47,7 @@ def violations(workflow: str) -> list[str]:
     if re.search(r"^\s*secrets\s*:\s*inherit\b", workflow, re.MULTILINE):
         found.append("`secrets: inherit` passes every secret to another workflow")
     found += [f"Supabase host {m.group(0)!r}" for m in _HOST.finditer(workflow)]
+    found += [f"a literal key beginning {m.group(0)!r}" for m in _LITERAL_KEY.finditer(workflow)]
     return found
 
 
@@ -58,6 +66,9 @@ def violations(workflow: str) -> list[str]:
             "pooler.supabase.com",
         ),
         ("env:\n  URL: https://abcdefghijklmnop.supabase.co\n", "supabase.co"),
+        ("env:\n  KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.x\n", "beginning 'eyJ'"),
+        ("env:\n  KEY: sb_secret_abcdefghijklmnop0123456789\n", "beginning 'sb_secret_'"),
+        ("# KEY: eyJhbGciOiJIUzI1NiJ9\n", "beginning 'eyJ'"),  # a comment is one edit from config
         ("env:\n  TOKEN: ${{ secrets.GITHUB_TOKEN }}\n  K: ${{ secrets.OTHER }}\n", "OTHER"),
     ],
     ids=[
@@ -67,6 +78,9 @@ def violations(workflow: str) -> list[str]:
         "inherit",
         "pooler_host",
         "project_host",
+        "legacy_jwt_key",
+        "secret_key",
+        "key_in_a_comment",
         "allowed_beside_disallowed",
     ],
 )

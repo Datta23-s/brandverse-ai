@@ -69,7 +69,7 @@ When summarising work, state what was built, what was stubbed, and what was not 
 | P13 | Swallow an exception without logging it | Silent failure in a 15-step pipeline is undebuggable |
 | P14 | Block the event loop with a synchronous HTTP or DB call in async code | Kills throughput under concurrency |
 | P15 | Add a dependency to work around a 20-line function | Dependency weight is a real cost |
-| P16 | Give CI credentials for the live project — in any workflow, for any purpose | A live key in CI is reachable by every workflow change and every unattended run on every push, and the live project is the single record of the schema and, later, the data. It stays on the laptop. Checks against the live project (`scripts/live_posture.py`, migration dry runs) are run by hand. Enforced by `backend/tests/test_ci_has_no_live_credentials.py`: default-deny — a workflow may read only the secrets on that test's allowlist (each with its reason) and name no Supabase host |
+| P16 | Give CI credentials for the live project — in any workflow, for any purpose | A live key in CI is reachable by every workflow change and every unattended run on every push, and the live project is the single record of the schema and, later, the data. It stays on the laptop. Checks against the live project (`scripts/live_posture.py`, migration dry runs) are run by hand. Enforced by `backend/tests/test_ci_has_no_live_credentials.py`: default-deny — a workflow may read only the secrets on that test's allowlist (each with its reason) name no Supabase host, and contain no literal key beginning `eyJ` or `sb_secret_` (not a general secret scanner) |
 
 ---
 
