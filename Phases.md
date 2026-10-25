@@ -309,7 +309,9 @@ Applied 2026-10-25 13:11 UTC after CI green on 4143eec (`migration list` identic
 NOT NULL, no default, 0 rows). Migrations 0026 and 0027 (owner's ruling 2026-10-25): confidence is
 a probability and a live item is never below the revocation threshold — revocation tests the
 value, not the transition (`Memory.md` §6.3); 0027 then drops the negative from 0024's decay
-pattern. Written and tested locally; live dry run passed; not yet applied.
+pattern. Live dry run passed; CI green on d75ab2f; both applied together 2026-10-25 13:27 UTC
+(`migration list` identical through 0027). The posture suite `test_table_posture.py`, run unchanged
+against the live project in a read-only session after 0027 (its first run since 0023): 111 of 111.
 
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming
