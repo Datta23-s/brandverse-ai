@@ -57,6 +57,20 @@ M = wₛS + w_pP + w_cC + w_mA + w_fF + wₑE
 
 Weights live in `config/scoring.yaml`. **Tune them in Phase 10 against a labelled relevance set and report both the defaults and the tuned values.** Publishing hand-picked weights as if they were derived is the kind of thing that gets a thesis questioned.
 
+**What `E` takes — decided 2026-10-25 (project owner).** An item backed by several sources carries
+**the maximum** of their source scores as its `E` input. The deciding property is monotonicity:
+adding a source must never lower an item's evidential score. The mean fails it (corroborating a
+strong source with a mediocre one makes the item worse) and so does the minimum (one weak source
+destroys an item backed by a good one); each makes finding more evidence hurt. The maximum cannot.
+**Corroboration is not modelled.** Three independent decent sources arguably beat one decent source,
+and the maximum does not capture that; the fix is a bonus term with no principled value, which is
+the kind of constant this project avoids. It is named here as future work and left out, and the
+source score of one page likewise omits the "corroboration count" that Architecture.md §6.2 first
+listed. **Storage:** the item stores both the aggregate (its `E` input) and the per-source scores,
+so the rule can be changed later without refetching anything. Build order: the scorer
+(`app/research/source_scoring.py`, standalone), then the migration, then `app.match_memory`
+returning the stored score, then the caller in Phase 6.
+
 ### 3.2 Reuse decision bands
 
 | `M` | Decision | Behaviour |
@@ -67,6 +81,22 @@ Weights live in `config/scoring.yaml`. **Tune them in Phase 10 against a labelle
 | **< 0.65** | Perform fresh analysis | Discard. Mark the knowledge slot as a research gap. |
 
 These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`.
+
+**The bands are PROVISIONAL — recorded 2026-10-25, before anything else touches them.** The
+0.90 / 0.80 / 0.65 bands and the write-back gate at `M ≥ 0.90` (§6.3) were set as defaults and
+have never been calibrated against a six-component `M`. They are applied today to a four-component
+`M`: `S`, `P`, `A` and `F` renormalised over their 0.75 of the weight, because `C` (Phase 6) and `E`
+(Phase 5, then the migration) do not exist yet. When `E` and `C` arrive, identical items score
+differently (a perfect item with `E` = 0.6 falls from 1.0 to about 0.95), so the same thresholds
+mean something else. **Nothing banded before `E` exists is comparable with anything banded after.**
+Band tuning happens only after `E` and `C` exist, not before; no figure derived from a
+four-component `M` is reported anywhere.
+
+*Audit, 2026-10-25.* `score()` has no caller outside the unit tests; no real `M` has ever been
+computed; and no recorded figure depends on `E`. The `m` that write-back compares with the reuse
+band is supplied by its callers and set by hand in its tests. This was established by searching the
+code and documents by pattern (`score(`, `source_score`, `left_out`, the module's imports and the
+recorded figures), not by reading every line.
 
 ### 3.3 Freshness decay
 

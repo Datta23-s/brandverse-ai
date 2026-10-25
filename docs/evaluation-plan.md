@@ -705,6 +705,23 @@ The thresholds are judgement-set limits, not measured ones. 90% and 2 s are deli
 chosen to catch a set that was not read and not to police a fast, honest labeller; they were fixed
 before any new label exists, and are not to be tuned afterwards to admit a particular export.
 
+### The M-score's bands are provisional — recorded 2026-10-25
+
+The reuse bands (0.90 / 0.80 / 0.65) and the write-back gate at `M >= 0.90` have never been
+calibrated against a six-component `M`; they are applied today to a four-component one (`S`, `P`,
+`A`, `F` renormalised over 0.75), because `C` and `E` do not exist yet. When they arrive identical
+items score lower, so the thresholds mean something different. Therefore:
+
+- The current bands are **provisional**.
+- **Band tuning, and the approver's 10-campaign calibration to >= 8/10 (D3, rubric §6), happen only
+  after `E` and `C` exist.** The practice campaigns are produced by a system whose reuse decisions
+  depend on the bands, so calibrating before they are fixed would calibrate a system that will not
+  be the one evaluated.
+- **No figure derived from a four-component `M` is reported anywhere.**
+- Audit: `score()` has no caller outside the tests, no real `M` has ever been computed, and no
+  recorded figure depends on `E`. This was found by searching by pattern, not by reading every
+  line. Details: `Memory.md` §3.2.
+
 ## 8. Decisions
 
 | # | Decision | Agreed |
