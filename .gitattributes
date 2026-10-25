@@ -1,0 +1,2 @@
+# Frozen evaluation inputs are hashed byte for byte: no line-ending conversion on any platform.
+evaluation/relevance/** -text

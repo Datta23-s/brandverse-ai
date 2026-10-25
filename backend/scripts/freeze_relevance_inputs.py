@@ -29,7 +29,8 @@ def _write_lock(lock: Path, record: dict[str, object]) -> dict[str, object]:
     if lock.exists():
         raise AlreadyFrozen(f"{lock} exists: frozen inputs are never re-frozen")
     record["frozen_at"] = datetime.now(UTC).isoformat()
-    lock.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    with lock.open("w", encoding="utf-8", newline="\n") as f:  # LF, as the repo stores it
+        f.write(json.dumps(record, indent=2) + "\n")
     return record
 
 
@@ -39,9 +40,8 @@ def freeze_queries(directory: Path) -> dict[str, object]:
         raise AlreadyFrozen(f"{lock} exists: frozen inputs are never re-frozen")
     md, out = directory / "queries.md", directory / "queries.yaml"
     rows = parse_queries_md(md.read_text(encoding="utf-8"))
-    out.write_text(
-        yaml.safe_dump(rows, sort_keys=False, allow_unicode=True, width=100), encoding="utf-8"
-    )
+    with out.open("w", encoding="utf-8", newline="\n") as f:  # LF: the hash is of these bytes
+        f.write(yaml.safe_dump(rows, sort_keys=False, allow_unicode=True, width=100))
     return _write_lock(
         lock,
         {
