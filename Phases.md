@@ -301,7 +301,7 @@ the system's act, recorded with a constrained reason, and how items died is an e
 the step-15 node `write_memory` (stages; `end_run` commits), the attempt rule split by trust in
 `budgeted_run.py`, `app/evaluation/memory_revocations.py`. Migration 0024 (decay revocation
 record): live dry run 2026-10-20, approved by the owner, applied 2026-10-20 10:42 UTC (posture
-54/54 after; `Architecture.md` §11). What feeds these — the validation step's flags against memory items, the reviewer's
+54 of the 111 posture checks after — tables and functions only; `Architecture.md` §11). What feeds these — the validation step's flags against memory items, the reviewer's
 edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6. Migration 0025
 (2026-10-20, owner's ruling): `memory_items.confidence` is `NOT NULL`, no default, so no item can be
 exempt from decay by having no confidence; its own dry run and approval, separate from 0024.

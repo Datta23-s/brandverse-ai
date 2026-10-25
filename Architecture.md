@@ -763,8 +763,9 @@ are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejec
 > `postgres`, so **no in-database protection against the owner is possible**: whatever `postgres`
 > installs, `postgres` can remove.
 >
-> State on the project after migration 0011 (checked 2026-10-14, 39 of 39 posture checks
-> matching `backend/tests/db/test_table_posture.py`):
+> State on the project after migration 0011 (checked 2026-10-14, 39 of the 40 checks in
+> `backend/tests/db/test_table_posture.py` — the table delete/truncate checks; see "What a posture
+> count covers" in §11 — matching):
 >
 > | Table | Claim | Holds against the application roles | Holds against `postgres` |
 > |---|---|---|---|
@@ -1084,8 +1085,26 @@ npx supabase@2.120.0 db push --db-url "$DATABASE_URL"
 ```
 
 `supabase_migrations.schema_migrations` on the project is the record of what has been applied;
-`migration list` must show local and remote identical after every push. The full database suite
+`migration list` must show local and remote identical after every push, and
+`uv run python scripts/live_posture.py --url "$DATABASE_URL"` (read-only; below) must report every posture
+check matching. The full database suite
 passes on CI's pgvector image before a push, never after.
+
+**What a posture count covers (corrected 2026-10-25).** Reports above that say "N checks, no
+mismatch" (39, 50, 52, 54) counted only two groups of `test_table_posture.py`: each table's
+delete/truncate posture for the three API roles (13 tables x 3 = 39) and each `app.*` function's
+security-definer flag, owner, `search_path` and EXECUTE grants (15 functions, 54 in all by 0024).
+They were not the whole suite, which is 111 checks since 0023 (107 at 0020, 109 at 0021). The other
+57 are: every column of `llm_calls` as an API role's INSERT/UPDATE target, 17 columns x 3 roles =
+51; the privilege lists of the two minimal roles `app_org_creator` and `app_audit_writer`; the
+three checks that every table, `app.*` function and `llm_calls` column has a stated posture; and
+that signed-in members can still read their organisation's `llm_calls`. The script that made the
+earlier live reads was not kept, so whether those reads also ran any of the 57 is not recorded;
+read the earlier figures as the 54 and no more. The first run of all 111 against the live project
+was after 0027 (2026-10-25): 111 of 111, with `backend/scripts/live_posture.py` from
+2026-10-25 on (read-only, refuses any statement that is not a read). CI runs all 111 on every push,
+but against a throwaway database built from the migrations, so it verifies what the migrations
+produce, not drift on the project (a dashboard change, a platform change).
 
 **Before pushing a migration that creates or changes an `app.*` function** (the lesson above):
 run the migration file against the project inside a transaction that is always rolled back —
@@ -1122,7 +1141,8 @@ updatable by `authenticated`; the nine seeded sectors. All matched `test_table_p
 rollback left nothing, the role included. Live rows before the push: 0 runs, 0 claims, 0 sectors,
 1 brand. Pushed with the CLI **2026-10-17 14:01 UTC**; `migration list` identical through 0020;
 the post-apply read matched the dry run, and a full read of every table's delete/truncate posture
-and every `app.*` function (50 checks) against `test_table_posture.py` found no mismatch.
+and every `app.*` function (50 of the suite's 107 checks; see "What a posture count covers") against
+`test_table_posture.py` found no mismatch.
 
 0021 (rule provenance; two new trigger functions; four synthetic rule rows) had the same
 procedure after CI passed on `fb5f2cf`: the rolled-back dry run showed `rules_provenance` arriving
@@ -1131,7 +1151,7 @@ under the new `sector_constraints_source` CHECK, both trigger functions with pin
 as stated, exactly the four synthetic rules (no URL, no author, the fixed source sentence), and no
 write grant on `sectors` for `anon` or `authenticated`; the rollback left nothing. Pushed with the
 CLI **2026-10-17 16:04 UTC**; `migration list` identical through 0021; the post-apply read matched
-and the full posture comparison found no mismatch (52 checks).
+and the table and function posture comparison found no mismatch (52 of the suite's 109 checks).
 
 **Lesson (2026-10-18, migration 0022): the dry run passed and the push was refused.** 0022's first
 draft set `hnsw.ef_search = 100` on `app.match_memory`. CI passed on `af4dd3a`, the rolled-back dry
@@ -1164,8 +1184,8 @@ changes were `app.match_memory` (invoker, `search_path=""` only, EXECUTE for `au
 re-created without `ON DELETE SET NULL`; the caller's path (`set_config` then the function) worked
 as `authenticated` and `service_role` and was refused to `anon`; after the rollback the catalog
 equalled the snapshot. Pushed with the CLI **2026-10-18 12:29 UTC**; `migration list` identical
-through 0023; the post-apply read matched and the full posture comparison found no mismatch (54
-checks). The two Phase 4 criteria were then checked on the project itself, rolled back
+through 0023; the post-apply read matched and the table and function posture comparison found no mismatch (54
+of the suite's 111 checks). The two Phase 4 criteria were then checked on the project itself, rolled back
 (`Phases.md` Phase 4).
 
 **0024 (decay revocation record).** Dry run 2026-10-20 with `live_migration_dry_run.py` on a fresh
@@ -1180,7 +1200,7 @@ their name; the evaluation count excluded E2E Org A (`is_test`). After the rollb
 equalled the snapshot; `memory_items` held 0 rows. Approved by the owner, CI green on `b553c30`,
 pushed with the CLI **2026-10-20 10:42 UTC**; `migration list` identical through 0024; the
 post-apply read found the new constraint and the function body hash the dry run predicted, and the
-full posture comparison found no mismatch (54 checks).
+table and function posture comparison found no mismatch (54 of the suite's 111 checks).
 
 ### Live project — permanent footprint
 
