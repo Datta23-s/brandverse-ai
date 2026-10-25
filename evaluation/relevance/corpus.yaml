@@ -1,485 +1,484 @@
 # Relevance corpus: marketing memory for three fictional brands (docs/evaluation-plan.md section 7).
-# Drafted 2026-10-25 from brief.md WITH the 50 queries in view (queries.lock froze them first).
-# Each item is one fact in the form of a memory item (Memory.md section 6): no prices, discounts,
-# promo codes, campaign dates, personal data or accented characters. Fictional brands throughout.
-# Only id and text are read by the pool builder; brand and kind are for loading memory_items.
+# Drafted 2026-10-25 by a session instructed to read brief.md and nothing else (its own report lists no
+# other file); it was never shown the 50 queries or the pool. This replaces the first corpus, which was
+# drafted with the queries in view and is kept in superseded/reversed-order/. Only id and text are read by the pool builder.
 - id: mp-01
   brand: mettlepan
-  kind: persona
-  text: "Couples setting up their first kitchen together want a small set of pans that covers everyday cooking and lasts, bought once rather than replaced. They are practical and watch their budget, and they respond to a plain answer about what they actually need more than to the size of the range."
+  kind: insight
+  text: "Mettlepan is a direct-to-consumer cookware brand from Bengaluru, positioned in the mid-premium band. Its promise is cookware for people moving away from non-stick coatings, built in tri-ply stainless steel and pre-seasoned cast iron."
 - id: mp-02
   brand: mettlepan
   kind: persona
-  text: "Health-conscious home cooks replacing non-stick pans are often worried about coatings that flake or wear, and about what ends up in their food. They want reassurance that steel and iron are simple and safe, and a plain guide to cooking without food sticking."
+  text: "Young couples setting up a first kitchen are a core Mettlepan customer. They want a small set of durable pieces that will last years, rather than a cupboard of cheap pans they will replace, and they look for guidance on what to buy first."
 - id: mp-03
   brand: mettlepan
   kind: persona
-  text: "Gift buyers around weddings and festivals want something useful that the receiver will keep for years. When they cannot judge individual pans, they choose a ready-made set, and their main worry is choosing wrongly."
+  text: "Health-conscious home cooks replacing non-stick are a core Mettlepan audience. They worry about worn coatings and fumes at high heat, read up on materials before buying, and want reassurance that stainless and cast iron are easy to live with."
 - id: mp-04
   brand: mettlepan
   kind: persona
-  text: "Some cooks like the idea of cast iron but fear rust and upkeep. They need the routine to feel short and forgiving, a minute of care after cooking, not a ritual that has to be done perfectly."
+  text: "Gift buyers around weddings and festivals form a third Mettlepan customer type. They are often not cooks themselves, so they need a clear, recognisable gift choice, good presentation and simple wording about what the set contains and why it lasts."
 - id: mp-05
   brand: mettlepan
   kind: persona
-  text: "Viewers of YouTube recipe creators copy the creator's pan, heat and oil almost exactly. They trust a result they have watched being cooked more than any claim made in words."
+  text: "Mettlepan's health-conscious buyers are usually cautious switchers who fear food will stick on stainless steel or that cast iron is hard to maintain. Content that shows the first few cooks step by step addresses the worry that stops them buying."
 - id: mp-06
   brand: mettlepan
   kind: persona
-  text: "Marketplace shoppers compare listings side by side and decide from the first image, the list of what is in the pack and a plain description. They rarely visit the brand's own website before buying."
+  text: "First-kitchen couples at Mettlepan often decide together and compare options across the website and marketplaces before ordering. They value clear set contents, honest descriptions of what each piece is for, and reviews from people in a similar situation."
 - id: mp-07
   brand: mettlepan
   kind: competitor
-  text: "Cookhaus sells mass-market non-stick cookware and is almost always running a sale. Mettlepan does not try to match it on the day. The argument is how long a pan lasts and what it replaces, not being cheaper this week."
+  text: "Ironvale is a cast-iron specialist competing with Mettlepan, and its strength is a heritage story about traditional foundry craft. It is credible with cast-iron purists but offers little in stainless steel, so Mettlepan can lead with a broader everyday range."
 - id: mp-08
   brand: mettlepan
   kind: competitor
-  text: "People who compare Mettlepan with Cookhaus are usually buying their first pan and judging on the shelf price. Answer with cost over years of use: one steel or iron pan against replacing a coated pan each time the coating wears. Say it calmly and do not run Cookhaus down."
+  text: "Cookhaus is the mass-market non-stick competitor to Mettlepan and is known for frequent sales and promotion-led advertising. Mettlepan does not match it on price messaging and instead speaks to buyers who are tired of coatings that wear out."
 - id: mp-09
   brand: mettlepan
   kind: competitor
-  text: "Ironvale is a cast-iron specialist with a strong heritage story, built on tradition and long family use. Mettlepan does not claim heritage. Its position is modern and practical: pre-seasoned, ready to cook with from the first day."
+  text: "Against Ironvale, Mettlepan should avoid a contest over who has the older tradition. The better contrast is that Mettlepan pre-seasons its cast iron and pairs it with stainless, so a new cook can start cooking on the first day."
 - id: mp-10
   brand: mettlepan
   kind: competitor
-  text: "Ironvale's heritage story gives little practical help to someone buying cast iron for the first time. Against it, Mettlepan opens with what a new buyer needs: a pan that arrives seasoned and a simple first-week routine, and leaves the history to Ironvale."
+  text: "Cookhaus wins on convenience and low entry cost, which is why Mettlepan never claims that its pans are as effortless as non-stick. It frames the extra care as a short, learnable habit that rewards the cook with cookware that lasts."
 - id: mp-11
   brand: mettlepan
   kind: competitor
-  text: "When a competitor is always on sale, do not mention sales in Mettlepan copy, and do not answer a sale with a promotion of our own. Talk about the pan's lasting value and let the comparison stand without a number in it."
+  text: "Buyers who compare Mettlepan with Cookhaus on marketplace listings tend to judge on coating worry and longevity, while those comparing with Ironvale judge on craft and weight. Mettlepan listings should address both comparisons directly and calmly."
 - id: mp-12
   brand: mettlepan
   kind: insight
-  text: "Never disparage people who cook with non-stick. Acknowledge that it was a sensible choice at the time, then show what changes with steel or iron: heat the pan first, use a little oil, give it a moment. People who feel judged stop reading."
+  text: "Mettlepan's voice is practical, warm, and a little proud of doing things the slow way. Copy explains how a thing works, uses everyday kitchen words, and treats patience with a pan as a pleasure rather than a chore."
 - id: mp-13
   brand: mettlepan
   kind: insight
-  text: "Tri-ply stainless is the everyday pan: lighter, even heat, no seasoning, and fine for acidic dishes such as tomato gravies. Cast iron is the heavy heat-holder for searing, rotis and slow cooking, and it improves with use. Present them as two tools for different jobs, not as rivals."
+  text: "Mettlepan copy avoids fear-based language about non-stick coatings. It states what its materials are and what they offer, and lets the customer draw the conclusion, because alarmist wording clashes with the warm, practical voice of the brand."
 - id: mp-14
   brand: mettlepan
   kind: insight
-  text: "Tri-ply steel is washed and dried like any steel pan. Cast iron must be dried straight away and given a thin coat of oil. When explaining the difference between the two, say which routine the reader is signing up for before they choose."
+  text: "The biggest barrier in Mettlepan's category is fear of the learning curve: food sticking on stainless and rust on cast iron. Knowledge that removes this fear, such as heat control and seasoning habits, matters more than product specifications."
 - id: mp-15
   brand: mettlepan
   kind: insight
-  text: "The fear that cast iron is too much maintenance is mostly a fear of rust. Answer with the short routine: wipe, dry on the heat, one thin coat of oil. Add that a lapse can be repaired with a scrub and a fresh seasoning, so nothing is ruined by one mistake."
+  text: "Mettlepan treats its own website as the place for depth, with care guides, recipes and set explanations, while marketplaces are where many first-time buyers discover and compare. The website carries the full story and the marketplace listing carries the essentials."
 - id: mp-16
   brand: mettlepan
   kind: insight
-  text: "Pre-seasoned means the pan can be used from the first day, and the seasoning builds with use. The easiest way to start is to cook dishes with some fat in them for the first week, which also teaches the new owner how the pan behaves."
+  text: "Indian home cooking is heavy on high-heat tempering, frying and flatbread making, so Mettlepan cookware is best presented through familiar dishes. Showing a kadai with a real sabzi or a tawa with rotis is more convincing than abstract material talk."
 - id: mp-17
   brand: mettlepan
   kind: insight
-  text: "People who throw out non-stick pans often do so after worrying about a scratched coating. Talk to them about what to cook in next, and how steel and iron cook differently: preheat, add oil, be patient. Otherwise a first egg that sticks makes them give up."
+  text: "Wedding and festival gifting is a recurring seasonal pattern in Mettlepan's category. The brand keeps gifting messages centred on lasting value and the start of a household, and never on urgency or pressure to buy."
 - id: mp-18
   brand: mettlepan
   kind: insight
-  text: "Most sticking complaints in the first week come from not preheating the pan. A three-step line prevents them: heat the pan first, then add oil, then add food. Put it on the pack insert and in every first-use video."
+  text: "Mettlepan's two marketplaces serve shoppers who arrive with a search term such as tawa or kadai, so product titles should name the item and its material plainly. The brand's slower, proud voice shows up in the description, not the title."
 - id: mp-19
   brand: mettlepan
   kind: claim
-  text: "The first-kitchen starter set has three pieces: a tri-ply kadai, a tri-ply saucepan and a pre-seasoned cast-iron tawa. They were chosen to cover everyday Indian cooking for two people."
+  text: "Mettlepan's stainless cookware uses a tri-ply build: an aluminium core sandwiched between two layers of stainless steel. The core spreads heat across the base and up the sides, which helps reduce hot spots when cooking."
 - id: mp-20
   brand: mettlepan
-  kind: insight
-  text: "The starter set is for couples furnishing a first kitchen and for people giving them a gift. Lead with 'everything you need to cook your first month' and avoid the word 'basic', which reads as cheap and undersells a set built to last."
+  kind: claim
+  text: "The Mettlepan tri-ply stainless kadai is a deep, wide-mouthed pan with two riveted handles, designed for frying, tempering and curries. Its stainless cooking surface is suitable for metal utensils and for cooking on gas and induction hobs."
 - id: mp-21
   brand: mettlepan
-  kind: insight
-  text: "In festival season the starter set is bought as a gift. Show it as a boxed, ready-to-give set and speak to the giver's worry about choosing right, not to cooking technique. Lead with usefulness and leave offers out of the headline."
+  kind: claim
+  text: "Mettlepan's tri-ply stainless saucepans have a tight-fitting lid and a pouring rim, and are meant for boiling milk, making tea, cooking dal and reheating. They are made from the same tri-ply construction as the kadai."
 - id: mp-22
   brand: mettlepan
-  kind: insight
-  text: "For wedding gifting the angle is 'the first thing they cook in': a gift that begins a couple's cooking life together. Stress that it will last for years and that a set suits relatives who want to give one joint gift."
+  kind: claim
+  text: "The Mettlepan cast-iron tawa and skillet come pre-seasoned, which means a baked-on layer of oil is applied at the factory so the pan can be used soon after washing. Users are still advised to keep seasoning it through regular cooking."
 - id: mp-23
   brand: mettlepan
-  kind: insight
-  text: "Gifting copy should name the moment, a new home or a new marriage, before it names any specification. Keep the specifications for the product page beneath the story, where a careful giver will look for them."
+  kind: claim
+  text: "Mettlepan cast iron is heavy and holds heat for a long time, which suits rotis, dosas and searing. Because of the weight, the product descriptions say so openly and point out the helper handle on the skillet."
 - id: mp-24
   brand: mettlepan
-  kind: insight
-  text: "When talking to a couple, speak to both partners and show two people cooking together. Do not assume who does the cooking. The first-kitchen conversation is about building a shared habit, so pictures of cooking together work better than a single cook."
+  kind: claim
+  text: "The Mettlepan first kitchen set has three pieces: a tri-ply stainless kadai with lid, a tri-ply stainless saucepan, and a pre-seasoned cast-iron tawa. It is intended to cover everyday Indian cooking for a new household."
 - id: mp-25
   brand: mettlepan
   kind: claim
-  text: "Mettlepan tri-ply cookware has an aluminium core between two layers of stainless steel, which spreads heat across the base and up the sides of the pan."
+  text: "Mettlepan's care accessories are a cleaning scrub and a seasoning oil. The scrub is for removing stuck-on food without stripping seasoning from cast iron, and the oil is a thin food-safe coating applied after drying to maintain the pan."
 - id: mp-26
   brand: mettlepan
   kind: claim
-  text: "Mettlepan cast-iron tawa and skillet are sold pre-seasoned and can be used without any preparation."
+  text: "Mettlepan stainless steel pieces are non-reactive, so cooking tomato or tamarind based dishes does not alter taste. This is a material property of food-grade stainless steel, and the brand states it without suggesting any health benefit."
 - id: mp-27
   brand: mettlepan
   kind: claim
-  text: "Mettlepan tri-ply pans work on induction, gas and electric hobs. The cast-iron pieces also work on all three."
+  text: "Mettlepan's cast-iron cookware should be dried promptly after washing and lightly oiled to prevent rust. The brand states this plainly in its care guidance, because honesty about upkeep builds more trust than claiming the pans are maintenance-free."
 - id: mp-28
   brand: mettlepan
   kind: claim
-  text: "Mettlepan cast iron is not dishwasher safe. It should be washed by hand, dried straight away and given a thin coat of oil. The tri-ply pans can be washed in the usual way."
+  text: "Mettlepan stainless pieces carry no non-stick coating of any kind, so there is no layer to chip or flake. The brand can say its stainless range is coating-free, but it does not compare itself with named non-stick makers."
 - id: mp-29
   brand: mettlepan
   kind: claim
-  text: "Mettlepan's care accessories are a cleaning scrub and a seasoning oil. The oil goes on in a thin coat after drying cast iron, and the scrub removes stuck-on food from both steel and iron."
+  text: "Mettlepan states that its cast iron is not dishwasher safe and that harsh detergent should be avoided on seasoned surfaces. Its stainless pieces tolerate dishwashing, though hand washing is recommended to keep the finish looking new."
 - id: mp-30
   brand: mettlepan
-  kind: insight
-  text: "Mettlepan's voice is practical and warm, and a little proud of doing things the slow way. It explains before it sells, and it sounds like a cook who knows the pan, not like an advertisement."
+  kind: creative
+  text: "Recipe content from Instagram and YouTube creators has been the strongest format for Mettlepan, because viewers see a real dish cooked in the pan from start to finish. Creators who cook everyday food convert better than polished studio films."
 - id: mp-31
   brand: mettlepan
-  kind: insight
-  text: "Mettlepan is conversational but not slangy: short sentences, 'you' and 'we'. Exclamation marks are rare, at most one in a social post and none on product pages. Formality is that of a helpful neighbour who cooks well."
+  kind: creative
+  text: "Mettlepan's seasoning and care explainers, shown as short step-by-step videos, have consistently drawn saves and questions. They work because they remove the fear of owning cast iron, and they suit short vertical formats well."
 - id: mp-32
   brand: mettlepan
-  kind: insight
-  text: "For the slow, careful way Mettlepan makes things, use plain words: made slowly, seasoned with care, properly made, takes time. Avoid 'artisanal' and 'handcrafted' unless a process really is done by hand, and avoid heritage words that belong to Ironvale."
+  kind: creative
+  text: "Creative that dramatises the problem of peeling non-stick pans has drawn comments but often reads as scolding. The team learned to show the pleasure of cooking in steel or iron instead of attacking the old pan."
 - id: mp-33
   brand: mettlepan
   kind: creative
-  text: "On Instagram, Mettlepan posts lead with one picture of food cooking in the pan and one short line, in a lighter tone. The detail of care and specifications stays on the website, so a post never has to carry everything."
+  text: "Slow-cooking and patience themes, such as a long simmer or a tawa heating up before the first roti, fit Mettlepan's proud-of-the-slow-way voice and have been well received. Fast, hype-driven edits feel off-brand."
 - id: mp-34
   brand: mettlepan
   kind: creative
-  text: "The Mettlepan website is where the fuller explanations live: care guides, comparisons of tri-ply and cast iron, and specifications. Its tone is a little more careful and complete than Instagram's, and still free of slang."
+  text: "Marketplace listing imagery for Mettlepan works best with a clear first image of the pan on white, followed by images showing size, handle detail, base construction and a dish in the pan. Lifestyle shots belong after the practical ones."
 - id: mp-35
   brand: mettlepan
   kind: creative
-  text: "For YouTube recipe creators, give the facts to say, such as preheating, the oil and the heat, and then let them cook. Ask them to show the pan in use rather than read a script, and to say nothing about health beyond what the product page states."
+  text: "Gift-focused Mettlepan creative performs best when it shows the first kitchen set as a complete, boxed present with a short note about what each piece does. Generic festive imagery without product detail has been less effective."
 - id: mp-36
   brand: mettlepan
   kind: creative
-  text: "Past Instagram posts showing a pan's care routine in under a minute were saved more often than product shots on a plain background. The short routine reassures cast-iron-hesitant cooks before they ask."
+  text: "Mettlepan has found that comparison-table graphics between stainless, cast iron and non-stick are widely shared, provided they stay neutral and factual. Tables that rank products with clear winners and losers draw distrust."
 - id: mp-37
   brand: mettlepan
   kind: creative
-  text: "On marketplace listings the first image shows everything in the starter set laid out together. The bullet list names each piece and who the set is for, because shoppers decide from that image and that list."
+  text: "Customer kitchen photographs, such as a well-used seasoned tawa or a scratched but loved kadai, add credibility to Mettlepan's pages. They show that the cookware ages gracefully, which supports the long-lasting promise."
 - id: mp-38
   brand: mettlepan
-  kind: creative
-  text: "A before-and-after format works for people leaving non-stick: what I cooked in my old pan, and what I cook in now. It has done better than facts about coatings, because it shows the result instead of arguing about the pan."
+  kind: sector
+  text: "Cookware sold in India must be suitable for contact with food, and Mettlepan should only state that its pieces are food grade where it holds supporting material specifications. Material descriptions on listings must match the actual alloy and build."
 - id: mp-39
   brand: mettlepan
   kind: sector
-  text: "Kitchenware is not a regulated sector, but words such as 'chemical-free' or 'non-toxic' need support. Describe the materials factually instead: stainless steel, aluminium core, pre-seasoned cast iron."
+  text: "In kitchenware marketing, claims such as toxin-free, chemical-free or healthier cooking are risky unless they can be substantiated. Mettlepan describes materials and construction factually and avoids implied medical or health outcomes."
 - id: mp-40
   brand: mettlepan
   kind: sector
-  text: "Do not promise that cast iron will never rust or that any pan lasts a lifetime. Say that with care it lasts for years. Absolute promises about durability are the first claims a reviewer will refuse."
+  text: "Marketplaces in India require accurate listing details for cookware, including material, dimensions, weight and compatible hobs. Mettlepan keeps these fields consistent with the website and package, so that returns and complaints about mismatch are avoided."
 - id: zv-01
   brand: zarvik
-  kind: persona
-  text: "People training for their first half marathon worry about fuelling, cramps and recovery. They want a simple plan for what to take before, during and after a long run, not a lecture, and reassurance that ordinary food comes first."
+  kind: insight
+  text: "Zarvik Nutrition makes plant-based supplements for urban Indian adults who train two to four times a week. It sits at a mid price point and presents itself as a dependable everyday option, not an extreme performance or transformation brand."
 - id: zv-02
   brand: zarvik
   kind: persona
-  text: "Gym-goers who avoid dairy do so for lactose intolerance, digestion or preference. They want protein that suits them, and they do not want to be told what they are missing or made to feel that avoiding dairy is a problem."
+  text: "Gym-goers who avoid dairy are a core Zarvik audience. They may be lactose intolerant, vegetarian or simply dairy-averse, are tired of whey-based defaults, and want a protein that digests comfortably and tastes acceptable when mixed with water."
 - id: zv-03
   brand: zarvik
   kind: persona
-  text: "Working professionals who want a simple daily routine prefer one or two products taken at a fixed moment. They make few decisions about supplements and drop anything that feels like a regimen."
+  text: "Runners training for their first half-marathon are a Zarvik persona with distinct needs: hydration on long runs, steady recovery and a manageable routine. They are beginners who read a lot, join running clubs and want practical, non-intimidating advice."
 - id: zv-04
   brand: zarvik
   kind: persona
-  text: "Members of running clubs trust their club-mates more than any advertisement. They pass on practical advice and respond to trying a product at a club session, where they can ask other runners what they think."
+  text: "Working professionals who want a simple daily routine are the third Zarvik customer type. They have little time, dislike complicated stacks, and prefer one or two products that fit into a morning or evening habit without much thought."
 - id: zv-05
   brand: zarvik
   kind: persona
-  text: "Some lifters have been told that whey is the only serious protein. They want the evidence and the numbers stated plainly, and they are quick to notice a claim that goes further than the data."
+  text: "Zarvik's dairy-free gym customers are often sceptical of plant protein because of past experience with chalky texture or an unclear amino acid story. Honest description of what the protein contains and how it mixes earns more trust than superlatives."
 - id: zv-06
   brand: zarvik
   kind: persona
-  text: "Quick-commerce shoppers order on impulse from small listings and compare in seconds. They need the one-line reason to buy, the flavour and the pack contents on the listing itself."
+  text: "First-time half-marathon runners buying from Zarvik are often guided by a running club, a coach or a fitness creator. They ask peers before buying, so word-of-mouth settings and group recommendations carry more weight than direct advertising."
 - id: zv-07
   brand: zarvik
   kind: competitor
-  text: "PlantFuel is cheaper and sells plant protein in bulk tubs. Zarvik does not compete on cost per kilo. Compare on what is in each serving, how it tastes and how it mixes, and never attack PlantFuel or its customers."
+  text: "PlantFuel is a plant-based competitor to Zarvik that wins on lower cost and large bulk tubs. Zarvik does not compete on size or cheapness, and instead emphasises ingredient clarity, flavour quality and a clear label."
 - id: zv-08
   brand: zarvik
   kind: competitor
-  text: "When someone asks why Zarvik costs more than PlantFuel, do not pretend the gap is not there. Acknowledge it, then say plainly what the buyer gets: a defined pea-and-rice blend, two flavours, and clear labelling per serving. Let the buyer decide whether that is worth it."
+  text: "VitaNest is a premium supplement brand sold on pharmacy shelves, and its strength is clinical-sounding authority and pharmacist recommendation. Zarvik differs by being plain-spoken, plant-based and aimed at active adults rather than patients."
 - id: zv-09
   brand: zarvik
   kind: competitor
-  text: "VitaNest is premium and sits on pharmacy shelves, which lends it the authority of the pharmacy. Zarvik cannot borrow that by claiming it. It competes by showing its evidence plainly and by being available where people train."
+  text: "Against PlantFuel, Zarvik's audience often asks whether the extra spend is justified. The standing answer is about what is in each serving and how it tastes, never a disparaging comparison of the competitor's products or ingredients."
 - id: zv-10
   brand: zarvik
   kind: competitor
-  text: "Never suggest that a product is better because it is sold in a pharmacy, or that Zarvik is a medicine. When positioning against VitaNest, say that supplements are not a substitute for medical advice and leave the pharmacy shelf to VitaNest."
+  text: "Against VitaNest, Zarvik should not imitate medical language or pharmacy-style authority, which would clash with its evidence-minded but plain voice and risk crossing sector rules. It earns credibility through clear labels and cited sources."
 - id: zv-11
   brand: zarvik
   kind: competitor
-  text: "In gyms, PlantFuel is the bulk buy for people who purchase by the month. Zarvik is the choice for people who train two to four times a week and want a product they like, not the largest tub."
+  text: "Zarvik's competitors reach buyers through different doors: PlantFuel through large online tubs and VitaNest through chemists. Zarvik concentrates on its own website, quick-commerce, gyms, running clubs and creators, where its active audience already is."
 - id: zv-12
   brand: zarvik
-  kind: claim
-  text: "Zarvik plant protein is a pea-and-rice blend. One serving provides 24 g of protein."
+  kind: insight
+  text: "Zarvik's voice is plain-spoken, evidence-minded and never preachy. It explains what a product contains and what the evidence says in short sentences, does not lecture about lifestyle, and avoids hype words such as miracle or ultimate."
 - id: zv-13
   brand: zarvik
-  kind: claim
-  text: "Zarvik plant protein comes in two flavours, chocolate and vanilla. Chocolate is richer and works well shaken with a plant milk. Vanilla is lighter and blends easily into oats or a smoothie."
+  kind: insight
+  text: "Many Zarvik customers are beginners in fitness and nutrition, so the brand avoids jargon and explains terms when it uses them. Education about daily protein habits, hydration and rest builds a relationship before any product mention."
 - id: zv-14
   brand: zarvik
   kind: insight
-  text: "To help someone choose between the two protein flavours: chocolate for a shake after training, vanilla for adding to breakfast or a smoothie. Say that taste is personal and offer the smaller pack to try one first."
+  text: "Quick-commerce apps suit Zarvik's impulse and replenishment purchases, such as an electrolyte pack on the way to a run. Listings there have very little space, so the product name, flavour and serving format must be clear at a glance."
 - id: zv-15
   brand: zarvik
-  kind: claim
-  text: "Zarvik electrolyte mix contains sodium, potassium and magnesium, with a small amount of sugar. It is mixed into water."
+  kind: insight
+  text: "Gyms and running clubs are trusted community channels for Zarvik. Presence there works through sampling, talks and shared routines, and the brand shows up as a supporter of the group rather than as a salesperson."
 - id: zv-16
   brand: zarvik
   kind: insight
-  text: "The electrolyte mix is for long sessions and hot-weather runs, when someone is sweating a lot, during or after. For a short easy session, plain water is enough, and saying so keeps Zarvik credible."
+  text: "Fitness creators are an important Zarvik channel, but the brand briefs them to share genuine usage and to disclose the partnership. It does not hand creators scripts with health or performance promises that the brand could not itself make."
 - id: zv-17
   brand: zarvik
-  kind: claim
-  text: "Zarvik multivitamin gummies are taken once a day. They are a supplement to a varied diet and not a replacement for one."
+  kind: insight
+  text: "Urban Indian adults who train are often confused by supplement marketing that promises rapid transformation. Zarvik's steady, modest and routine-based message stands out, and the team treats restraint as a deliberate brand asset."
 - id: zv-18
   brand: zarvik
   kind: insight
-  text: "For a daily routine, tie each product to a moment that already exists: protein after a workout, gummies with breakfast, the magnesium powder as part of winding down. A product tied to an existing habit is taken longer than one that needs a new routine."
+  text: "Zarvik's own website is where full ingredient lists, nutrition panels, usage directions and the evidence behind its statements live. Other channels summarise and point back to it so that a sceptical buyer can verify every statement."
 - id: zv-19
   brand: zarvik
-  kind: insight
-  text: "For someone starting a new routine, suggest one product first and keep it for four weeks before adding another. People drop off when they are asked to take too much too soon, and a small start keeps the promise honest."
+  kind: claim
+  text: "Zarvik's plant protein is a blend of pea protein and rice protein. Combining the two sources gives a broader amino acid profile than either alone, and the product contains no dairy ingredients."
 - id: zv-20
   brand: zarvik
-  kind: insight
-  text: "Say 'plant-based' and 'contains no dairy' plainly. Do not imply that dairy is bad or that people who eat it are wrong. The point for people who avoid dairy is simply that this protein is made for them."
+  kind: claim
+  text: "Zarvik plant protein is sold in two flavours, a chocolate and a vanilla. Both are sweetened and flavoured to be pleasant when shaken with water, and the flavour descriptions must match the label and the ingredients list."
 - id: zv-21
   brand: zarvik
-  kind: insight
-  text: "Do not promise that Zarvik protein will not cause bloating or that it is gentle on every stomach. What can be said is that the blend contains no dairy and no lactose, which is a fact about the ingredients."
+  kind: claim
+  text: "Zarvik's electrolyte drink mix contains sodium, potassium and magnesium with a small amount of sugar for taste, and is mixed into water. It is described as a way to replace fluids and salts lost through sweat during exercise."
 - id: zv-22
   brand: zarvik
-  kind: insight
-  text: "The honest answer to 'plant protein does not work as well as whey' is that both give a complete set of amino acids in a typical serving, and what matters most for results is total daily protein and consistent training. Do not say plant is better. Do not say it is worse."
+  kind: claim
+  text: "Zarvik multivitamin gummies are a chewable daily format containing a range of vitamins and are intended for adults. The brand notes they are a supplement to a varied diet and not a replacement for meals."
 - id: zv-23
   brand: zarvik
   kind: claim
-  text: "Together, pea and rice protein supply all nine essential amino acids, which is why Zarvik uses a blend of the two rather than one source alone."
+  text: "Zarvik's sleep-support magnesium powder is a flavoured powder with magnesium, taken in the evening mixed with water. It is positioned as a nutritional supplement that contributes to normal magnesium intake, not as a treatment for sleeplessness."
 - id: zv-24
   brand: zarvik
-  kind: insight
-  text: "For a first half marathon, say that real food comes first. Zarvik fits after long runs, where protein is useful, and during long runs in heat, where electrolytes are. Present neither as required to finish."
+  kind: claim
+  text: "Zarvik states clearly that its products are food supplements and are not medicines. They are not intended to diagnose, treat, cure or prevent any disease, and this statement appears on the website and pack."
 - id: zv-25
   brand: zarvik
-  kind: insight
-  text: "Talk to first-time half marathon runners about finishing, not about a time. Do not promise speed or set pace targets. The message is that preparation and consistency matter more than any product."
+  kind: claim
+  text: "Every Zarvik product states a recommended serving and a notice that the stated daily intake should not be exceeded. The brand also advises that supplements should not replace a varied balanced diet and a healthy lifestyle."
 - id: zv-26
   brand: zarvik
   kind: claim
-  text: "The evidence file on plant versus whey protein cites a single study in resistance-trained adults that compared gains in lean mass and strength over 12 weeks and found no meaningful difference between the two groups. It measured lean mass and strength. It did not measure recovery, soreness or sleep."
+  text: "Zarvik lists allergen information on every product page, including soy, nut or gluten traces where they could apply from shared manufacturing facilities. Allergen statements must always match the current pack label exactly."
 - id: zv-27
   brand: zarvik
-  kind: insight
-  text: "Wording that can be used about plant protein after training: protein after training helps people meet their daily protein needs, as part of a varied diet. Zarvik does not say its protein speeds recovery or reduces soreness, because the evidence on file does not measure either."
+  kind: claim
+  text: "Zarvik plant protein is suitable for vegetarians and vegans, and the brand may call it plant-based and dairy-free. It does not claim that plant protein is better than whey, since the evidence supports comparable use rather than superiority."
 - id: zv-28
   brand: zarvik
   kind: creative
-  text: "A past post said plant protein 'helps you recover faster'. It was held back at review because the only supporting claim was the protein content per serving, which says nothing about how fast anyone recovers. A cited claim has to say what the sentence says."
+  text: "Zarvik's best-received creative explains one thing at a time, such as what electrolytes do during a long run, in a calm and simple format. Dense infographics packed with several claims are saved less and questioned more."
 - id: zv-29
   brand: zarvik
-  kind: claim
-  text: "One serving of Zarvik magnesium powder contains 200 mg of magnesium. It is a powder mixed into water, taken in the evening."
+  kind: creative
+  text: "Before-and-after body imagery is off limits for Zarvik. It conflicts with the never-preachy voice and with sector rules on implied outcomes, and the team uses everyday training, routines and ingredients as visual material instead."
 - id: zv-30
   brand: zarvik
-  kind: claim
-  text: "The approved wording on file for magnesium is that it contributes to the reduction of tiredness and fatigue. The wording on file is about tiredness. It is not about sleep."
+  kind: creative
+  text: "Long-run and training-block diaries by running club members have worked well for Zarvik. They are honest, show the electrolyte mix as one part of a routine, and avoid promising that a product produced a result."
 - id: zv-31
   brand: zarvik
-  kind: insight
-  text: "Talk about the magnesium powder as part of an evening wind-down routine. Never say it helps you fall asleep, fixes sleep or treats insomnia. Those are health claims, and the evidence on file does not support them."
+  kind: creative
+  text: "Taste-test and mixing videos for Zarvik plant protein answer the main doubt about texture. Showing the shake being made with water and drunk straight away builds more trust than describing the flavour in words."
 - id: zv-32
   brand: zarvik
   kind: creative
-  text: "A creator draft said the magnesium powder 'knocks you out' and 'fixes your sleep'. It was rejected. The magnesium claim on file is about tiredness and fatigue, and a creator's enthusiasm does not widen it."
+  text: "Zarvik's morning and evening routine content, such as a gummy with breakfast or magnesium after dinner, resonates with working professionals. Simple, repeatable habit framing performs better than fitness-intensity framing for this group."
 - id: zv-33
   brand: zarvik
-  kind: sector
-  text: "Illustrative rule for the supplements sector (synthetic, not from any regulation): 'miracle cure' is prohibited, and so is any promise of guaranteed results. Protein copy must carry the line that protein content varies by serving size, and all output carries a consult-a-professional line."
+  kind: creative
+  text: "Creator content for Zarvik works when the creator is a real trainee who explains why they chose a plant-based product. Highly produced testimonials that read like scripts draw scepticism from this audience."
 - id: zv-34
   brand: zarvik
-  kind: sector
-  text: "Supplement copy must not state or imply that a product treats, cures or prevents a disease or a medical condition, including insomnia and injury. Describe what a product contains and the approved wording for it, and no more."
+  kind: creative
+  text: "On quick-commerce listings, Zarvik's cleanest creatives show the pack front, flavour, serving format and one plain descriptor. Crowded banners with several claims are hard to read in small thumbnails."
 - id: zv-35
   brand: zarvik
-  kind: insight
-  text: "Zarvik is plain-spoken and evidence-minded and never preachy. It uses short sentences, says what a product is and what it contains before what it does, and states a limit when there is one."
+  kind: sector
+  text: "In the health supplements sector, Zarvik may not make disease claims. It must never say a product treats, cures, prevents or relieves a condition, and wording about sleep, immunity or recovery has to stay within permitted nutritional descriptions."
 - id: zv-36
   brand: zarvik
-  kind: insight
-  text: "Zarvik never sounds like a hype-driven supplement advertisement, a doctor delivering a lecture, or a wellness influencer handing out guilt. No 'should' or 'must' aimed at the reader, no drama, and no promise bigger than the label."
+  kind: sector
+  text: "Under the illustrative supplement registry rules Zarvik works to, a health-related statement must be supported by evidence on file, and the team keeps that evidence ready. A claim without a documented basis is not published."
 - id: zv-37
   brand: zarvik
-  kind: insight
-  text: "Words Zarvik avoids because they sound preachy: clean, pure, toxin-free, guilt-free, detox, biohack, no excuses, and 'you need to'. Replace them with what the product contains, in plain terms."
+  kind: sector
+  text: "Zarvik avoids implying guaranteed results such as fast muscle gain, weight loss or better sleep. Statements are phrased as what an ingredient contributes to, and testimonials may not be used to suggest an outcome the brand could not claim itself."
 - id: zv-38
   brand: zarvik
-  kind: creative
-  text: "In gym partnerships the message is shorter and spoken, in the gym's own voice, so a trainer can repeat it in one sentence. The website carries the labels, the nutrition detail and the evidence. The gym tone is more direct, and the website tone is more complete."
+  kind: sector
+  text: "Supplement advertising must not suggest that a product replaces medical advice or medication. Zarvik copy for the sleep-support powder and multivitamin gummies encourages people with medical conditions or on medication to consult a doctor first."
 - id: zv-39
   brand: zarvik
-  kind: creative
-  text: "Fitness creators get a one-page brief: what the products are, what each contains, three things that can be said, and a list of things that must not be said, mainly health claims. They use their own voice and show their real routine."
+  kind: sector
+  text: "Paid partnerships between Zarvik and fitness creators must be clearly disclosed as such, and creators must follow the same claim rules as the brand. Zarvik reviews creator drafts for prohibited health claims before they are posted."
 - id: zv-40
   brand: zarvik
-  kind: creative
-  text: "A quick-commerce listing carries one line giving the reason to buy, the flavour and what is in the pack, and nothing beyond what is on the label."
+  kind: sector
+  text: "Zarvik does not target children or make claims aimed at minors, and its gummies are labelled for adult use. Marketing images and creator choices should reflect an adult audience, and products are kept out of youth-oriented placements."
 - id: nw-01
   brand: nookwell
-  kind: persona
-  text: "Renters in their twenties furnishing a first flat have a limited budget and cannot change the walls. They want the place to look put together quickly, with pieces that come with them to the next flat."
+  kind: insight
+  text: "Nookwell Home sells cotton home textiles for rented city flats: bedsheets, cushion covers and blackout curtains that look good and survive frequent washing. It sits at an affordable to mid price level and speaks to people in small spaces."
 - id: nw-02
   brand: nookwell
   kind: persona
-  text: "Hosts who let out rooms short-term need bedding that looks fresh in photographs, survives constant washing and can be bought again in a matching set. They think in terms of turnaround between guests."
+  text: "Renters in their twenties furnishing a first flat are Nookwell's central customer. They have a small budget and little space, want the room to feel like theirs without drilling or buying furniture, and often shop on marketplaces."
 - id: nw-03
   brand: nookwell
   kind: persona
-  text: "Families redecorating for a festival refresh cushions, curtains and bedsheets together. They want colour and a festive look without replacing everything in the room."
+  text: "Families redecorating for festivals are a Nookwell customer type that refreshes cushion covers, curtains and bedding to welcome guests. They buy in sets, look for coordinated prints, and care that the fabrics will stay colourful after repeated washing."
 - id: nw-04
   brand: nookwell
   kind: persona
-  text: "Marketplace-first shoppers read the ratings and look at the photographs before anything else. They compare several sets in one sitting and rarely go on to the brand's own website."
+  text: "Hosts who let out rooms short-term are a third Nookwell customer. They need linen that looks fresh in photographs, washes quickly between guests, and can be bought again in matching sets as items wear."
 - id: nw-05
   brand: nookwell
   kind: persona
-  text: "Tenants in small flats care about light, storage and a room that does not feel crowded. They like ideas that work in the space they have and distrust pictures of big rooms."
+  text: "Nookwell's young renters tend to move often, so they value items that pack easily, fit standard beds and windows, and work in a new flat. A bundle that covers the basics in one purchase is attractive to them."
 - id: nw-06
   brand: nookwell
   kind: persona
-  text: "Followers of home-decor creators on Pinterest and Instagram save ideas for later. They look for colour palettes, real small rooms and before-and-after changes they could copy in a rental."
+  text: "Short-term hosts judge Nookwell on durability and consistency. They wash linen frequently, need colours that do not fade or bleed, and care about being able to reorder the same design so that rooms look uniform."
 - id: nw-07
   brand: nookwell
   kind: competitor
-  text: "SoftLoom sells premium, hotel-style linen. Nookwell does not claim hotel quality. It offers good-looking cotton that is easy to wash for real flats, and says so without comparing itself to a hotel bed."
+  text: "SoftLoom is a premium competitor offering hotel-style linen, and its appeal is luxury feel and high thread count language. Nookwell does not try to be a luxury brand and instead stresses everyday comfort and practical washing."
 - id: nw-08
   brand: nookwell
   kind: competitor
-  text: "When Nookwell is compared with SoftLoom, say what each is for: SoftLoom for a bed that feels like a hotel, Nookwell for a rented flat whose sheets are washed often. Never run SoftLoom down. A fair comparison is more believable."
+  text: "Duvetly is a low-price competitor with a very wide catalogue. Nookwell cannot match its range or its lowest prices, so it competes on a focused, well-made selection of cotton that holds up in repeated washes."
 - id: nw-09
   brand: nookwell
   kind: competitor
-  text: "Duvetly has the lowest prices and a very wide catalogue. Nookwell cannot win on being cheapest or on breadth. It competes on cotton quality, a smaller set of well-chosen designs, and how the fabric looks after many washes."
+  text: "Against SoftLoom, Nookwell's advantage is accessibility: good cotton that a renter can afford and replace without worry. Messaging avoids claiming hotel luxury and presents the beds as comfortable, honest and ready for daily life."
 - id: nw-10
   brand: nookwell
   kind: competitor
-  text: "When someone compares Nookwell's prices with Duvetly's, acknowledge the difference and then talk about cost over time: sheets that keep their shape and colour after repeated washing. Keep numbers out of the answer."
+  text: "Against Duvetly, shoppers on marketplaces often see similar-looking listings side by side. Nookwell wins attention with clear fabric descriptions, true-to-colour photographs and visible reviews rather than by matching the breadth of the catalogue."
 - id: nw-11
   brand: nookwell
   kind: competitor
-  text: "Duvetly's wide catalogue can overwhelm a first-time renter. Present Nookwell's smaller range as a plus: fewer choices, and they go together, so the room comes together without a styling decision at every step."
+  text: "Nookwell sits between SoftLoom and Duvetly, offering better cotton quality than the lowest-cost catalogue and a friendlier cost than hotel-style linen. The team uses this middle position to explain value, never to criticise either rival."
 - id: nw-12
   brand: nookwell
-  kind: claim
-  text: "Nookwell offers cotton bedsheet sets in two weaves. Percale is a plain weave that feels crisp and matte and sleeps cooler. Sateen feels smooth and slightly glossy, drapes more softly and feels warmer."
+  kind: insight
+  text: "Nookwell's voice is friendly, unfussy and upbeat about small spaces. Copy talks like a helpful friend who has also lived in a rented flat, uses simple words, and treats a small room as a chance for personality."
 - id: nw-13
   brand: nookwell
   kind: insight
-  text: "To explain percale and sateen: percale for hot weather and for people who like a crisp feel, sateen for people who like a smooth, cosy feel. Renters in hot cities usually lean to percale. Neither is better, so ask how the person likes a bed to feel."
+  text: "Marketplaces are Nookwell's first channel and its own website comes second. Most first-time buyers discover the brand through marketplace search, so listing titles, images and review quality carry the most weight in winning new customers."
 - id: nw-14
   brand: nookwell
-  kind: claim
-  text: "Each Nookwell bedsheet set includes a fitted sheet, a flat sheet and pillow covers, in 100 percent cotton."
+  kind: insight
+  text: "Nookwell's own website holds the fuller story, including care guides, room ideas and the move-in bundle. It serves returning customers and people who want to see matching items together, while marketplaces handle first discovery."
 - id: nw-15
   brand: nookwell
-  kind: claim
-  text: "The move-in bundle is for new tenants. It contains a percale bedsheet set, two cushion covers and a pair of blackout curtains."
+  kind: insight
+  text: "Pinterest is the planning channel for Nookwell. People save room ideas and colour palettes there well before buying, so evergreen boards for small bedrooms and rental-friendly decor keep working long after they are posted."
 - id: nw-16
   brand: nookwell
   kind: insight
-  text: "Frame the move-in bundle as everything to make the bedroom feel like yours in an afternoon. Stress that nothing in it needs drilling or leaves a mark, which matters to every tenant with a landlord."
+  text: "Instagram home-decor creators show Nookwell products in real small flats, which makes the brand relatable to renters. The best partners style a whole corner, such as a bed with cushions and curtains, rather than a single item."
 - id: nw-17
   brand: nookwell
-  kind: claim
-  text: "Nookwell sheets are washed before they are cut and sewn to limit shrinkage, and the colour is set for repeated washing."
+  kind: insight
+  text: "Rented-flat constraints shape what Nookwell customers want: no drilling, standard curtain rods, walls they cannot repaint. Product and content that solve decor problems within these limits resonate more than aspirational interior design."
 - id: nw-18
   brand: nookwell
   kind: insight
-  text: "To answer worry about frequent washing, give care advice that is realistic: wash cool to warm, and do not over-dry. Never promise sheets that never fade or that last forever. Point to how the fabric behaves in customers' reviews."
+  text: "Festival periods repeatedly bring a shift toward refreshing the home, and Nookwell's seasonal print cushion covers speak to that behaviour. Festival messaging focuses on welcoming guests and refreshing a room without a full renovation."
 - id: nw-19
   brand: nookwell
-  kind: insight
-  text: "When talking to short-let hosts, talk about turnaround: sheets that wash easily and dry quickly, matching spare sets, and a bed that looks fresh in the listing photographs. A host's measure is how fast a room is ready for the next guest."
+  kind: claim
+  text: "Nookwell's bedsheet sets are made from cotton in two weaves, percale and sateen. Percale has a crisp, matte, cool feel, while sateen has a smoother, softer finish with a slight sheen."
 - id: nw-20
   brand: nookwell
   kind: claim
-  text: "Nookwell blackout curtains block most light but not all of it. Do not describe them as completely dark. Say that they cut out most of the light, which is what a tenant sleeping through early sun actually needs."
+  text: "A Nookwell bedsheet set includes a fitted or flat sheet in the stated bed size and matching pillow covers. The set contents and the bed size each product fits must be written plainly on every listing."
 - id: nw-21
   brand: nookwell
-  kind: insight
-  text: "For renters who cannot drill holes, curtains hang from a tension rod or adhesive hooks. Show the setup in the pictures and say that it comes off without a mark. Say 'no drilling needed' only for a curtain shown with a rod that does not need it."
+  kind: claim
+  text: "Nookwell bedsheets are described as made to survive frequent washing, and the brand backs this with colourfast dyeing and sturdy stitching. It does not promise they will never fade, and it gives machine-wash guidance on the pack."
 - id: nw-22
   brand: nookwell
-  kind: insight
-  text: "The angle for festival redecorating is small changes, big feel. Swap cushion covers and curtains for festive colours, and keep the sheets and furniture as they are. It is a refresh that costs little effort and can be put away afterwards."
+  kind: claim
+  text: "Nookwell cushion covers come in seasonal prints and have a concealed zip so the cover can be removed for washing. Covers are sold without inserts, and the listing states the cover size so buyers can match their own filler."
 - id: nw-23
   brand: nookwell
-  kind: insight
-  text: "Between seasons, present the seasonal cushion covers as a rotation. Keep neutral covers on the sofa year-round, store the set that is not in use, and change prints when the mood changes. Do not manufacture urgency for the next print."
+  kind: claim
+  text: "Nookwell blackout curtains use a thick, tightly woven, lined fabric that blocks most daylight, which helps with sleeping in a bright room. The brand says they reduce light significantly and does not say they block light completely."
 - id: nw-24
   brand: nookwell
-  kind: insight
-  text: "Be upbeat about small spaces with specifics: lighter colours, one strong cushion, a bed made to look inviting. Avoid 'tiny' and 'cramped', and do not promise a dream flat. Upbeat is believable when it is specific."
+  kind: claim
+  text: "Nookwell sheer curtains are a light cotton-blend voile that diffuses sunlight and adds some privacy while keeping a room bright. They are designed to be hung alone or layered with a blackout curtain on a double rod."
 - id: nw-25
   brand: nookwell
-  kind: insight
-  text: "For someone furnishing a first rented flat, lead with what changes a room fastest for least effort: bedsheets and curtains. Reassure them that it is all rental-safe and moves with them, so nothing is wasted if they move."
+  kind: claim
+  text: "Nookwell curtains are made to fit standard window sizes with rod-pocket or eyelet tops, so they hang on common rods without drilling or special fittings. Drop and width are listed on every product."
 - id: nw-26
   brand: nookwell
-  kind: insight
-  text: "Nookwell's voice is friendly, unfussy and upbeat about small spaces. It talks like a friend who knows linen, not like a catalogue."
+  kind: claim
+  text: "The Nookwell move-in bundle gathers the basics for a new tenant: a bedsheet set, a pair of cushion covers and a curtain pair in coordinating colours. It is built so a first flat can look finished without choosing item by item."
 - id: nw-27
   brand: nookwell
-  kind: insight
-  text: "Exclamation marks are fine in Nookwell social posts, used sparingly, no more than one a post, and never on product pages or in care instructions. Contractions are welcome. It is casual, but not loud."
+  kind: claim
+  text: "Nookwell's cotton textiles are easy to machine wash on a gentle cycle. The brand advises washing new coloured items separately at first and avoiding strong bleach, so that colours and prints keep their look."
 - id: nw-28
   brand: nookwell
-  kind: insight
-  text: "Nookwell is casual in the way a friendly neighbour is: 'your flat', not 'your living environment'. Avoid decor jargon and long sentences. Explain a weave or a fabric in a few plain words."
+  kind: claim
+  text: "Nookwell describes its fabrics by what they are, such as cotton and the weave type, and uses only fibre content that is on the label. It does not use vague luxury terms that the fabric specification cannot support."
 - id: nw-29
   brand: nookwell
   kind: creative
-  text: "A marketplace listing opens with the set on a made bed in a small bedroom. The bullets give fabric, weave, what is in the set and how to wash it. The tone is plain and factual, with the story saved for the website."
+  text: "Small-space makeover content, such as a rented bedroom styled in a single weekend with Nookwell bedding, cushions and curtains, has been Nookwell's most dependable creative format on Instagram and Pinterest."
 - id: nw-30
   brand: nookwell
   kind: creative
-  text: "The Nookwell website has room for what a marketplace listing cannot hold: room stories, a care guide and the reasons behind the designs. Its tone is a little fuller and warmer than a listing's."
+  text: "Washing-test and after-many-washes content has resonated with Nookwell's audience, since durability is the central promise. Showing the fabric colour and feel after repeated washes answers the main doubt directly."
 - id: nw-31
   brand: nookwell
   kind: creative
-  text: "Pinterest decor creators get colour palettes, print names and care notes, and are asked to show real small rooms. No scripted claims. They are asked to say honestly what they like and to leave the rest."
+  text: "Marketplace images for Nookwell sheets work best when the first image shows the full set in true colour, followed by close-ups of weave and stitching, a size guide and a styled bed. Over-edited colours cause returns and poor reviews."
 - id: nw-32
   brand: nookwell
   kind: creative
-  text: "On Instagram, a before-and-after of a rented room refreshed without drilling works well for decor creators, because it shows the thing a tenant most wants to know is possible."
+  text: "Pinterest pins for Nookwell perform best as tall images of a complete styled room with a short text line about the small-space idea. Pins that show only a single product on a plain background are saved less often."
 - id: nw-33
   brand: nookwell
   kind: creative
-  text: "Posts showing a one-afternoon bedroom refresh in a rented flat were saved more often than product-only pictures. The finished room carries the message, not the item."
+  text: "Festival-themed Nookwell creative that shows a living room with refreshed cushion covers and curtains for guests has been well received. The tone stays warm and welcoming and avoids heavy religious imagery or formulaic festive cliches."
 - id: nw-34
   brand: nookwell
   kind: creative
-  text: "Content for short-let hosts shows matching sets stacked ready for the next guest and a bed made up the way a listing photograph shows it. It speaks to the turnaround problem before it mentions fabric."
+  text: "Creators who host guests or let out rooms have been a good fit for Nookwell, since they show the practical routine of changing linen between stays. Their content speaks to the short-term host persona more credibly than a decor stylist."
 - id: nw-35
   brand: nookwell
-  kind: sector
-  text: "In home furnishing, say '100 percent cotton' only when it is true of the product, and state the weave. Do not use the phrase 'hotel quality', which implies a standard Nookwell does not claim."
+  kind: creative
+  text: "Before-and-after room reveals using the move-in bundle have been popular with Nookwell's renter audience. The best versions show a bare, ordinary rented room first, which keeps the transformation believable and attainable."
 - id: nw-36
   brand: nookwell
-  kind: sector
-  text: "Do not call bedding anti-bacterial, hypoallergenic or dust-mite resistant unless there is support for it. Describe the fabric, the weave and the care instructions, and let a reader draw their own conclusion."
+  kind: creative
+  text: "Seasonal print launches for Nookwell cushion covers are best shown on a sofa or bed alongside plain basics. This reassures shoppers that prints can be mixed with what they already own, and encourages multi-item baskets."
 - id: nw-37
   brand: nookwell
-  kind: claim
-  text: "Nookwell cushion covers close with a zip and are removed for washing. The inner cushion is sold separately."
+  kind: sector
+  text: "Textile products sold in India should carry accurate fibre content and care labelling, and Nookwell listings must state cotton content truthfully. Terms such as pure cotton or organic should only be used where the product and paperwork support them."
 - id: nw-38
   brand: nookwell
-  kind: insight
-  text: "A neutral base set with accent cushions lets a renter change the look of a room cheaply. When suggesting a first set, recommend a calm colour for the sheets and put the pattern in the cushion covers, which are easy to swap."
+  kind: sector
+  text: "Home furnishing marketing should not exaggerate fabric performance. Nookwell avoids absolute claims such as never fades, completely blackout or wrinkle-free, and uses measured wording that matches how the fabric behaves in real homes."
 - id: nw-39
   brand: nookwell
-  kind: insight
-  text: "Families expecting guests before a festival prepare the guest room early. Spare matching sets and a quick refresh of cushion covers make the room look ready, and are easier than buying a whole new set."
+  kind: sector
+  text: "Marketplace rules for home textiles require size, dimension and set-content details to be accurate, since size mismatch is a leading reason for returns. Nookwell checks bed, window and cover measurements against the product before listing."
 - id: nw-40
   brand: nookwell
-  kind: insight
-  text: "When a review complains that colours faded or fabric shrank, reply with the care instructions and an offer to help, not with a defence. Keep the reply short and factual. A calm answer is read by every future buyer who opens that review."
+  kind: sector
+  text: "Nookwell uses customer photos and reviews only with the customer's permission and does not edit reviews or images to alter their meaning. Creator posts about Nookwell products must carry a clear disclosure of the partnership."

@@ -52,25 +52,46 @@ def freeze_queries(directory: Path) -> dict[str, object]:
     )
 
 
-def freeze_corpus(directory: Path) -> dict[str, object]:
+def freeze_corpus(
+    directory: Path, supersedes: Path | None = None, reason: str | None = None
+) -> dict[str, object]:
+    """Freeze `corpus.yaml`. A corpus that replaces an earlier frozen one says so in its lock,
+    naming the earlier lock's hash and the reason: the first is kept, never overwritten."""
     corpus = directory / "corpus.yaml"
     items = yaml.safe_load(corpus.read_text(encoding="utf-8"))
     per_brand: dict[str, int] = {}
     for item in items:
         per_brand[item["brand"]] = per_brand.get(item["brand"], 0) + 1
-    return _write_lock(
-        directory / "corpus.lock",
-        {"items": len(items), "per_brand": per_brand, "sha256": {"corpus": sha256_file(corpus)}},
-    )
+    record: dict[str, object] = {
+        "items": len(items),
+        "per_brand": per_brand,
+        "sha256": {"corpus": sha256_file(corpus)},
+    }
+    if supersedes is not None:
+        if not reason:
+            raise ValueError("a superseding corpus must say why")
+        earlier = json.loads(supersedes.read_text(encoding="utf-8"))
+        record["supersedes"] = {
+            "corpus_sha256": earlier["sha256"]["corpus"],
+            "frozen_at": earlier["frozen_at"],
+            "reason": reason,
+        }
+    return _write_lock(directory / "corpus.lock", record)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("what", choices=["queries", "corpus"])
     parser.add_argument("--dir", type=Path, required=True)
+    parser.add_argument("--supersedes", type=Path, help="corpus: the earlier corpus.lock replaced")
+    parser.add_argument("--reason", help="corpus: why it was replaced")
     args = parser.parse_args()
     try:
-        record = (freeze_queries if args.what == "queries" else freeze_corpus)(args.dir)
+        record = (
+            freeze_queries(args.dir)
+            if args.what == "queries"
+            else freeze_corpus(args.dir, args.supersedes, args.reason)
+        )
     except AlreadyFrozen as e:
         print(f"not frozen: {e}")
         return 1

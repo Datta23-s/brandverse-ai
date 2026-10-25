@@ -110,6 +110,23 @@ def _opaque(seed: int, kind: str, n: int) -> str:
     return hashlib.sha256(f"{seed}:{kind}:{n}".encode()).hexdigest()[:10]
 
 
+def candidate_pools(
+    queries: Sequence[Query], items: Sequence[Item], encoder: Encoder, depth: int
+) -> dict[str, list[str]]:
+    """Per query, the union of the top `depth` of BM25 and of cosine over the encoder's vectors,
+    as a sorted list of item ids: a set, since order is decided by the shuffle in `build_pool`,
+    not by a ranker."""
+    vectors = dict(
+        zip((i.id for i in items), encoder.embed_documents([i.text for i in items]), strict=True)
+    )
+    query_vectors = encoder.embed_queries([q.text for q in queries])
+    pools: dict[str, list[str]] = {}
+    for q, qv in zip(queries, query_vectors, strict=True):
+        union = dict.fromkeys(bm25_rank(q.text, items)[:depth] + vector_rank(qv, vectors)[:depth])
+        pools[q.id] = sorted(union)
+    return pools
+
+
 def build_pool(
     queries: Sequence[Query],
     items: Sequence[Item],
@@ -127,13 +144,7 @@ def build_pool(
         raise ValueError("cannot duplicate more queries than there are")
     rng = random.Random(seed)  # noqa: S311 - a reproducible shuffle, not a secret
     text = {i.id: i.text for i in items}
-    vectors = dict(zip(text, encoder.embed_documents([i.text for i in items]), strict=True))
-    query_vectors = encoder.embed_queries([q.text for q in queries])
-
-    pools: dict[str, list[str]] = {}
-    for q, qv in zip(queries, query_vectors, strict=True):
-        union = dict.fromkeys(bm25_rank(q.text, items)[:depth] + vector_rank(qv, vectors)[:depth])
-        pools[q.id] = sorted(union)  # a set: order is decided by the shuffle below, not a ranker
+    pools = candidate_pools(queries, items, encoder, depth)
 
     repeated = rng.sample([q.id for q in queries], duplicates)
     sittings = [(q.id, False) for q in queries] + [(qid, True) for qid in repeated]

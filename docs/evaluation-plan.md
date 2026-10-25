@@ -486,57 +486,106 @@ computed on this set carries that fact. Stated plainly, as a limitation of the s
 - *What was not recorded.* Which queries Kundan changed, and how, was not kept. The set as frozen
   is the only record.
 
-**Order of events, corrected.** The list below says the corpus is drafted before the queries are
-written. What happened is the reverse: the queries existed first (frozen and hashed,
-`evaluation/relevance/queries.lock`), then the corpus was drafted from the brief **with the queries
-in view**. The labeller still never reads the corpus before labelling. The cost is on the other
-side of the independence: the corpus author knew what would be asked, so corpus wording may echo
-query wording more than a corpus written blind would, which would inflate lexical and vector
-overlap with the queries. How the corpus was drafted to limit that, and its own limitations, are
-recorded in the next subsection.
+**Order of events — an incident, recorded 2026-10-25.** The protocol (brief, then corpus, then
+queries) exists so the corpus cannot be shaped by the queries. On 2026-10-25 the order was
+reversed: the queries were supplied and frozen first, and a first corpus was drafted from the brief
+with the queries in view. The owner's instruction caused the reversal; the drafter noticed it and
+disclosed it. It was caught before any pool was shown to the labeller and before any label
+existed. Disclosure alone does not repair it, so the corpus was **redrafted blind**: by a separate
+session that was given `brief.md` and nothing else, and instructed in writing not to open any other
+file, in particular the queries and the pool. The surviving corpus is that one. Detail and
+figures are in the next subsection.
 
-### The corpus as frozen — 2026-10-25
+### The corpus as frozen, and the incident behind it — 2026-10-25
 
-`evaluation/relevance/corpus.yaml`: 120 items (40 each for Mettlepan, Zarvik Nutrition and Nookwell
-Home), hashed in `corpus.lock` after `queries.lock`, and before the pool (`pool.lock`). Drafted by
-Claude (the coding assistant) from `brief.md`, with the 50 queries in view. Each item is one fact in
-the form of a memory item, 22 to 67 encoder tokens against a cap of 400, and passes write-back's own
-screens for prices, discounts, dates, promo codes and personal data. What it is and is not:
+**What is frozen.** `evaluation/relevance/corpus.yaml`: 120 items (40 each for Mettlepan, Zarvik
+Nutrition and Nookwell Home), hashed in `corpus.lock` after `queries.lock` and before the pool
+(`pool.lock`). `corpus.lock` records that it supersedes the first corpus and why. Each item is one
+fact in the form of a memory item, 39 to 60 encoder tokens against a cap of 400, and passes
+write-back's own screens for prices, discounts, dates, promo codes and personal data
+(`tests/test_relevance_corpus.py`). Counts by kind: claim 30, insight 24, creative 23, persona 15,
+competitor 15, sector 13.
 
-- *Drafting to limit echo.* Items were written as the standing knowledge a marketing team would
-  keep about the brand (personas, competitors, claims, voice, how formats behave), not as answers
-  to a query. Echo is limited by how the items were written, not removed: the author had read the
-  queries, and where a query names a thing the brief names, an item names it too. Precision@10
-  on this set may therefore be higher than on a corpus written without sight of the queries; the
-  size of that effect is not measured.
-- *Synthetic, and drafted by the same family of model that assisted with the queries* (the
-  queries' assistant is not identified in this record, so it is not claimed to be the same model).
-  The items are invented facts about invented brands, including the behavioural statements
-  ('posts showing X were saved more often'). They are not evidence about real customers or real
-  creative, and nothing in the thesis may cite them as such.
-- *The unanswerable queries.* The eight (q43 to q50) were checked against the finished corpus on
-  2026-10-25 by reading, for each, the four top candidates of BM25 and of the vector ranker, and by
-  `tests/test_relevance_corpus.py`, which fails if any item contains the words an answer would need
-  (a discount figure, a launch date, wholesale pricing, a collection's performance, creator spend
-  or conversion, a returns policy, a sales count). None answers any of the eight. Items near the
-  topic exist on purpose (the starter set, festival gifting, SoftLoom, creator briefs, a
-  quick-commerce listing, the move-in bundle's contents), so a retriever returns something and the
-  right behaviour, nothing above the reuse band, is a real test. A labeller may still judge such a
-  neighbour 'partial'; the eight are reported separately for that reason.
-- *The claim-sensitive queries (q27, q28).* The corpus holds the material that bears on them: the
-  evidence file (`zv-26`: one study of lean mass and strength, not recovery), the approved wording
-  (`zv-30`: tiredness, not sleep), the permitted and refused phrasings (`zv-27`, `zv-31`, `zv-34`),
-  and two past rejections (`zv-28`, `zv-32`). `zv-26` and `zv-30` would overstate if cited loosely
-  for recovery and for sleep, so the claim gate and the reuse bands are exercised, not bypassed.
-- *The pool.* `pool.lock`: the union of the top 15 of BM25 and of the pinned encoder's cosine
-  ranking per query (neither is the hybrid ranker or the M-score), 55 sittings (50 queries and 5
-  hidden repeats), 1,335 judgments, seed 20261025.
+**The first corpus** (commit `d5b880d`; kept in the tree under
+`evaluation/relevance/superseded/reversed-order/` with its lock and the pool built from it, as
+evidence of what happened and not for use). It was drafted by the same coding assistant that
+froze the queries, from the brief, with the 50 queries in view.
+
+**The redraft.** A fresh subagent session with an isolated working directory holding a copy of
+`brief.md` only. Its instructions named the constraint explicitly (read nothing outside that
+directory, follow no path the brief mentions, report every path opened) and did not mention the
+queries' content, the pool, the unanswerable queries, the claim gate, or any particular
+claim-sensitive topic. Its report lists two paths, `brief.md` and its own output. **That list is
+the whole evidence of what it read**: its transcript was not retained, so isolation is shown by its
+own report and by the instructions it was given, not by an audit of its tool calls. The
+Zarvik sector items were written from the brief's note that the brand is in a regulated sector
+(plus the drafter's own general knowledge of supplement marketing norms); the sector items for
+Mettlepan and Nookwell were invented by the drafter, as general norms and not legal citations.
+The brands, facts and behavioural statements ('posts showing X were saved more often') are all
+invented; none is evidence about real customers or creative, and nothing in the thesis may cite
+them as such.
+
+**Echo, measured on both corpora** (`evaluation/relevance/echo.json`; definitions, stop-word list
+and bootstrap seed fixed in `app/evaluation/echo.py` before either corpus was measured). Echo is
+how much of a query's own wording a corpus repeats. For the 42 answerable queries (mean per query):
+
+| Measure | First corpus (queries in view) | Redrafted blind | First − blind, 95% interval |
+|---|---|---|---|
+| Best single item's coverage of the query's terms, over the whole corpus (no retriever involved) | 0.835 | 0.639 | **+0.197** (0.132 to 0.269) |
+| Share of the query's adjacent term pairs found adjacent in a pooled candidate | 0.055 | 0.037 | **+0.018** (0.008 to 0.028) |
+| Share of the query's terms found in a pooled candidate | 0.175 | 0.158 | +0.017 (−0.002 to 0.035) |
+
+For the 8 unanswerable queries the same three measures are 0.356, 0.014 and 0.096 (first corpus)
+and 0.402, 0.011 and 0.126 (blind): no sign of echo, as expected for queries the first corpus was
+checked not to answer.
+
+Read these for what they are. The first corpus echoes the queries more, clearly so on the one
+measure no retriever touches, and a little on phrases; on the share of query words in a pooled
+candidate the interval includes zero. That is the effect of the reversed order on *this* pair of
+corpora, with 42 queries. It is not proof that the blind corpus is free of echo: its best-item
+coverage is still 0.64, because both are written from one brief and share its brand and product
+words, and the interval does not separate the order from the other ways the two corpora differ
+(two sessions, different item style and length). The pool measures are partly mechanical, since
+BM25 puts items that share words into the pool. The two corpora are not pooled together: only the
+blind corpus is labelled.
+
+**The checks, repeated on the blind corpus.**
+- *The eight unanswerable queries (q43 to q50).* For each, the four top candidates of BM25 and of the
+  vector ranker were read, and every item containing a term an answer would need was read in full.
+  None answers any of the eight. Items that touch the topic exist: a competitor's frequent sales
+  (`mp-08`), creators who 'convert better' (`mp-30`, Mettlepan, unquantified), three items that
+  mention returns only as a reason to keep listings accurate (`mp-40`, `nw-31`, `nw-39`), the
+  move-in bundle's contents (`nw-26`), quick-commerce listing design (`zv-14`, `zv-34`). A labeller
+  may judge some of them 'partial'; the eight are reported separately for that reason.
+  `tests/test_relevance_corpus.py` holds each reading as a reviewed exception and fails on any new
+  or stale one.
+- *The claim-sensitive queries (q27, q28): a result, not a defect.* q28 (magnesium powder and
+  sleep) has material that bears directly on it: the powder's description and the statement that
+  it is not a treatment for sleeplessness (`zv-23`), the rule against implying better sleep
+  (`zv-37`), the medical-advice limit (`zv-38`), the general ban on disease claims (`zv-35`). q27
+  (plant protein and recovery) has boundaries but no answer: `zv-35` says wording about sleep,
+  immunity or recovery 'has to stay within permitted nutritional descriptions', `zv-27` says the
+  brand does not claim plant protein is better than whey, and `zv-19` describes the blend's amino
+  acid profile. **No item states what may be said about recovery**, no item records the evidence
+  that exists, and no item is a past rejection of an over-reaching sentence. The first corpus held
+  all three, written because the queries asked. So q27 is answerable only partly, and the blind
+  corpus offers the claim gate less to bite on than the first did: `zv-19` (a 'broader amino acid
+  profile') and `zv-23` (contributes to normal magnesium intake) would overstate if cited loosely
+  for recovery and for sleep, but no item was written as a trap. Neither query is fixed or
+  dropped; the labeller's judgments on them are reported as they come.
+- *Accents.* No accented character in any file under `evaluation/` (`Memory.md` §5).
+
+**The pool.** `pool.lock`: the union of the top 15 of BM25 and of the pinned encoder's cosine
+ranking per query (neither is the hybrid ranker or the M-score), 55 sittings (50 queries and 5
+hidden repeats), 1,340 judgments, seed 20261025.
 
 **Who writes what, and in what order (decided 2026-10-18).**
 
 1. The developer writes a one-page **brief**: three fictional brands, their sectors, product lines
    and rough positioning (`evaluation/relevance/brief.md`). The labeller sees the brief.
-2. The developer drafts the **corpus** from the brief, then freezes and hashes it. **The labeller
+2. The developer drafts the **corpus** from the brief, then freezes and hashes it. *(Amended
+   2026-10-25: the surviving corpus was drafted by a separate session given the brief only; see
+   the incident above.)* **The labeller
    never reads the corpus text before labelling.**
 3. The labeller (Kundan) writes the **50 queries from the brief only** — plausible marketing
    questions about brands whose shape is known, not questions copied from documents.

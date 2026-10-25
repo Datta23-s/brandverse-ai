@@ -1,0 +1,631 @@
+{
+  "definitions": "app/evaluation/echo.py",
+  "stop_words": [
+    "a",
+    "about",
+    "an",
+    "and",
+    "answer",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "give",
+    "handle",
+    "how",
+    "i",
+    "if",
+    "in",
+    "is",
+    "it",
+    "its",
+    "may",
+    "might",
+    "no",
+    "not",
+    "of",
+    "on",
+    "or",
+    "our",
+    "people",
+    "position",
+    "s",
+    "said",
+    "say",
+    "should",
+    "so",
+    "someone",
+    "something",
+    "sound",
+    "talk",
+    "tell",
+    "than",
+    "that",
+    "the",
+    "then",
+    "these",
+    "this",
+    "those",
+    "to",
+    "us",
+    "use",
+    "used",
+    "was",
+    "we",
+    "were",
+    "what",
+    "whats",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "will",
+    "with",
+    "word",
+    "words",
+    "would",
+    "you",
+    "your"
+  ],
+  "queries": {
+    "answerable": 42,
+    "unanswerable": 8
+  },
+  "first_corpus_drafted_with_queries_in_view": {
+    "answerable": {
+      "pool_coverage": 0.17531705805696488,
+      "pool_bigram": 0.055474927191948784,
+      "corpus_best": 0.8354024943310657
+    },
+    "unanswerable": {
+      "pool_coverage": 0.09558465719063544,
+      "pool_bigram": 0.01414591849374458,
+      "corpus_best": 0.35625
+    }
+  },
+  "second_corpus_drafted_blind": {
+    "answerable": {
+      "pool_coverage": 0.15849711494828816,
+      "pool_bigram": 0.037301667382609906,
+      "corpus_best": 0.6385204081632653
+    },
+    "unanswerable": {
+      "pool_coverage": 0.12564102564102564,
+      "pool_bigram": 0.011367753623188407,
+      "corpus_best": 0.40208333333333335
+    }
+  },
+  "first_minus_second_answerable": {
+    "pool_coverage": {
+      "mean": 0.016819943108676717,
+      "low": -0.0022688782794027806,
+      "high": 0.035467250160314344
+    },
+    "pool_bigram": {
+      "mean": 0.018173259809338878,
+      "low": 0.008212209224459052,
+      "high": 0.027895524068352624
+    },
+    "corpus_best": {
+      "mean": 0.19688208616780045,
+      "low": 0.13180272108843538,
+      "high": 0.26865079365079364
+    }
+  },
+  "per_query": {
+    "first": {
+      "q01": {
+        "pool_coverage": 0.23602484472049687,
+        "pool_bigram": 0.08695652173913043,
+        "corpus_best": 1.0
+      },
+      "q02": {
+        "pool_coverage": 0.23484848484848483,
+        "pool_bigram": 0.06363636363636364,
+        "corpus_best": 0.6666666666666666
+      },
+      "q03": {
+        "pool_coverage": 0.3522727272727273,
+        "pool_bigram": 0.13636363636363635,
+        "corpus_best": 1.0
+      },
+      "q04": {
+        "pool_coverage": 0.40476190476190477,
+        "pool_bigram": 0.23809523809523808,
+        "corpus_best": 1.0
+      },
+      "q05": {
+        "pool_coverage": 0.19333333333333333,
+        "pool_bigram": 0.11200000000000002,
+        "corpus_best": 0.8333333333333334
+      },
+      "q06": {
+        "pool_coverage": 0.19090909090909092,
+        "pool_bigram": 0.011363636363636364,
+        "corpus_best": 0.6
+      },
+      "q07": {
+        "pool_coverage": 0.1875,
+        "pool_bigram": 0.027777777777777776,
+        "corpus_best": 0.5
+      },
+      "q08": {
+        "pool_coverage": 0.21153846153846154,
+        "pool_bigram": 0.0641025641025641,
+        "corpus_best": 1.0
+      },
+      "q09": {
+        "pool_coverage": 0.14130434782608695,
+        "pool_bigram": 0.043478260869565216,
+        "corpus_best": 1.0
+      },
+      "q10": {
+        "pool_coverage": 0.07407407407407407,
+        "pool_bigram": 0.024691358024691357,
+        "corpus_best": 1.0
+      },
+      "q11": {
+        "pool_coverage": 0.08333333333333333,
+        "pool_bigram": 0.020833333333333332,
+        "corpus_best": 1.0
+      },
+      "q12": {
+        "pool_coverage": 0.20800000000000002,
+        "pool_bigram": 0.05,
+        "corpus_best": 0.8
+      },
+      "q13": {
+        "pool_coverage": 0.04938271604938271,
+        "pool_bigram": 0.037037037037037035,
+        "corpus_best": 0.6666666666666666
+      },
+      "q14": {
+        "pool_coverage": 0.12,
+        "pool_bigram": 0.03,
+        "corpus_best": 1.0
+      },
+      "q15": {
+        "pool_coverage": 0.23478260869565218,
+        "pool_bigram": 0.09782608695652174,
+        "corpus_best": 1.0
+      },
+      "q16": {
+        "pool_coverage": 0.1875,
+        "pool_bigram": 0.08333333333333333,
+        "corpus_best": 1.0
+      },
+      "q17": {
+        "pool_coverage": 0.09615384615384616,
+        "pool_bigram": 0.07692307692307693,
+        "corpus_best": 1.0
+      },
+      "q18": {
+        "pool_coverage": 0.28,
+        "pool_bigram": 0.025,
+        "corpus_best": 0.6
+      },
+      "q19": {
+        "pool_coverage": 0.17857142857142858,
+        "pool_bigram": 0.06122448979591836,
+        "corpus_best": 0.625
+      },
+      "q20": {
+        "pool_coverage": 0.15625,
+        "pool_bigram": 0.027777777777777776,
+        "corpus_best": 1.0
+      },
+      "q21": {
+        "pool_coverage": 0.13076923076923078,
+        "pool_bigram": 0.028846153846153848,
+        "corpus_best": 0.8
+      },
+      "q22": {
+        "pool_coverage": 0.13580246913580246,
+        "pool_bigram": 0.018518518518518517,
+        "corpus_best": 0.6666666666666666
+      },
+      "q23": {
+        "pool_coverage": 0.08333333333333333,
+        "pool_bigram": 0.012345679012345678,
+        "corpus_best": 0.5
+      },
+      "q24": {
+        "pool_coverage": 0.25,
+        "pool_bigram": 0.043478260869565216,
+        "corpus_best": 1.0
+      },
+      "q25": {
+        "pool_coverage": 0.21153846153846154,
+        "pool_bigram": 0.01282051282051282,
+        "corpus_best": 0.75
+      },
+      "q26": {
+        "pool_coverage": 0.19318181818181818,
+        "pool_bigram": 0.045454545454545456,
+        "corpus_best": 1.0
+      },
+      "q27": {
+        "pool_coverage": 0.3939393939393939,
+        "pool_bigram": 0.13636363636363635,
+        "corpus_best": 1.0
+      },
+      "q28": {
+        "pool_coverage": 0.19444444444444442,
+        "pool_bigram": 0.08333333333333333,
+        "corpus_best": 1.0
+      },
+      "q29": {
+        "pool_coverage": 0.248,
+        "pool_bigram": 0.07,
+        "corpus_best": 0.8
+      },
+      "q30": {
+        "pool_coverage": 0.20512820512820512,
+        "pool_bigram": 0.07692307692307693,
+        "corpus_best": 1.0
+      },
+      "q31": {
+        "pool_coverage": 0.12962962962962962,
+        "pool_bigram": 0.037037037037037035,
+        "corpus_best": 0.5
+      },
+      "q32": {
+        "pool_coverage": 0.1,
+        "pool_bigram": 0.08,
+        "corpus_best": 1.0
+      },
+      "q33": {
+        "pool_coverage": 0.07453416149068323,
+        "pool_bigram": 0.007246376811594202,
+        "corpus_best": 0.42857142857142855
+      },
+      "q34": {
+        "pool_coverage": 0.13043478260869565,
+        "pool_bigram": 0.0,
+        "corpus_best": 1.0
+      },
+      "q35": {
+        "pool_coverage": 0.21818181818181817,
+        "pool_bigram": 0.056818181818181816,
+        "corpus_best": 0.8
+      },
+      "q36": {
+        "pool_coverage": 0.1346153846153846,
+        "pool_bigram": 0.05128205128205128,
+        "corpus_best": 0.75
+      },
+      "q37": {
+        "pool_coverage": 0.08800000000000001,
+        "pool_bigram": 0.02,
+        "corpus_best": 0.8
+      },
+      "q38": {
+        "pool_coverage": 0.11538461538461539,
+        "pool_bigram": 0.03076923076923077,
+        "corpus_best": 0.5
+      },
+      "q39": {
+        "pool_coverage": 0.12,
+        "pool_bigram": 0.04,
+        "corpus_best": 1.0
+      },
+      "q40": {
+        "pool_coverage": 0.17391304347826086,
+        "pool_bigram": 0.08695652173913043,
+        "corpus_best": 1.0
+      },
+      "q41": {
+        "pool_coverage": 0.13194444444444445,
+        "pool_bigram": 0.03333333333333333,
+        "corpus_best": 0.5
+      },
+      "q42": {
+        "pool_coverage": 0.08,
+        "pool_bigram": 0.04,
+        "corpus_best": 1.0
+      },
+      "q43": {
+        "pool_coverage": 0.18840579710144925,
+        "pool_bigram": 0.034782608695652174,
+        "corpus_best": 0.5
+      },
+      "q44": {
+        "pool_coverage": 0.18400000000000002,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.2
+      },
+      "q45": {
+        "pool_coverage": 0.04,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.3333333333333333
+      },
+      "q46": {
+        "pool_coverage": 0.020833333333333332,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.25
+      },
+      "q47": {
+        "pool_coverage": 0.09420289855072463,
+        "pool_bigram": 0.034782608695652174,
+        "corpus_best": 0.5
+      },
+      "q48": {
+        "pool_coverage": 0.02564102564102564,
+        "pool_bigram": 0.007692307692307693,
+        "corpus_best": 0.3333333333333333
+      },
+      "q49": {
+        "pool_coverage": 0.06666666666666667,
+        "pool_bigram": 0.018518518518518517,
+        "corpus_best": 0.4
+      },
+      "q50": {
+        "pool_coverage": 0.14492753623188404,
+        "pool_bigram": 0.017391304347826087,
+        "corpus_best": 0.3333333333333333
+      }
+    },
+    "second": {
+      "q01": {
+        "pool_coverage": 0.18452380952380953,
+        "pool_bigram": 0.048611111111111105,
+        "corpus_best": 0.7142857142857143
+      },
+      "q02": {
+        "pool_coverage": 0.20289855072463767,
+        "pool_bigram": 0.0782608695652174,
+        "corpus_best": 0.5
+      },
+      "q03": {
+        "pool_coverage": 0.27380952380952384,
+        "pool_bigram": 0.06349206349206349,
+        "corpus_best": 0.75
+      },
+      "q04": {
+        "pool_coverage": 0.325,
+        "pool_bigram": 0.18,
+        "corpus_best": 0.6666666666666666
+      },
+      "q05": {
+        "pool_coverage": 0.246031746031746,
+        "pool_bigram": 0.13333333333333336,
+        "corpus_best": 0.5
+      },
+      "q06": {
+        "pool_coverage": 0.14074074074074075,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6
+      },
+      "q07": {
+        "pool_coverage": 0.15,
+        "pool_bigram": 0.06666666666666667,
+        "corpus_best": 0.5
+      },
+      "q08": {
+        "pool_coverage": 0.10185185185185185,
+        "pool_bigram": 0.0,
+        "corpus_best": 1.0
+      },
+      "q09": {
+        "pool_coverage": 0.12962962962962962,
+        "pool_bigram": 0.024691358024691357,
+        "corpus_best": 0.75
+      },
+      "q10": {
+        "pool_coverage": 0.09259259259259259,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.5
+      },
+      "q11": {
+        "pool_coverage": 0.04,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6666666666666666
+      },
+      "q12": {
+        "pool_coverage": 0.14400000000000002,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.4
+      },
+      "q13": {
+        "pool_coverage": 0.0,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.0
+      },
+      "q14": {
+        "pool_coverage": 0.07407407407407407,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6
+      },
+      "q15": {
+        "pool_coverage": 0.14400000000000002,
+        "pool_bigram": 0.05,
+        "corpus_best": 1.0
+      },
+      "q16": {
+        "pool_coverage": 0.24074074074074073,
+        "pool_bigram": 0.037037037037037035,
+        "corpus_best": 1.0
+      },
+      "q17": {
+        "pool_coverage": 0.13636363636363635,
+        "pool_bigram": 0.045454545454545456,
+        "corpus_best": 1.0
+      },
+      "q18": {
+        "pool_coverage": 0.2,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6
+      },
+      "q19": {
+        "pool_coverage": 0.13690476190476192,
+        "pool_bigram": 0.03401360544217687,
+        "corpus_best": 0.375
+      },
+      "q20": {
+        "pool_coverage": 0.16666666666666666,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.5
+      },
+      "q21": {
+        "pool_coverage": 0.16521739130434784,
+        "pool_bigram": 0.05434782608695652,
+        "corpus_best": 0.6
+      },
+      "q22": {
+        "pool_coverage": 0.25,
+        "pool_bigram": 0.0625,
+        "corpus_best": 0.6666666666666666
+      },
+      "q23": {
+        "pool_coverage": 0.1111111111111111,
+        "pool_bigram": 0.012345679012345678,
+        "corpus_best": 0.5
+      },
+      "q24": {
+        "pool_coverage": 0.14423076923076922,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.5
+      },
+      "q25": {
+        "pool_coverage": 0.16346153846153846,
+        "pool_bigram": 0.02564102564102564,
+        "corpus_best": 0.75
+      },
+      "q26": {
+        "pool_coverage": 0.23148148148148148,
+        "pool_bigram": 0.012345679012345678,
+        "corpus_best": 0.75
+      },
+      "q27": {
+        "pool_coverage": 0.22727272727272727,
+        "pool_bigram": 0.11363636363636363,
+        "corpus_best": 0.6666666666666666
+      },
+      "q28": {
+        "pool_coverage": 0.13636363636363635,
+        "pool_bigram": 0.022727272727272728,
+        "corpus_best": 1.0
+      },
+      "q29": {
+        "pool_coverage": 0.23636363636363636,
+        "pool_bigram": 0.03409090909090909,
+        "corpus_best": 0.8
+      },
+      "q30": {
+        "pool_coverage": 0.1733333333333333,
+        "pool_bigram": 0.0,
+        "corpus_best": 1.0
+      },
+      "q31": {
+        "pool_coverage": 0.07142857142857142,
+        "pool_bigram": 0.011904761904761904,
+        "corpus_best": 0.5
+      },
+      "q32": {
+        "pool_coverage": 0.16,
+        "pool_bigram": 0.12,
+        "corpus_best": 1.0
+      },
+      "q33": {
+        "pool_coverage": 0.08074534161490683,
+        "pool_bigram": 0.02898550724637681,
+        "corpus_best": 0.42857142857142855
+      },
+      "q34": {
+        "pool_coverage": 0.08641975308641975,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6666666666666666
+      },
+      "q35": {
+        "pool_coverage": 0.32727272727272727,
+        "pool_bigram": 0.09090909090909091,
+        "corpus_best": 0.8
+      },
+      "q36": {
+        "pool_coverage": 0.19318181818181818,
+        "pool_bigram": 0.01515151515151515,
+        "corpus_best": 0.5
+      },
+      "q37": {
+        "pool_coverage": 0.19047619047619047,
+        "pool_bigram": 0.05952380952380952,
+        "corpus_best": 0.8
+      },
+      "q38": {
+        "pool_coverage": 0.14,
+        "pool_bigram": 0.016,
+        "corpus_best": 0.5
+      },
+      "q39": {
+        "pool_coverage": 0.08333333333333333,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.6666666666666666
+      },
+      "q40": {
+        "pool_coverage": 0.20952380952380953,
+        "pool_bigram": 0.08333333333333333,
+        "corpus_best": 0.6
+      },
+      "q41": {
+        "pool_coverage": 0.14583333333333334,
+        "pool_bigram": 0.041666666666666664,
+        "corpus_best": 0.5
+      },
+      "q42": {
+        "pool_coverage": 0.0,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.0
+      },
+      "q43": {
+        "pool_coverage": 0.20138888888888887,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.5
+      },
+      "q44": {
+        "pool_coverage": 0.17500000000000002,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.4
+      },
+      "q45": {
+        "pool_coverage": 0.038461538461538464,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.3333333333333333
+      },
+      "q46": {
+        "pool_coverage": 0.05,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.25
+      },
+      "q47": {
+        "pool_coverage": 0.08695652173913043,
+        "pool_bigram": 0.0,
+        "corpus_best": 0.5
+      },
+      "q48": {
+        "pool_coverage": 0.125,
+        "pool_bigram": 0.025000000000000005,
+        "corpus_best": 0.3333333333333333
+      },
+      "q49": {
+        "pool_coverage": 0.11304347826086956,
+        "pool_bigram": 0.03260869565217391,
+        "corpus_best": 0.4
+      },
+      "q50": {
+        "pool_coverage": 0.21527777777777776,
+        "pool_bigram": 0.03333333333333333,
+        "corpus_best": 0.5
+      }
+    }
+  }
+}

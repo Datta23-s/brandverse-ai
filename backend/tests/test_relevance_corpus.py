@@ -2,10 +2,13 @@
 (docs/evaluation-plan.md §7).
 
 Offline and cheap. Two things here are mechanical stand-ins for a reading that was also done by
-hand when the corpus was frozen (`corpus.lock`): the token cap uses a word count (the encoder's
-own count, 67 at most, was checked against `max_item_tokens` when freezing), and the
-unanswerable guard looks for the words an answer would need, not for meaning. Neither replaces the
-other.
+hand when the corpus was frozen (`corpus.lock`): the size bound uses a word count (the encoder's
+own count was checked against `max_item_tokens` when freezing), and the unanswerable guard looks
+for the words an answer would need, not for meaning. Neither replaces the other.
+
+The corpus was drafted blind, by a session that had only `brief.md`. A query it happens to answer
+poorly or not at all is a result about the query, reported in the plan, not a reason to edit the
+corpus: nothing here asserts that any answerable query has an answer.
 """
 
 import re
@@ -24,20 +27,40 @@ ITEMS = yaml.safe_load((RELEVANCE / "corpus.yaml").read_text(encoding="utf-8"))
 KINDS = {"persona", "competitor", "insight", "claim", "creative", "sector"}
 BRANDS = {"mettlepan", "zarvik", "nookwell"}
 
-# Query -> a pattern an item would need to contain to answer it. A match is a stop-and-read.
+# Query -> a pattern an item would need to contain to answer it. A hit is a stop-and-read: every
+# hit in the frozen corpus was read in full on 2026-10-25 and judged NOT to answer the query. The
+# judgement is the reason beside the id. A hit not listed fails (default-deny); a listed id that
+# no longer hits fails too (a stale exemption).
 ANSWER_WORDS = {
-    "q43": r"discount|% off|diwali",
-    "q44": r"go live|goes live|launch|campaign date|schedule",
+    "q43": r"discount|% off|diwali|promo|\bsales?\b",
+    "q44": r"go live|goes live|launch|schedule|campaign date",
     "q45": r"wholesale|trade price|dealer",
-    "q46": r"spring|collection|season.s sales",
-    "q47": r"\bspend\b|\bspent\b|fee paid|\bpaid\b|creator budget",
-    "q48": r"conversion|best-performing creator|top creator",
-    "q49": r"\breturn|refund|exchange policy|\bpolicy\b",
+    "q46": r"spring|collection",
+    "q47": r"\bspend\b|\bspent\b|\bpaid\b|creator budget",
+    "q48": r"conversion|\bconvert|top creator|best creator",
+    "q49": r"\breturns?\b|refund|exchange policy|\bpolicy\b",
     "q50": r"\bpune\b|units sold|bundles sold|sales figure",
+}
+REVIEWED = {
+    "q43": {"mp-08": "Cookhaus's frequent sales, a competitor's; no discount on Mettlepan's set"},
+    "q44": {"nw-36": "how Nookwell shows seasonal prints; not a Zarvik campaign date"},
+    "q47": {
+        "zv-09": "customers asking whether the extra spend over PlantFuel is justified",
+        "zv-39": "creators must disclose paid partnerships; no amount, no creator",
+    },
+    "q48": {
+        "mp-30": "Mettlepan recipe creators 'convert better' than studio films: unquantified,"
+        " not fitness creators, no ranking"
+    },  # fmt: skip
+    "q49": {
+        "mp-40": "accurate marketplace listings avoid returns; states no returns policy",
+        "nw-31": "true-colour images avoid returns; states no returns policy",
+        "nw-39": "accurate sizes avoid returns; states no returns policy",
+    },
 }
 
 
-def test_the_corpus_is_three_brands_of_about_forty() -> None:
+def test_the_corpus_is_three_brands_of_forty() -> None:
     assert len(ITEMS) == 120
     assert Counter(i["brand"] for i in ITEMS) == {"mettlepan": 40, "zarvik": 40, "nookwell": 40}
 
@@ -62,21 +85,13 @@ def test_no_item_is_longer_than_one_fact_can_be() -> None:
 
 
 @pytest.mark.parametrize("qid", sorted(ANSWER_WORDS))
-def test_no_item_contains_what_an_answer_to_an_unanswerable_query_needs(qid: str) -> None:
-    hits = [i["id"] for i in ITEMS if re.search(ANSWER_WORDS[qid], i["text"], re.IGNORECASE)]
-    assert hits == [], f"{qid}: read {hits} before freezing"
-
-
-def test_the_claim_sensitive_queries_have_material_and_a_trap_that_would_overstate() -> None:
-    """q27 (plant protein and recovery) and q28 (magnesium and sleep): items that bear on them,
-    including ones that would overstate if cited loosely, so the claim gate has work to do."""
-    text = {i["id"]: i["text"] for i in ITEMS}
-    # Would overstate q27 if cited for 'recovery': the study measured lean mass and strength.
-    assert "did not measure recovery" in text["zv-26"]
-    # Would overstate q28 if cited for 'sleep': the approved wording is about tiredness.
-    assert "not about sleep" in text["zv-30"]
-    # The rules and the past rejections that say how far each can be taken.
-    assert "recover faster" in text["zv-28"] and "knocks you out" in text["zv-32"]
+def test_no_unreviewed_item_contains_what_an_answer_to_an_unanswerable_query_needs(
+    qid: str,
+) -> None:
+    hits = {i["id"] for i in ITEMS if re.search(ANSWER_WORDS[qid], i["text"], re.IGNORECASE)}
+    reviewed = set(REVIEWED.get(qid, {}))
+    assert hits - reviewed == set(), f"{qid}: read {sorted(hits - reviewed)} before freezing"
+    assert reviewed - hits == set(), f"{qid}: reviewed items that no longer match: stale"
 
 
 def test_the_corpus_matches_its_lock() -> None:

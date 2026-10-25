@@ -1,0 +1,12 @@
+{
+  "items": 120,
+  "per_brand": {
+    "mettlepan": 40,
+    "zarvik": 40,
+    "nookwell": 40
+  },
+  "sha256": {
+    "corpus": "47c18b496073fffe92882fdee1b202421b694829407b00961836474ef30fdb43"
+  },
+  "frozen_at": "2026-10-25T14:13:09.829075+00:00"
+}

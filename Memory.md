@@ -249,12 +249,14 @@ text the result is computed from:
   accented character.
   While it passes, the gap is **demonstrably inert for every relevance-set result, because no
   accented character appears in the corpus or the query set**. **Scanned 2026-10-25 over the
-  finished corpus (120 items, frozen), the 50 queries (frozen) and the pool built from them:
-  13 files, none with an accented character.** `corpus.yaml`, `queries.yaml`, the pool files
-  and the V2 probe are pure ASCII; the only other non-ASCII characters are section signs and em
-  dashes in headings and notes (`brief.md`, `queries.md`, `test_set.yaml`,
-  `tuning_brands.yaml`) and one middle dot in the labelling page's own template, none in any text
-  a retriever reads. So the claim holds for the set as it will be labelled and measured. If the
+  finished corpus (120 items, redrafted blind and frozen), the 50 queries (frozen) and the pool
+  built from them, rescanned after the redraft: 20 files under `evaluation/` (which include the
+  superseded first corpus and its pool, kept as evidence), none with an accented character.**
+  `corpus.yaml`, `queries.yaml`, the pool files and the V2 probe are pure ASCII; the only other
+  non-ASCII characters are section signs and em dashes in headings and notes (`brief.md`,
+  `queries.md`, `test_set.yaml`, `tuning_brands.yaml`) and one middle dot in the labelling page's
+  own template, none in any text a retriever reads. So the claim holds for the set as it will be
+  labelled and measured. If the
   test ever fails, the owner decides before the corpus or the pool goes further.
 - *The main experiment's memory.* Items written during evaluation runs come from model output,
   not from a committed file, so the test cannot cover them in advance. Whether any accented

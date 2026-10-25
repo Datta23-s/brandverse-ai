@@ -6,7 +6,12 @@
     "nookwell": 40
   },
   "sha256": {
-    "corpus": "47c18b496073fffe92882fdee1b202421b694829407b00961836474ef30fdb43"
+    "corpus": "6dc10b01d99cfee9c7ed45803655e181555a5cd88a49a350640658962ce62669"
   },
-  "frozen_at": "2026-10-25T14:13:09.829075+00:00"
+  "supersedes": {
+    "corpus_sha256": "47c18b496073fffe92882fdee1b202421b694829407b00961836474ef30fdb43",
+    "frozen_at": "2026-10-25T14:13:09.829075+00:00",
+    "reason": "The first corpus (commit d5b880d) was drafted with the 50 queries in view, reversing the protocol's order (brief, corpus, queries). Caught before labelling; redrafted by a session given brief.md only."
+  },
+  "frozen_at": "2026-10-25T14:31:46.300260+00:00"
 }
