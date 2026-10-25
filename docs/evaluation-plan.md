@@ -532,6 +532,12 @@ The brands, facts and behavioural statements ('posts showing X were saved more o
 invented; none is evidence about real customers or creative, and nothing in the thesis may cite
 them as such.
 
+**The count first: at least 3 of the 42 answerable queries (q27, q13, q42) had dedicated
+supporting items in the first corpus and none in the blind one.** (For q13 and q42 the blind
+corpus still holds general voice items; what it lacks is anything on exclamation marks or
+formality.) The three are not equally diagnostic, and the next subsection says how. The aggregate
+figures follow.
+
 **Echo, measured on both corpora** (`evaluation/relevance/echo.json`; definitions, stop-word list
 and bootstrap seed fixed in `app/evaluation/echo.py` before either corpus was measured). Echo is
 how much of a query's own wording a corpus repeats. For the 42 answerable queries (mean per query):
@@ -573,39 +579,47 @@ blind corpus is labelled.
   trap: `zv-19` (a 'broader amino acid profile') and `zv-23` (contributes to normal magnesium
   intake) would overstate if cited loosely for recovery and for sleep, but they are ordinary brand
   material (stated in `Phases.md`, Phase 3, as it bears on the claim gate).
-- *A third kind of query, not two.* The eight (q43 to q50) were **designed** unanswerable. The
-  other 42 were written to be answerable, by a labeller who had not seen the corpus. Comparing the
-  two corpora query by query shows that some of the 42 are a third kind: **reasonable questions
-  the brand's standing knowledge, as the blind drafter wrote it, does not answer.** They are
+- *A third kind of query, not two, and three cases that are not equally diagnostic.* The eight
+  (q43 to q50) were **designed** unanswerable. The other 42 were written to be answerable, by a
+  labeller who had not seen the corpus. Comparing the two corpora query by query finds at least
+  three that had dedicated supporting items in the first corpus and none in the blind one. Q27 is
+  evidence of what the reversed order did. For q13 and q42 the comparison cannot say. They are
   reported as their own category, neither folded into the eight nor dropped, and none is edited
   into the corpus.
-  - *q27 (what can we say about plant protein and recovery)* is the clearest case, and a reader
-    can check it. The first corpus held three items for it: the evidence file (one study of
-    lean mass and strength, which did not measure recovery), the permitted wording, and a past
-    rejection of 'helps you recover faster' (`zv-26`, `zv-27`, `zv-28` in that corpus's
-    numbering, under `superseded/reversed-order/`). The blind corpus holds none of the three. It
-    has boundaries (`zv-35`: wording about recovery 'has to stay within permitted nutritional
-    descriptions'; `zv-27`: no claim that plant protein beats whey) and the blend's amino acid
-    profile (`zv-19`), and no item says what may be said about recovery. **Those three items
-    existed in the first corpus only because the query asked for them.** That single case is
-    better evidence of what the reversed order was doing than the aggregate figures are.
-  - *q13 and q42 (how formal are we, and do we use exclamation marks / how casual).* The same
-    signature, found by the per-query comparison and not by looking for it: the first corpus had a
-    dedicated item for each (`mp-31`, `nw-27` in its numbering: 'exclamation marks are rare';
-    'fine ... no more than one a post'); the blind corpus has nothing on exclamation marks or
-    formality, and the best item's coverage of their terms falls from 1.00 to 0.00 (q42) and from
-    0.67 to 0.00 (q13). The voice items (`mp-12`, `nw-12`) bear on the 'casual' half, so these two
-    are half unanswerable, not wholly.
-  - *Not a claim of completeness.* These three come from the query-by-query comparison and from
-    the drafter reading each answerable query's top candidates. The reading is the drafter's
-    judgement, not the labeller's, and it does not say no other query is thin; the labels will
-    show that. Q27 is not 'a category of one'; it is the clearest of at least three.
+  - *q27 (what can we say about plant protein and recovery): strong evidence.* The first corpus
+    held three specific artifacts for it: the evidence file (one study of lean mass and strength,
+    which did not measure recovery), the permitted wording, and a past rejection of 'helps you
+    recover faster' (`zv-26`, `zv-27`, `zv-28` in that corpus's numbering, under
+    `superseded/reversed-order/`). The blind corpus holds none of the three. It has boundaries
+    (`zv-35`: wording about recovery 'has to stay within permitted nutritional descriptions';
+    `zv-27`: no claim that plant protein beats whey) and the blend's amino acid profile
+    (`zv-19`), and no item says what may be said about recovery. No brand's standing knowledge
+    spontaneously contains a record of a rejection about recovery unless someone was writing
+    toward that question, so these three existed in the first corpus because the query asked for
+    them. A reader can check it against the superseded file, and it is better evidence of what the
+    reversed order was doing than the aggregate figures are.
+  - *q13 and q42 (how formal are we, and do we use exclamation marks / how casual): ambiguous.*
+    The first corpus had a dedicated item for each (`mp-31`, `nw-27` in its numbering: 'exclamation
+    marks are rare'; 'fine ... no more than one a post'); the blind corpus has nothing on
+    exclamation marks or formality, and the best item's coverage of their terms falls from 1.00 to
+    0.00 (q42) and from 0.67 to 0.00 (q13). **Two readings fit, and they cannot be separated from
+    here:** (a) the first corpus invented those items because the queries asked; or (b) the blind
+    corpus simply omitted voice material that a real brand's memory would plausibly hold, since a
+    note on exclamation marks and formality is ordinary standing voice knowledge. Either could be
+    true of either brand. Claiming (a) for all three would overstate what the comparison shows;
+    it is shown for q27 and not for these. The blind voice items (`mp-12`, `nw-12`) bear on the
+    'casual' half, so these two are at most half unanswerable.
+  - *Not a claim of completeness.* The three come from the query-by-query comparison and from the
+    drafter reading each answerable query's top candidates. The reading is the drafter's judgement,
+    not the labeller's, and it does not say no other query is thin; the labels will show that.
+    Q27 is not 'a category of one': it is the clearest of at least three.
   - *Expected behaviour and provenance.* For q27 the right behaviour is the same as for the eight:
     return nothing, or only items below the reuse band (`Memory.md` §3.2). For q13 and q42, the
     voice items only. The provenance differs, and the thesis says so: the eight are unanswerable
-    by design; these are unanswerable because the brand's own standing knowledge, written without
-    sight of the question, does not contain the answer. Nothing changes about the labelling: the
-    labeller labels blind and is not told which query is which.
+    by design; q27 is unanswerable because the brand's own standing knowledge, written without
+    sight of the question, does not contain the answer; q13 and q42 are unanswerable in part for
+    a reason that is either that or a gap in the blind drafting, and which is not known. Nothing
+    changes about the labelling: the labeller labels blind and is not told which query is which.
 - *Accents.* No accented character in any file under `evaluation/` (`Memory.md` §5).
 
 **The pool.** `pool.lock`: the union of the top 15 of BM25 and of the pinned encoder's cosine
