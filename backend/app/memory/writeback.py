@@ -42,6 +42,9 @@ corrections commit. Write-back has two halves to match:
   2026-10-19): half a fact could be retrieved and cited as if it were whole. The author is to
   split the content into separate facts upstream, each a candidate of its own. This also keeps a
   raw page body out (§6.2).
+- *Confidence at or above the revocation threshold* (staging): a candidate below `revoke_below`
+  is refused, so no item is written that the rule would revoke on sight (migration 0026 makes the
+  same true of the table).
 - *Not a near-duplicate* (commit): below.
 
 **Near-duplicates (§6.1 rule 4).** Within the organisation, the same brand (or both org-level),
@@ -89,6 +92,12 @@ class WritebackEncoder(Encoder, Protocol):
     def count_tokens(self, text: str) -> int: ...
 
 
+def _check_probability(confidence: float) -> None:
+    # The table refuses it too (0026); checked here so the defect is named where it is made.
+    if not 0 <= confidence <= 1:
+        raise ValueError(f"confidence {confidence!r} is not between 0 and 1")
+
+
 class WritebackRefused(RuntimeError):
     """The commit must not happen: raised inside the terminal transaction, which it rolls back."""
 
@@ -111,6 +120,9 @@ class MemoryWrite:
     sector: str | None = None
     source_url: str | None = None
     freshness_days: int | None = None
+
+    def __post_init__(self) -> None:
+        _check_probability(self.confidence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +222,9 @@ class Candidate:
     claim_id: str | None
     confidence: float  # stated by whoever proposes the fact; there is no default (0025)
     freshness_days: int | None = None
+
+    def __post_init__(self) -> None:
+        _check_probability(self.confidence)
 
 
 _PERSONAL = frozenset({"contains_an_email_address", "contains_a_phone_number"})
@@ -341,6 +356,10 @@ async def stage_writeback(
             reasons.append("gate_blocked_the_output")
         reasons += _basis(c, report, truth)
         reasons += content_screens(content)
+        if c.confidence < cfg.revoke_below:
+            # Revocation tests the value, not the crossing (0026): an item written below the
+            # threshold would be live and exempt from the rule that revokes everything below it.
+            reasons.append("confidence_below_the_revocation_threshold")
         tokens = encoder.count_tokens(content) if content else 0
         if tokens > cfg.max_item_tokens:
             # One fact, never split (Memory.md §5): the author splits it into separate facts.
@@ -501,7 +520,7 @@ async def _correct(
             done.skipped.append(entry | {"reason": "already_corrected_in_this_run"})
             continue
         corrected.add(c.item_id)
-        after = before - step
+        after = max(before - step, Decimal(0))  # a confidence below zero is not a quantity
         revoke = after < threshold
         await conn.execute(
             _DECREMENT_SQL,

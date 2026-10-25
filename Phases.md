@@ -305,6 +305,11 @@ record): live dry run 2026-10-20, approved by the owner, applied 2026-10-20 10:4
 edit-outs, the campaign's list of reused items — is wired with the graph in Phase 6. Migration 0025
 (2026-10-20, owner's ruling): `memory_items.confidence` is `NOT NULL`, no default, so no item can be
 exempt from decay by having no confidence; its own dry run and approval, separate from 0024.
+Applied 2026-10-25 13:11 UTC after CI green on 4143eec (`migration list` identical; the column
+NOT NULL, no default, 0 rows). Migrations 0026 and 0027 (owner's ruling 2026-10-25): confidence is
+a probability and a live item is never below the revocation threshold — revocation tests the
+value, not the transition (`Memory.md` §6.3); 0027 then drops the negative from 0024's decay
+pattern. Written and tested locally; live dry run passed; not yet applied.
 
 **A finding Phase 4's preparation surfaced: V4, citation does not imply entailment**
 (`docs/evaluation-plan.md` §4). It was not designed as a test. In the cheap-tier calls confirming

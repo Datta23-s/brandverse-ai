@@ -249,7 +249,9 @@ text the result is computed from:
   fact rather than a remembered one. It scans everything under `evaluation/` and fails on any
   accented character, so the corpus and the query set are covered the moment they are committed.
   While it passes, the gap is **demonstrably inert for every relevance-set result, because no
-  accented character appears in the corpus or the query set**. If it fails, the owner decides
+  accented character appears in the corpus or the query set**. Re-scanned 2026-10-25: still none
+  (`evaluation/` holds only the brief, `test_set.yaml`, `tuning_brands.yaml` and the probes; the
+  test passes). If it fails, the owner decides
   before the corpus or the pool goes further.
 - *The main experiment's memory.* Items written during evaluation runs come from model output,
   not from a committed file, so the test cannot cover them in advance. Whether any accented
@@ -381,7 +383,19 @@ it.
   default would be a guessed value standing in for a missing one), so no path can write such an
   item; and write-back's `Candidate.confidence` is required, stated by whoever proposes the fact.
   Done while `memory_items` held 0 rows on the live project: once data exists, a backfill would be
-  a decision about what the missing values were, which nobody would know.
+  a decision about what the missing values were, which nobody would know. Applied 2026-10-25.
+- **Revocation tests the value, not the transition — decided 2026-10-25 (project owner),
+  migration 0026.** The rule as first built ran only when a decrement happened, so an item
+  written at 0.20 was live and retrievable until some correction found it: exempt from the
+  mechanism by how it entered, the pattern of the previous bullet. Now `memory_items` refuses
+  `confidence` outside [0, 1] and refuses a live item below 0.30 (`revoked or confidence >=
+  0.30`; the number is `writeback.revoke_below`, and a test fails if the two differ, so raising
+  the threshold takes a migration that first revokes what it would strand). Write-back refuses a
+  candidate below the threshold at staging (`confidence_below_the_revocation_threshold`,
+  recorded like any refusal), treats a confidence outside [0, 1] as a defect, and clamps a
+  decrement at 0 — a confidence below zero is not a quantity, whatever happens to the item
+  afterwards. Migration 0027 removes the optional minus from 0024's decay pattern, which only
+  the unclamped decrement could have needed.
 
 ### 6.4 Revocation
 

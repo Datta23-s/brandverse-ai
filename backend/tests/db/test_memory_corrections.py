@@ -148,6 +148,70 @@ async def test_no_memory_item_can_be_written_without_a_confidence(
         await conn.execute("update memory_items set confidence = null where id = %s", (item,))
 
 
+async def test_confidence_is_a_probability(conn: AsyncConnection, seed: Seed) -> None:
+    # 0026: numeric(3,2) alone stores -9.99 to 9.99.
+    for bad in (-0.05, 1.5):
+        await conn.execute("savepoint s")
+        with pytest.raises(psycopg.errors.CheckViolation, match="confidence_range"):
+            await _existing(conn, seed, _fact(), confidence=bad)
+        await conn.execute("rollback to savepoint s")
+    item = await _existing(conn, seed, _fact(), confidence=1.0)
+    with pytest.raises(psycopg.errors.CheckViolation, match="confidence_range"):
+        await conn.execute("update memory_items set confidence = -0.01 where id = %s", (item,))
+
+
+async def test_a_live_item_cannot_sit_below_the_revocation_threshold(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    # 0026: revocation tests the value, not the crossing. An item written at 0.20 would otherwise
+    # be live and retrievable until some correction found it.
+    await conn.execute("savepoint s")
+    with pytest.raises(psycopg.errors.CheckViolation, match="live_confidence"):
+        await _existing(conn, seed, _fact(), confidence=0.20)
+    await conn.execute("rollback to savepoint s")
+    item = await _existing(conn, seed, _fact(), confidence=0.30)  # the threshold itself is live
+    with pytest.raises(psycopg.errors.CheckViolation, match="live_confidence"):
+        await conn.execute("update memory_items set confidence = 0.29 where id = %s", (item,))
+
+
+async def test_the_database_threshold_is_the_configured_one(conn: AsyncConnection) -> None:
+    import re
+    from decimal import Decimal
+
+    from app.memory.scoring import load_scoring
+
+    (definition,) = await _one(
+        conn,
+        "select pg_get_constraintdef(oid) from pg_constraint "
+        "where conname = 'memory_items_live_confidence'",
+        (),
+    )
+    match = re.search(r"confidence >= ([0-9.]+)", str(definition))
+    assert match, definition
+    assert Decimal(match[1]) == Decimal(str(load_scoring().writeback.revoke_below))
+
+
+async def test_a_decrement_cannot_take_confidence_below_zero(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    from app.memory.scoring import load_scoring
+
+    cfg = load_scoring().writeback.model_copy(update={"correction_step": 0.5})
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
+    run_id = await _run(conn, seed)
+    done = await commit_memory(
+        conn,
+        run_id,
+        StagedMemory(corrections=(Correction.flagged(item, "unrepeated_quantity"),)),
+        cfg=cfg,
+    )
+    reason = "confidence_decay: confidence 0.40 -> 0.00 below 0.30; "
+    state = await _state(conn, item)
+    assert state[:2] == ("0.00", True)
+    assert str(state[4]).startswith(reason)
+    assert [(c["after"], c["revoked"]) for c in done.corrected] == [(0.0, True)]
+
+
 async def test_an_item_corrected_in_a_run_is_not_reinforced_by_it(
     conn: AsyncConnection, seed: Seed
 ) -> None:
@@ -219,13 +283,28 @@ async def test_a_reuse_bump_needs_an_approved_campaign(conn: AsyncConnection, se
 
 
 async def _revoke(
-    conn: AsyncConnection, item: UUID, reason: str | None, by: UUID | None = None
+    conn: AsyncConnection,
+    item: UUID,
+    reason: str | None,
+    by: UUID | None = None,
+    *,
+    confidence: float | None = None,
 ) -> None:
-    await conn.execute(
-        "update memory_items set revoked = true, revoked_by = %s, revoked_reason = %s "
-        "where id = %s",
-        (by, reason, item),
-    )
+    """Revoke; `confidence` is lowered in the same statement, as a decay does (0026 allows a
+    confidence below the threshold only on a revoked item)."""
+    # Named only when given: a signed-in user holds no UPDATE grant on the column.
+    if confidence is None:
+        await conn.execute(
+            "update memory_items set revoked = true, revoked_by = %s, revoked_reason = %s "
+            "where id = %s",
+            (by, reason, item),
+        )
+    else:
+        await conn.execute(
+            "update memory_items set revoked = true, revoked_by = %s, revoked_reason = %s, "
+            "confidence = %s where id = %s",
+            (by, reason, confidence, item),
+        )
 
 
 @pytest.mark.parametrize(
@@ -252,35 +331,40 @@ async def _revoke(
 async def test_a_revocation_with_no_revoker_must_carry_a_well_formed_decay_record(
     conn: AsyncConnection, seed: Seed, reason: str | None
 ) -> None:
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
     with pytest.raises(psycopg.errors.CheckViolation):
-        await _revoke(conn, item, reason and reason.format(run=uuid4()))
+        await _revoke(conn, item, reason and reason.format(run=uuid4()), confidence=0.25)
 
 
 async def test_the_well_formed_record_is_accepted(conn: AsyncConnection, seed: Seed) -> None:
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
     reason = DECAY.format(cause="validation_flag:unsourced_claim", run=uuid4())
-    await _revoke(conn, item, reason)
+    await _revoke(conn, item, reason, confidence=0.25)
     assert await _state(conn, item) == ("0.25", True, None, True, reason)
 
 
 async def test_a_decay_record_cannot_carry_a_revoker(conn: AsyncConnection, seed: Seed) -> None:
     # By rule or by a person, never both: the split the evaluation reads depends on it.
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
     reason = DECAY.format(cause="validation_flag:unsourced_claim", run=uuid4())
     with pytest.raises(psycopg.errors.CheckViolation):
-        await _revoke(conn, item, reason, by=seed.users["owner_a"])
+        await _revoke(conn, item, reason, by=seed.users["owner_a"], confidence=0.25)
 
 
 async def test_a_decay_revocations_confidence_is_frozen(conn: AsyncConnection, seed: Seed) -> None:
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
-    await _revoke(conn, item, DECAY.format(cause="validation_flag:unsourced_claim", run=uuid4()))
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
+    await _revoke(
+        conn,
+        item,
+        DECAY.format(cause="validation_flag:unsourced_claim", run=uuid4()),
+        confidence=0.25,
+    )
     with pytest.raises(psycopg.errors.CheckViolation):
         await conn.execute("update memory_items set confidence = 0.90 where id = %s", (item,))
 
 
 async def test_a_person_cannot_write_a_decay_record(conn: AsyncConnection, seed: Seed) -> None:
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
+    item = await _existing(conn, seed, _fact(), confidence=0.40)
     await _act_as(conn, seed, "owner_a")
     reason = DECAY.format(cause="validation_flag:unsourced_claim", run=uuid4())
     with pytest.raises(psycopg.errors.RaiseException, match="recorded by the system"):
@@ -288,7 +372,7 @@ async def test_a_person_cannot_write_a_decay_record(conn: AsyncConnection, seed:
 
 
 async def test_a_person_still_revokes_in_their_own_name(conn: AsyncConnection, seed: Seed) -> None:
-    item = await _existing(conn, seed, _fact(), confidence=0.25)
+    item = await _existing(conn, seed, _fact(), confidence=0.50)
     await _act_as(conn, seed, "owner_a")
     await _revoke(conn, item, "wrong supplier", by=seed.users["owner_a"])
     await conn.execute("reset role")
@@ -327,7 +411,9 @@ async def test_revocations_are_counted_by_decay_cause_and_by_review(
 
     for cause in ("validation_flag:unsourced_claim", "validation_flag:unsourced_claim",
                   f"reviewer_edit:{seed.users['approver_a']}"):  # fmt: skip
-        await _revoke(conn, await item(0.25), DECAY.format(cause=cause, run=uuid4()))
+        await _revoke(
+            conn, await item(0.40), DECAY.format(cause=cause, run=uuid4()), confidence=0.25
+        )
     await _revoke(conn, await item(0.70), "wrong supplier", by=seed.users["owner_a"])
     await _revoke(conn, await item(0.70, seed_item=True), "seed", by=seed.users["owner_a"])
     await item(0.70)  # live: not counted

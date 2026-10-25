@@ -237,6 +237,25 @@ async def test_an_empty_candidate_is_refused() -> None:
     assert _reasons(screening) == [("empty",)]
 
 
+async def test_a_candidate_below_the_revocation_threshold_is_refused_not_written_live() -> None:
+    # 0026: revocation tests the value. At the threshold itself the item is live.
+    at, below = (
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, 0.30),
+        Candidate("insight", "Recycled-mesh uppers lead the copy", VERIFIED.id, 0.29),
+    )
+    screening, stage = await _screen(at, below)
+    assert [i.confidence for i in stage.items] == [0.30]
+    assert _reasons(screening) == [("confidence_below_the_revocation_threshold",)]
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.01])
+def test_a_confidence_that_is_not_a_probability_is_a_defect_not_a_refusal(
+    confidence: float,
+) -> None:
+    with pytest.raises(ValueError, match="not between 0 and 1"):
+        Candidate("insight", "Recycled mesh reads as premium", VERIFIED.id, confidence)
+
+
 async def test_every_reason_is_reported_not_only_the_first() -> None:
     screening, _ = await _screen(Candidate("insight", "Flat 500 off, write to a@b.co", None, 0.7))
     assert _reasons(screening) == [
