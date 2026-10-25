@@ -6,15 +6,19 @@ its payload says what any system thinks, duplicates are unmarked, and a frozen s
 """
 
 import hashlib
+import inspect
 import json
 import re
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+import yaml
 
 from app.evaluation.relevance import (
     DEFINITIONS,
+    JUDGMENTS,
     Item,
     Query,
     bm25_rank,
@@ -235,20 +239,100 @@ def test_the_task_is_written_once_and_frozen_labels_are_never_overwritten(tmp_pa
         write_task(tmp_path, QUERIES, ITEMS, FakeEncoder(), seed=3)
 
     payload = json.loads((tmp_path / "pool_payload.json").read_text(encoding="utf-8"))
+    key = json.loads((tmp_path / "pool_key.json").read_text(encoding="utf-8"))
+    write_queries(tmp_path)
     export = tmp_path / "export.json"
-    incomplete = labels_for(payload)
+    incomplete = valid_labels(payload, key)
     incomplete["labels"] = {}
     export.write_text(json.dumps(incomplete), encoding="utf-8")
     with pytest.raises(NotFreezable, match="not judged"):
         freeze(export, tmp_path)
 
-    export.write_text(json.dumps(labels_for(payload)), encoding="utf-8")
+    export.write_text(json.dumps(valid_labels(payload, key)), encoding="utf-8")
     record = freeze(export, tmp_path)
     assert record["labeller"] == "Kundan"
     assert record["labels_sha256"] == hashlib.sha256(export.read_bytes()).hexdigest()
     assert record["self_consistency"]["candidates_judged_twice"] > 0  # type: ignore[index]
     with pytest.raises(NotFreezable, match="never overwritten"):
         freeze(export, tmp_path)
+
+
+def write_queries(directory: Path) -> None:
+    """queries.yaml beside the pool, as the freeze script reads it: q6 is the unanswerable one."""
+    rows = [{"id": q.id, "unanswerable": q.id == "q6"} for q in QUERIES]
+    (directory / "queries.yaml").write_text(yaml.safe_dump(rows), encoding="utf-8")
+
+
+def valid_labels(
+    payload: dict[str, object], key: dict[str, object], *, seconds: float = 5.0
+) -> dict[str, object]:
+    """A complete export that passes every validity check: judgments cycle through all three
+    values, the unanswerable query (q6) gets none relevant, and judgments are `seconds` apart."""
+    labels = labels_for(payload)
+    start = datetime(2026, 10, 18, 11, tzinfo=UTC)
+    n = 0
+    for q in payload["queries"]:  # type: ignore[attr-defined]
+        unanswerable = key["queries"][q["id"]]["query"] == "q6"  # type: ignore[index]
+        for c in q["candidates"]:
+            mark = labels["labels"][q["id"]][c["id"]]  # type: ignore[index]
+            mark["judgment"] = "not_relevant" if unanswerable else JUDGMENTS[n % 3]
+            mark["at"] = (start + timedelta(seconds=seconds * n)).isoformat()
+            n += 1
+    return labels
+
+
+def frozen_task(tmp_path: Path) -> tuple[dict[str, object], dict[str, object]]:
+    write_task(tmp_path, QUERIES, ITEMS, FakeEncoder(), seed=3, depth=4, duplicates=2)
+    payload = json.loads((tmp_path / "pool_payload.json").read_text(encoding="utf-8"))
+    key = json.loads((tmp_path / "pool_key.json").read_text(encoding="utf-8"))
+    write_queries(tmp_path)
+    return payload, key
+
+
+def refusal(tmp_path: Path, labels: dict[str, object]) -> str:
+    export = tmp_path / "export.json"
+    export.write_text(json.dumps(labels), encoding="utf-8")
+    with pytest.raises(NotFreezable) as refused:
+        freeze(export, tmp_path)
+    assert not (tmp_path / "labels.lock").exists()  # nothing written on a refusal
+    return str(refused.value)
+
+
+def test_a_relevant_label_under_an_unanswerable_query_is_refused(tmp_path: Path) -> None:
+    payload, key = frozen_task(tmp_path)
+    labels = valid_labels(payload, key)
+    code = next(c for c, v in key["queries"].items() if v["query"] == "q6")  # type: ignore[attr-defined]
+    first = next(iter(labels["labels"][code]))  # type: ignore[index]
+    labels["labels"][code][first]["judgment"] = "relevant"  # type: ignore[index]
+    message = refusal(tmp_path, labels)
+    assert "unanswerable" in message and "q6" in message
+
+
+def test_a_near_uniform_label_set_is_refused(tmp_path: Path) -> None:
+    payload, key = frozen_task(tmp_path)
+    labels = valid_labels(payload, key)
+    for marks in labels["labels"].values():  # type: ignore[attr-defined]
+        for m in marks.values():
+            m["judgment"] = "partial"
+    message = refusal(tmp_path, labels)
+    assert "of judgments are 'partial'" in message
+
+
+def test_judging_faster_than_two_seconds_at_the_median_is_refused(tmp_path: Path) -> None:
+    payload, key = frozen_task(tmp_path)
+    message = refusal(tmp_path, valid_labels(payload, key, seconds=1.0))
+    assert "median interval" in message and "1.00s" in message
+
+
+def test_a_refusal_prints_the_diagnostics_and_there_is_no_override(tmp_path: Path) -> None:
+    payload, key = frozen_task(tmp_path)
+    message = refusal(tmp_path, valid_labels(payload, key, seconds=0.5))
+    headings = ("distribution", "unanswerable", "sittings", "intervals_seconds", "hidden_repeats")
+    for heading in headings:
+        assert f'"{heading}"' in message
+    from scripts.freeze_relevance_labels import main
+
+    assert "--force" not in inspect.getsource(main)  # no override flag exists
 
 
 def test_a_held_key_or_chord_cannot_record_a_judgment() -> None:

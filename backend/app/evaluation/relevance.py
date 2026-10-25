@@ -28,7 +28,9 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from statistics import median
 from typing import Literal
 
 # Queries and items are embedded by separate methods: the query instruction applies to queries
@@ -241,6 +243,127 @@ class Consistency:
 def self_consistency(resolved: Mapping[tuple[str, str], Sequence[Judgment]]) -> Consistency:
     twice = [js for js in resolved.values() if len(js) == 2]
     return Consistency(len(twice), sum(1 for a, b in twice if a == b))
+
+
+# ── Validity: an export that is complete can still be unreadable as a set of judgments ───────
+# Decided 2026-10-25 after a sitting whose export was discarded (docs/evaluation-plan.md §7). These
+# are hard refusals with no override: a legitimate export that trips one is a conversation.
+
+MAX_SINGLE_LABEL_SHARE = 0.90
+MIN_MEDIAN_INTERVAL_SECONDS = 2.0
+
+
+def _percentile(sorted_values: Sequence[float], p: float) -> float:
+    return sorted_values[int(p * (len(sorted_values) - 1))]
+
+
+def diagnostics(
+    payload: Mapping[str, object],
+    key: Mapping[str, object],
+    labels: Mapping[str, object],
+    unanswerable: Sequence[str],
+) -> dict[str, object]:
+    """The five facts a refusal shows, computed on whatever was judged (partial exports included):
+    distribution, the unanswerable queries' labels, which sittings are complete, the interval
+    distribution, and the hidden repeats' agreement. Intervals are the gaps between consecutive
+    judgments over the whole session, ordered by timestamp."""
+    queries, judged = key["queries"], labels.get("labels")
+    pool = payload["queries"]
+    if not (
+        isinstance(queries, Mapping) and isinstance(judged, Mapping) and isinstance(pool, list)
+    ):
+        raise TypeError("payload, key or labels are malformed")
+    marks = [
+        (code, cid, m)
+        for code, cs in judged.items()
+        for cid, m in cs.items()
+        if isinstance(m, Mapping)
+    ]
+    n = len(marks)
+    counts = Counter(m.get("judgment") for _, _, m in marks)
+    distribution = {
+        j: {"count": counts[j], "share": counts[j] / n if n else float("nan")} for j in JUDGMENTS
+    }
+
+    def name(code: str) -> str:
+        return str(queries[code]["query"]) + (" (repeat)" if queries[code]["duplicate"] else "")
+
+    complete, partial, untouched = [], [], []
+    for q in pool:
+        total = len(q["candidates"])
+        done = sum(1 for c in q["candidates"] if c["id"] in judged.get(q["id"], {}))
+        if done == total:
+            complete.append(name(q["id"]))
+        elif done == 0:
+            untouched.append(name(q["id"]))
+        else:
+            partial.append(f"{name(q['id'])} ({done}/{total})")
+    unanswerable_labels = {
+        name(code): dict(Counter(m.get("judgment") for m in judged[code].values()))
+        for code in sorted(judged, key=name)
+        if queries[code]["query"] in unanswerable
+    }
+    stamps = sorted(datetime.fromisoformat(str(m["at"])) for _, _, m in marks)
+    gaps = sorted((b - a).total_seconds() for a, b in zip(stamps, stamps[1:], strict=False))
+    intervals: dict[str, object] = {"n": len(gaps)}
+    if gaps:
+        intervals |= {
+            "min": gaps[0], "p10": _percentile(gaps, 0.1), "p25": _percentile(gaps, 0.25),
+            "median": median(gaps), "p75": _percentile(gaps, 0.75), "p90": _percentile(gaps, 0.9),
+            "p99": _percentile(gaps, 0.99), "max": gaps[-1],
+            "share_at_or_under_1s": sum(1 for g in gaps if g <= 1) / len(gaps),
+        }  # fmt: skip
+    consistency = self_consistency(resolve(key, labels))
+    return {
+        "judged": n,
+        "total": sum(len(q["candidates"]) for q in pool),
+        "distribution": distribution,
+        "unanswerable": unanswerable_labels,
+        "sittings": {
+            "complete": sorted(complete),
+            "partial": sorted(partial),
+            "untouched": sorted(untouched),
+        },
+        "intervals_seconds": intervals,
+        "hidden_repeats": {
+            "pairs": consistency.pairs,
+            "agreed": consistency.agreed,
+            "note": "a uniform label set agrees with itself perfectly; read with the distribution",
+        },
+    }  # fmt: skip
+
+
+def validity_problems(found: Mapping[str, object]) -> list[str]:
+    """Reasons an export must not be frozen, from `diagnostics`. Empty when none apply."""
+    problems = []
+    unanswerable = found["unanswerable"]
+    if not isinstance(unanswerable, Mapping):
+        raise TypeError("malformed diagnostics")
+    flagged = {q: c["relevant"] for q, c in unanswerable.items() if c.get("relevant")}
+    if flagged:
+        problems.append(
+            "candidates under designed-unanswerable queries are marked relevant "
+            f"({sum(flagged.values())} across {', '.join(sorted(flagged))}): "
+            "nothing in the corpus answers them"
+        )
+    distribution = found["distribution"]
+    if not isinstance(distribution, Mapping):
+        raise TypeError("malformed diagnostics")
+    for j, d in distribution.items():
+        if d["count"] and d["share"] > MAX_SINGLE_LABEL_SHARE:
+            problems.append(
+                f"{d['share']:.1%} of judgments are '{j}' (limit {MAX_SINGLE_LABEL_SHARE:.0%}): "
+                "a pool built to contain non-matches was not read"
+            )
+    intervals = found["intervals_seconds"]
+    if not isinstance(intervals, Mapping):
+        raise TypeError("malformed diagnostics")
+    if "median" in intervals and intervals["median"] < MIN_MEDIAN_INTERVAL_SECONDS:
+        problems.append(
+            f"median interval between judgments is {intervals['median']:.2f}s "
+            f"(minimum {MIN_MEDIAN_INTERVAL_SECONDS:g}s): too fast to have read candidate and query"
+        )
+    return problems
 
 
 def precision_at_10(

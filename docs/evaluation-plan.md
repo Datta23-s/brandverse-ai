@@ -679,6 +679,32 @@ established. The page now ignores repeated keydowns and chords (`label_page.html
 (queries, corpus, pool, locks, the superseded corpus, `label.html`, the freeze script) are kept as
 the evidence the protocol was real and so a later sitting can still be run on the same pool.
 
+**Validity refusals in the freeze script — decided 2026-10-25, before any labelling is
+reattempted.** `scripts/freeze_relevance_labels.py` already refused an incomplete export. It now
+also refuses an invalid one, so that no export is frozen only because nobody thought to check it.
+Three thresholds, each a hard refusal with **no override flag**: a legitimate export that trips one
+is a conversation, not a command-line switch.
+
+| Refuse if | Threshold | Why |
+|---|---|---|
+| A candidate under a designed-unanswerable query (q43–q50) is marked "relevant" | any one | Objective: the finished corpus was verified to contain nothing that answers them, so such a label contradicts the repo. It is not a judgement call. |
+| One label value exceeds a share of all judgments | 90% | A pooled candidate set is built to contain non-matches; a near-uniform set did not read them. |
+| The median interval between consecutive judgments is under | 2 seconds | Reading a candidate against its query takes longer than that. Intervals are the gaps between consecutive judgments over the whole session, ordered by timestamp. |
+
+The checks run on whatever was judged, so a partial export is also tested. On **any** refusal the
+script prints the same five diagnostics: the label distribution (counts and shares); the labels
+under each unanswerable query; which sittings are complete, partial and untouched; the interval
+distribution (min, p10, p25, median, p75, p90, p99, max, share at or under 1 s); and the hidden
+repeats' agreement, with the note that a uniform label set agrees with itself perfectly, so that
+figure means nothing until the distribution is read. Run against the discarded 2026-10-25 export
+(read-only; nothing written), it refuses on all three: 144 "relevant" labels under the unanswerable
+sittings (q43, q46, q48, q49, q50 and the q50 repeat; 120 on the five distinct queries), 99.8%
+"relevant", and a 0.89 s median.
+
+The thresholds are judgement-set limits, not measured ones. 90% and 2 s are deliberately loose,
+chosen to catch a set that was not read and not to police a fast, honest labeller; they were fixed
+before any new label exists, and are not to be tuned afterwards to admit a particular export.
+
 ## 8. Decisions
 
 | # | Decision | Agreed |
