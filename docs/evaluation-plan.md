@@ -493,7 +493,44 @@ in view**. The labeller still never reads the corpus before labelling. The cost 
 side of the independence: the corpus author knew what would be asked, so corpus wording may echo
 query wording more than a corpus written blind would, which would inflate lexical and vector
 overlap with the queries. How the corpus was drafted to limit that, and its own limitations, are
-recorded where it is frozen (`evaluation/relevance/corpus.lock`, below).
+recorded in the next subsection.
+
+### The corpus as frozen — 2026-10-25
+
+`evaluation/relevance/corpus.yaml`: 120 items (40 each for Mettlepan, Zarvik Nutrition and Nookwell
+Home), hashed in `corpus.lock` after `queries.lock`, and before the pool (`pool.lock`). Drafted by
+Claude (the coding assistant) from `brief.md`, with the 50 queries in view. Each item is one fact in
+the form of a memory item, 22 to 67 encoder tokens against a cap of 400, and passes write-back's own
+screens for prices, discounts, dates, promo codes and personal data. What it is and is not:
+
+- *Drafting to limit echo.* Items were written as the standing knowledge a marketing team would
+  keep about the brand (personas, competitors, claims, voice, how formats behave), not as answers
+  to a query. Echo is limited by how the items were written, not removed: the author had read the
+  queries, and where a query names a thing the brief names, an item names it too. Precision@10
+  on this set may therefore be higher than on a corpus written without sight of the queries; the
+  size of that effect is not measured.
+- *Synthetic, and drafted by the same family of model that assisted with the queries* (the
+  queries' assistant is not identified in this record, so it is not claimed to be the same model).
+  The items are invented facts about invented brands, including the behavioural statements
+  ('posts showing X were saved more often'). They are not evidence about real customers or real
+  creative, and nothing in the thesis may cite them as such.
+- *The unanswerable queries.* The eight (q43 to q50) were checked against the finished corpus on
+  2026-10-25 by reading, for each, the four top candidates of BM25 and of the vector ranker, and by
+  `tests/test_relevance_corpus.py`, which fails if any item contains the words an answer would need
+  (a discount figure, a launch date, wholesale pricing, a collection's performance, creator spend
+  or conversion, a returns policy, a sales count). None answers any of the eight. Items near the
+  topic exist on purpose (the starter set, festival gifting, SoftLoom, creator briefs, a
+  quick-commerce listing, the move-in bundle's contents), so a retriever returns something and the
+  right behaviour, nothing above the reuse band, is a real test. A labeller may still judge such a
+  neighbour 'partial'; the eight are reported separately for that reason.
+- *The claim-sensitive queries (q27, q28).* The corpus holds the material that bears on them: the
+  evidence file (`zv-26`: one study of lean mass and strength, not recovery), the approved wording
+  (`zv-30`: tiredness, not sleep), the permitted and refused phrasings (`zv-27`, `zv-31`, `zv-34`),
+  and two past rejections (`zv-28`, `zv-32`). `zv-26` and `zv-30` would overstate if cited loosely
+  for recovery and for sleep, so the claim gate and the reuse bands are exercised, not bypassed.
+- *The pool.* `pool.lock`: the union of the top 15 of BM25 and of the pinned encoder's cosine
+  ranking per query (neither is the hybrid ranker or the M-score), 55 sittings (50 queries and 5
+  hidden repeats), 1,335 judgments, seed 20261025.
 
 **Who writes what, and in what order (decided 2026-10-18).**
 

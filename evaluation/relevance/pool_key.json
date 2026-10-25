@@ -1,0 +1,349 @@
+{
+  "pool_sha256": "029e48a26787ea183ba430ceb0874c01bc63f49afb928488fa78ac91310169ef",
+  "seed": 20261025,
+  "depth": 15,
+  "queries": {
+    "c600ccb787": {
+      "query": "q21",
+      "duplicate": false
+    },
+    "0ddfa8210f": {
+      "query": "q26",
+      "duplicate": false
+    },
+    "15d0f115ce": {
+      "query": "q28",
+      "duplicate": false
+    },
+    "7cdcbd6a6c": {
+      "query": "q19",
+      "duplicate": false
+    },
+    "e617dcc836": {
+      "query": "q12",
+      "duplicate": false
+    },
+    "e73d3d0c10": {
+      "query": "q48",
+      "duplicate": false
+    },
+    "8916f2affc": {
+      "query": "q20",
+      "duplicate": false
+    },
+    "61f42a9171": {
+      "query": "q34",
+      "duplicate": false
+    },
+    "9f82bed303": {
+      "query": "q40",
+      "duplicate": false
+    },
+    "7034843441": {
+      "query": "q50",
+      "duplicate": true
+    },
+    "c309f498df": {
+      "query": "q42",
+      "duplicate": false
+    },
+    "523466d270": {
+      "query": "q17",
+      "duplicate": false
+    },
+    "1055fe825e": {
+      "query": "q30",
+      "duplicate": false
+    },
+    "e64883a683": {
+      "query": "q50",
+      "duplicate": false
+    },
+    "6ef1d1be97": {
+      "query": "q32",
+      "duplicate": false
+    },
+    "c19ccaea59": {
+      "query": "q49",
+      "duplicate": false
+    },
+    "7f601a23ab": {
+      "query": "q39",
+      "duplicate": false
+    },
+    "73e5dce10b": {
+      "query": "q36",
+      "duplicate": false
+    },
+    "37b9949b8e": {
+      "query": "q15",
+      "duplicate": false
+    },
+    "bae3a443b2": {
+      "query": "q18",
+      "duplicate": false
+    },
+    "4e7b784df1": {
+      "query": "q13",
+      "duplicate": false
+    },
+    "9e94e067c2": {
+      "query": "q08",
+      "duplicate": false
+    },
+    "91746b5944": {
+      "query": "q11",
+      "duplicate": false
+    },
+    "94fe55ad5b": {
+      "query": "q13",
+      "duplicate": true
+    },
+    "a9d1864ba4": {
+      "query": "q01",
+      "duplicate": false
+    },
+    "f124963cf1": {
+      "query": "q02",
+      "duplicate": false
+    },
+    "d57cfacf83": {
+      "query": "q43",
+      "duplicate": false
+    },
+    "72492ae1b4": {
+      "query": "q33",
+      "duplicate": false
+    },
+    "a8ab4c6805": {
+      "query": "q16",
+      "duplicate": false
+    },
+    "c733dbc24b": {
+      "query": "q14",
+      "duplicate": false
+    },
+    "2cda5bad49": {
+      "query": "q46",
+      "duplicate": false
+    },
+    "9f22301dd0": {
+      "query": "q35",
+      "duplicate": false
+    },
+    "98e3ec7594": {
+      "query": "q07",
+      "duplicate": false
+    },
+    "15c5df54fb": {
+      "query": "q15",
+      "duplicate": true
+    },
+    "ff31dca2f8": {
+      "query": "q03",
+      "duplicate": false
+    },
+    "3bab104fd7": {
+      "query": "q31",
+      "duplicate": false
+    },
+    "c829a7a4b5": {
+      "query": "q06",
+      "duplicate": false
+    },
+    "bbfebc3af0": {
+      "query": "q38",
+      "duplicate": false
+    },
+    "ea5859d5a3": {
+      "query": "q23",
+      "duplicate": false
+    },
+    "a7807d3a8b": {
+      "query": "q28",
+      "duplicate": true
+    },
+    "0df6170056": {
+      "query": "q41",
+      "duplicate": false
+    },
+    "5c3adb2bb8": {
+      "query": "q25",
+      "duplicate": false
+    },
+    "3e49f52c3f": {
+      "query": "q25",
+      "duplicate": true
+    },
+    "70abb82b1c": {
+      "query": "q22",
+      "duplicate": false
+    },
+    "8a55d64ca5": {
+      "query": "q04",
+      "duplicate": false
+    },
+    "76dec2a993": {
+      "query": "q09",
+      "duplicate": false
+    },
+    "7584dee5e5": {
+      "query": "q45",
+      "duplicate": false
+    },
+    "84b7bb5a44": {
+      "query": "q10",
+      "duplicate": false
+    },
+    "e524a82b41": {
+      "query": "q24",
+      "duplicate": false
+    },
+    "60ebe99e44": {
+      "query": "q27",
+      "duplicate": false
+    },
+    "32a527a00d": {
+      "query": "q05",
+      "duplicate": false
+    },
+    "7ff5315401": {
+      "query": "q29",
+      "duplicate": false
+    },
+    "47f588e2a6": {
+      "query": "q37",
+      "duplicate": false
+    },
+    "5afc396f02": {
+      "query": "q47",
+      "duplicate": false
+    },
+    "717771962f": {
+      "query": "q44",
+      "duplicate": false
+    }
+  },
+  "items": {
+    "5568160169": "mp-01",
+    "fe087191d0": "mp-02",
+    "2ffa14a3ac": "mp-03",
+    "fe77f7ac52": "mp-04",
+    "25784a6885": "mp-05",
+    "97115cf5b7": "mp-06",
+    "bb08d2e7db": "mp-07",
+    "29da2ebd87": "mp-08",
+    "7a2b498eff": "mp-09",
+    "263ef1511e": "mp-10",
+    "0155c2d698": "mp-11",
+    "b0bd789f19": "mp-12",
+    "d339b7830a": "mp-13",
+    "631b3b0974": "mp-14",
+    "ef97894495": "mp-15",
+    "000363bc90": "mp-16",
+    "0d60059c63": "mp-17",
+    "977dccce08": "mp-18",
+    "b09bf8bd75": "mp-19",
+    "096f9f2a91": "mp-20",
+    "5c70ad39af": "mp-21",
+    "ad2166fe62": "mp-22",
+    "3cbc8312be": "mp-23",
+    "b9872d19a9": "mp-24",
+    "8d43f92274": "mp-25",
+    "777653bddd": "mp-26",
+    "3a7e892c34": "mp-27",
+    "aa28d478e2": "mp-28",
+    "46cc7b1105": "mp-29",
+    "5d38c84cfe": "mp-30",
+    "dbbbda227c": "mp-31",
+    "726de2492b": "mp-32",
+    "3995eb4afc": "mp-33",
+    "597e310a5b": "mp-34",
+    "4100a781db": "mp-35",
+    "56f5d31f1e": "mp-36",
+    "bac53c1442": "mp-37",
+    "dd71078b98": "mp-38",
+    "cb82d6931f": "mp-39",
+    "23994eb15d": "mp-40",
+    "e624737742": "nw-01",
+    "fac832c8bd": "nw-02",
+    "05c4b1f8be": "nw-03",
+    "e8964203b1": "nw-04",
+    "a8b5dbcbe9": "nw-05",
+    "933d490630": "nw-06",
+    "626fb9c5a9": "nw-07",
+    "3d15ac39c5": "nw-08",
+    "373797f238": "nw-09",
+    "8da7bff8d2": "nw-10",
+    "dedc38cee6": "nw-11",
+    "22fc59390d": "nw-12",
+    "5e87b1be4c": "nw-13",
+    "4483c4f813": "nw-14",
+    "8a9d635d0c": "nw-15",
+    "3d7be63356": "nw-16",
+    "f6dc9a98a1": "nw-17",
+    "ab7976818d": "nw-18",
+    "6d74a409f9": "nw-19",
+    "ef9588cb10": "nw-20",
+    "cd4c1bcaa3": "nw-21",
+    "2828142398": "nw-22",
+    "54ba486841": "nw-23",
+    "e571ac0c9d": "nw-24",
+    "7188d0b5b5": "nw-25",
+    "3b0b6a5b2e": "nw-26",
+    "1832cc9bdb": "nw-27",
+    "c6824d1e61": "nw-28",
+    "04ebe18ccb": "nw-29",
+    "d0415a2f6c": "nw-30",
+    "649b7d21a5": "nw-31",
+    "89b5622930": "nw-32",
+    "3a3c9281e8": "nw-33",
+    "3597f4da4e": "nw-34",
+    "e2c815792c": "nw-35",
+    "fb27521d50": "nw-36",
+    "7d9237cc41": "nw-37",
+    "4eb2ae40ed": "nw-38",
+    "6ec58e13a2": "nw-39",
+    "fb2cfc26a5": "nw-40",
+    "b2d0c3c482": "zv-01",
+    "4abfcf1b16": "zv-02",
+    "3148bc48c3": "zv-03",
+    "fa950bbf65": "zv-04",
+    "8ceba297d5": "zv-05",
+    "1036b1e0f4": "zv-06",
+    "580ff2c7ce": "zv-07",
+    "8a887c2cd7": "zv-08",
+    "8d7e7c8a5c": "zv-09",
+    "670c9591d6": "zv-10",
+    "5bf44ef8b4": "zv-11",
+    "9f5e589246": "zv-12",
+    "e5d20de517": "zv-13",
+    "160c3dfdf5": "zv-14",
+    "beee10b015": "zv-15",
+    "46410aa8cf": "zv-16",
+    "fd618d3799": "zv-17",
+    "0adb1a02b1": "zv-18",
+    "754aac3198": "zv-19",
+    "0c0fed26bc": "zv-20",
+    "bb927b4ca2": "zv-21",
+    "61f0904301": "zv-22",
+    "32d7892d39": "zv-23",
+    "6c4b2fce82": "zv-24",
+    "3d0f791716": "zv-25",
+    "e20008cf05": "zv-26",
+    "098e84f604": "zv-27",
+    "7e4b13f787": "zv-28",
+    "14b825cdf1": "zv-29",
+    "8fac16620c": "zv-30",
+    "bf629a3925": "zv-31",
+    "869aa0791f": "zv-32",
+    "6d61978381": "zv-33",
+    "05c8738ab7": "zv-34",
+    "90eb448c62": "zv-35",
+    "18d2e3d8a3": "zv-36",
+    "192ef9dd4b": "zv-37",
+    "7e86cb43ba": "zv-38",
+    "8d82922498": "zv-39",
+    "1b164864ca": "zv-40"
+  }
+}

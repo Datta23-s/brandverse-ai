@@ -1,0 +1,13 @@
+{
+  "pool_sha256": "029e48a26787ea183ba430ceb0874c01bc63f49afb928488fa78ac91310169ef",
+  "encoder": {
+    "model": "BAAI/bge-base-en-v1.5",
+    "version": "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a"
+  },
+  "seed": 20261025,
+  "depth": 15,
+  "queries": 50,
+  "sittings": 55,
+  "hidden_duplicates": 5,
+  "judgments": 1335
+}

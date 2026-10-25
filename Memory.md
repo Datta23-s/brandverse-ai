@@ -244,15 +244,18 @@ text the result is computed from:
   every character whose canonical decomposition carries a combining mark (what the tokenizer's
   accent stripping removes): none in `evaluation/relevance/brief.md`, `evaluation/test_set.yaml`,
   `evaluation/tuning_brands.yaml` or the V2 probe file (their only non-ASCII characters are em
-  dashes and section signs). The corpus and the 50-query set do not exist yet, so the claim is
-  not yet true of them; `backend/tests/test_evaluation_text_unaccented.py` makes it a checked
-  fact rather than a remembered one. It scans everything under `evaluation/` and fails on any
-  accented character, so the corpus and the query set are covered the moment they are committed.
+  dashes and section signs). `backend/tests/test_evaluation_text_unaccented.py` makes it a checked
+  fact rather than a remembered one: it scans everything under `evaluation/` and fails on any
+  accented character.
   While it passes, the gap is **demonstrably inert for every relevance-set result, because no
-  accented character appears in the corpus or the query set**. Re-scanned 2026-10-25: still none
-  (`evaluation/` holds only the brief, `test_set.yaml`, `tuning_brands.yaml` and the probes; the
-  test passes). If it fails, the owner decides
-  before the corpus or the pool goes further.
+  accented character appears in the corpus or the query set**. **Scanned 2026-10-25 over the
+  finished corpus (120 items, frozen), the 50 queries (frozen) and the pool built from them:
+  13 files, none with an accented character.** `corpus.yaml`, `queries.yaml`, the pool files
+  and the V2 probe are pure ASCII; the only other non-ASCII characters are section signs and em
+  dashes in headings and notes (`brief.md`, `queries.md`, `test_set.yaml`,
+  `tuning_brands.yaml`) and one middle dot in the labelling page's own template, none in any text
+  a retriever reads. So the claim holds for the set as it will be labelled and measured. If the
+  test ever fails, the owner decides before the corpus or the pool goes further.
 - *The main experiment's memory.* Items written during evaluation runs come from model output,
   not from a committed file, so the test cannot cover them in advance. Whether any accented
   character reached `memory_items.content` in the evaluation organisations is checked after the
