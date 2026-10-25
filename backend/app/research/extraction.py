@@ -13,6 +13,10 @@ CI runs `Extractor` over the library's recorded outputs for saved HTML pages
 (tests/fixtures/extraction, recorded by scripts/record_extraction_fixtures.py), and the same
 assertions run against the live library wherever it is installed.
 
+Language: the library's `language` came back empty on all five fixture pages. It is carried through
+but unverified, and nothing may depend on language detection until it has been shown to work on real
+fetched pages.
+
 Zero-retention (Architecture.md §6): an `ExtractedPage` holds the page's text and lives in memory or
 in Redis under a TTL. Nothing here writes to Postgres; only extracted, scored, attributed findings
 persist, and those are built from this by later pieces.
@@ -20,6 +24,7 @@ persist, and those are built from this by later pieces.
 
 from collections.abc import Callable, Mapping
 from datetime import date
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,8 +42,8 @@ class ExtractedPage(BaseModel):
     text: str
     published: date | None  # the page's own date, for freshness decay; None when it states none
     author: str | None
-    sitename: str | None
-    language: str | None
+    sitename: str | None  # only a publisher the page states; see `_stated_sitename`
+    language: str | None  # UNVERIFIED: empty on all five fixtures; nothing depends on it
     truncated: bool = False
 
 
@@ -54,6 +59,23 @@ def _date(value: object) -> date | None:
         return date.fromisoformat(value.strip()[:10])
     except ValueError:
         return None
+
+
+def _stated_sitename(value: object, url: str) -> str | None:
+    """The publisher the page states, or None. trafilatura fills `sitename` with the hostname when
+    the page names no publisher, which would turn an unstated publisher into an apparently stated
+    one, and the library does not say which it did. So a value that is the URL's host, or a parent
+    domain of it (case and a leading `www.` ignored), is treated as NOT STATED. A page that really
+    names itself by its domain is lost with it: the rule errs toward not stated. Every consumer
+    inherits this; source scoring must not re-derive it."""
+    name = _text(value)
+    host = (urlsplit(url).hostname or "").casefold().removeprefix("www.")
+    if name is None:
+        return None
+    bare = name.casefold().removeprefix("www.")
+    if host and (bare == host or host.endswith("." + bare)):
+        return None
+    return name
 
 
 def _cut(text: str, limit: int) -> str:
@@ -82,7 +104,7 @@ class Extractor:
             text=_cut(text, self._max_chars) if truncated else text,
             published=_date(raw.get("date")),
             author=_text(raw.get("author")),
-            sitename=_text(raw.get("sitename")),
+            sitename=_stated_sitename(raw.get("sitename"), url),
             language=_text(raw.get("language")),
             truncated=truncated,
         )

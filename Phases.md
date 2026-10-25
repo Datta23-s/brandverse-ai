@@ -384,6 +384,9 @@ overlong one at a paragraph, both limits in `config/scoring.yaml`. Tested in CI 
 library output for five saved pages (boilerplate and comments stripped, spec table kept, a login
 wall refused); the same assertions run against the live library where it is installed. The page
 fetcher, which supplies the HTML, is not written.
+A publisher name equal to the page's host is read as NOT STATED (trafilatura fills it in when the page
+names none). Language detection is UNVERIFIED (empty on all five fixtures): nothing may depend on it
+until it works on real fetched pages.
 
 ---
 

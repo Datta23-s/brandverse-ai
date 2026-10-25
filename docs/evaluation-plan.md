@@ -794,7 +794,9 @@ request's snapshot is older than N days**, rather than leaving it a target someo
 arms necessarily saw the same results.)
 
 *Reported, per request:* the actual span between its first and last fetch, and the share of its
-evidence replayed versus fetched live. *Reported once, descriptively, not as a constraint:* the
+evidence replayed versus fetched live, **and the age of the oldest replayed entry**: a request
+running entirely on three-week-old snapshots is comparable across arms and also stale in absolute
+terms, and the second fact must be visible rather than implied by its absence. *Reported once, descriptively, not as a constraint:* the
 global span of the snapshot, earliest to latest fetch.
 
 *Residual, stated now.* A query first issued late in the evaluation was fetched later than one

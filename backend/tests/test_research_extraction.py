@@ -218,3 +218,34 @@ def test_overlong_text_with_no_late_boundary_is_cut_at_the_limit() -> None:
 
 def test_text_within_the_limit_is_not_flagged() -> None:
     assert not small(raw_with(), max_chars=10_000).extract("", "https://x/").truncated
+
+
+def test_a_site_name_the_library_derived_from_the_host_is_not_a_stated_publisher() -> None:
+    # The recording: no publisher on the page, and the library answered with the hostname.
+    recording = recording_of("article_no_date")
+    raw = recording["raw"]
+    assert isinstance(raw, dict) and raw["sitename"] == "fixtures.example.test"
+    page = extractor(recorded).extract(html_of("article_no_date"), url_of("article_no_date"))
+    assert page.sitename is None
+
+
+@pytest.mark.parametrize(
+    ("sitename", "url", "expected"),
+    [
+        ("fixtures.example.test", "https://fixtures.example.test/a", None),  # the host itself
+        ("Fixtures.Example.Test", "https://fixtures.example.test/a", None),  # case
+        ("example.test", "https://journal.example.test/a", None),  # a parent domain of the host
+        ("www.example.test", "https://example.test/a", None),  # a leading www.
+        ("example.test", "https://www.example.test/a", None),
+        ("Example Cookware Journal", "https://journal.example.test/a", "Example Cookware Journal"),
+        ("Example", "https://example.test/a", "Example"),  # a stated name that is not a domain
+        ("other.test", "https://example.test/a", "other.test"),  # a different domain is stated
+        ("ample.test", "https://example.test/a", "ample.test"),  # not a parent: no suffix trick
+        (None, "https://example.test/a", None),
+    ],
+)
+def test_the_stated_versus_derived_site_name_rule(
+    sitename: str | None, url: str, expected: str | None
+) -> None:
+    page = small(raw_with(sitename=sitename)).extract("", url)
+    assert page.sitename == expected
