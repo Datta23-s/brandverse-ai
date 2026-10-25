@@ -376,7 +376,8 @@ code that catches these errors, which is the query planner's job and is not writ
 `config/scoring.yaml` `research.search_cache_ttl_s` (a parameter beside the M-score weights; an
 entry older than the TTL in force is a miss), a per-run ledger of the TTL, each search's outcome
 and each reused entry's age, and a report of evidence fetched versus reused. Whether evaluation
-runs use it is proposed, not decided: `docs/evaluation-plan.md` §8, awaiting the owner's ruling.
+runs use it is ruled (2026-10-25): one frozen record-and-replay snapshot, arms of a request within
+3 days of its first fetch; `docs/evaluation-plan.md` §8. The snapshot mode is not built yet.
 
 ---
 
