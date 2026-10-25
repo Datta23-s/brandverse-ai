@@ -1,0 +1,200 @@
+- id: q01
+  brand: mettlepan
+  text: What do we say to a couple setting up their first kitchen together
+  unanswerable: false
+- id: q02
+  brand: mettlepan
+  text: How do we talk to someone throwing out their non-stick pans
+  unanswerable: false
+- id: q03
+  brand: mettlepan
+  text: What's in the first kitchen starter set and who is it for
+  unanswerable: false
+- id: q04
+  brand: mettlepan
+  text: What's the difference between our tri-ply and our cast iron
+  unanswerable: false
+- id: q05
+  brand: mettlepan
+  text: How do we answer someone who thinks cast iron is too much maintenance
+  unanswerable: false
+- id: q06
+  brand: mettlepan
+  text: What do we say when someone says our pans cost more than Cookhaus
+  unanswerable: false
+- id: q07
+  brand: mettlepan
+  text: How should we sound on Instagram compared to our own website
+  unanswerable: false
+- id: q08
+  brand: mettlepan
+  text: What do we tell a YouTube recipe creator about how to talk about our pans
+  unanswerable: false
+- id: q09
+  brand: mettlepan
+  text: How do we position against Ironvale's heritage story
+  unanswerable: false
+- id: q10
+  brand: mettlepan
+  text: How do we handle Cookhaus always running a sale
+  unanswerable: false
+- id: q11
+  brand: mettlepan
+  text: What's our angle for wedding gifting
+  unanswerable: false
+- id: q12
+  brand: mettlepan
+  text: How do we talk about the starter set during festival season
+  unanswerable: false
+- id: q13
+  brand: mettlepan
+  text: How formal are we, and do we use exclamation marks
+  unanswerable: false
+- id: q14
+  brand: mettlepan
+  text: What words do we use for the slow, careful way we make things
+  unanswerable: false
+- id: q15
+  brand: zarvik
+  text: What do we say to someone training for their first half marathon
+  unanswerable: false
+- id: q16
+  brand: zarvik
+  text: How do we talk to people who avoid dairy
+  unanswerable: false
+- id: q17
+  brand: zarvik
+  text: What's in the electrolyte mix and when do you use it
+  unanswerable: false
+- id: q18
+  brand: zarvik
+  text: What are the two protein flavours and how do they differ
+  unanswerable: false
+- id: q19
+  brand: zarvik
+  text: How do we answer someone who says plant protein doesn't work as well as whey
+  unanswerable: false
+- id: q20
+  brand: zarvik
+  text: What do we say when someone asks why we cost more than PlantFuel
+  unanswerable: false
+- id: q21
+  brand: zarvik
+  text: How do we sound in a gym partnership compared to our own website
+  unanswerable: false
+- id: q22
+  brand: zarvik
+  text: What do we give fitness creators to work from
+  unanswerable: false
+- id: q23
+  brand: zarvik
+  text: How do we position against VitaNest being in pharmacies
+  unanswerable: false
+- id: q24
+  brand: zarvik
+  text: How do we talk about our products for someone starting a new routine
+  unanswerable: false
+- id: q25
+  brand: zarvik
+  text: How plain-spoken are we, and what do we never sound like
+  unanswerable: false
+- id: q26
+  brand: zarvik
+  text: What words do we avoid because they sound preachy
+  unanswerable: false
+- id: q27
+  brand: zarvik
+  text: What can we say about plant protein and recovery
+  unanswerable: false
+- id: q28
+  brand: zarvik
+  text: How do we talk about the magnesium powder and sleep
+  unanswerable: false
+- id: q29
+  brand: nookwell
+  text: What do we say to someone furnishing their first rented flat
+  unanswerable: false
+- id: q30
+  brand: nookwell
+  text: How do we talk to a short-let host
+  unanswerable: false
+- id: q31
+  brand: nookwell
+  text: What's the difference between percale and sateen
+  unanswerable: false
+- id: q32
+  brand: nookwell
+  text: What's in the move-in bundle
+  unanswerable: false
+- id: q33
+  brand: nookwell
+  text: How do we answer someone worried our sheets won't survive frequent washing
+  unanswerable: false
+- id: q34
+  brand: nookwell
+  text: What do we say when someone compares us to Duvetly's prices
+  unanswerable: false
+- id: q35
+  brand: nookwell
+  text: How do we sound on a marketplace listing compared to our own website
+  unanswerable: false
+- id: q36
+  brand: nookwell
+  text: What do we give Pinterest decor creators to work from
+  unanswerable: false
+- id: q37
+  brand: nookwell
+  text: How do we position against SoftLoom's hotel-style linen
+  unanswerable: false
+- id: q38
+  brand: nookwell
+  text: How do we talk about curtains for someone who can't drill holes in a rented flat
+  unanswerable: false
+- id: q39
+  brand: nookwell
+  text: What's our angle for festival redecorating
+  unanswerable: false
+- id: q40
+  brand: nookwell
+  text: How do we talk about the seasonal cushion covers between seasons
+  unanswerable: false
+- id: q41
+  brand: nookwell
+  text: How upbeat are we about small spaces without sounding fake
+  unanswerable: false
+- id: q42
+  brand: nookwell
+  text: Do we use exclamation marks and how casual are we
+  unanswerable: false
+- id: q43
+  brand: null
+  text: What was the discount on the Mettlepan starter set last Diwali
+  unanswerable: true
+- id: q44
+  brand: null
+  text: When does the next Zarvik campaign go live
+  unanswerable: true
+- id: q45
+  brand: null
+  text: What is Ironvale's wholesale pricing
+  unanswerable: true
+- id: q46
+  brand: null
+  text: How did SoftLoom's spring collection perform
+  unanswerable: true
+- id: q47
+  brand: null
+  text: What did we spend on the YouTube recipe creator last quarter
+  unanswerable: true
+- id: q48
+  brand: null
+  text: Which fitness creator gave us the best conversion rate
+  unanswerable: true
+- id: q49
+  brand: null
+  text: What is our returns policy wording for quick-commerce
+  unanswerable: true
+- id: q50
+  brand: null
+  text: How many Nookwell move-in bundles did we sell in Pune
+  unanswerable: true

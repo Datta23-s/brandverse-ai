@@ -28,6 +28,7 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 # Queries and items are embedded by separate methods: the query instruction applies to queries
@@ -242,3 +243,62 @@ def precision_at_10(
     hits = {"relevant"} | ({"partial"} if partial_counts else set())
     unjudged = sum(1 for i in top if i not in judgments)
     return sum(1 for i in top if judgments.get(i) in hits) / 10, unjudged
+
+
+# ── Frozen inputs: the queries and the corpus ────────────────────────────────────────────────
+
+_BRAND_OF_HEADING = {
+    "METTLEPAN": "mettlepan",
+    "ZARVIK NUTRITION": "zarvik",
+    "NOOKWELL HOME": "nookwell",
+    "UNANSWERABLE": None,
+}
+_QUERY_LINE = re.compile(r"^(\d+)\.\s+(.+?)(\s+\[UNANSWERABLE\])?\s*$")
+
+
+def parse_queries_md(text: str) -> list[dict[str, object]]:
+    """`queries.md` -> the rows of `queries.yaml`: id, brand, text, unanswerable. The marker stays
+    out of `text` (the labeller's page shows the query only). Refuses a file whose numbering is not
+    1..N, or whose markers disagree with its UNANSWERABLE section."""
+    rows: list[dict[str, object]] = []
+    section: str | None = None
+    in_section = False
+    for line in text.splitlines():
+        heading = line.strip()
+        if heading in _BRAND_OF_HEADING:
+            section, in_section = _BRAND_OF_HEADING[heading], True
+            continue
+        m = _QUERY_LINE.match(line)
+        if not m:
+            continue
+        if not in_section:
+            raise ValueError(f"query before any brand heading: {line!r}")
+        marked = m.group(3) is not None
+        if marked != (section is None):
+            raise ValueError(f"query {m.group(1)} disagrees with its section about UNANSWERABLE")
+        rows.append(
+            {
+                "id": f"q{int(m.group(1)):02d}",
+                "brand": section,
+                "text": m.group(2),
+                "unanswerable": marked,
+            }
+        )
+    if [r["id"] for r in rows] != [f"q{n:02d}" for n in range(1, len(rows) + 1)]:
+        raise ValueError("queries are not numbered 1..N in order")
+    return rows
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def verify_frozen(lock: Path, **files: Path) -> None:
+    """Raise unless `lock` exists and records each named file's current SHA-256. The pool is built
+    only from inputs that were frozen and have not changed since."""
+    if not lock.exists():
+        raise FileNotFoundError(f"{lock} is missing: the inputs have not been frozen")
+    recorded = json.loads(lock.read_text(encoding="utf-8"))["sha256"]
+    for name, path in files.items():
+        if recorded.get(name) != sha256_file(path):
+            raise ValueError(f"{path.name} differs from what {lock.name} froze")

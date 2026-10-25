@@ -1,0 +1,9 @@
+{
+  "queries": 50,
+  "unanswerable": 8,
+  "sha256": {
+    "md": "c014bb687961e003cf16beae48f958c25213a4a98e5f237615afbb916f1a5dde",
+    "yaml": "b077b05fa1abb66e80f15ab6cfe7ec9782c91bee22413a980e694f49466c2e2d"
+  },
+  "frozen_at": "2026-10-25T14:03:03.948925+00:00"
+}

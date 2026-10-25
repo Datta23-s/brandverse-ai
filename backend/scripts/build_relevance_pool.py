@@ -30,7 +30,7 @@ from pathlib import Path
 
 import yaml
 
-from app.evaluation.relevance import Item, Query, build_pool
+from app.evaluation.relevance import Item, Query, build_pool, verify_frozen
 from app.memory.embeddings import Encoder
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "app" / "evaluation" / "label_page.html"
@@ -110,6 +110,13 @@ def main() -> int:
         help="module:function returning an Encoder (default: the pinned local encoder)",
     )
     args = parser.parse_args()
+    # Only frozen inputs: the queries before the corpus was drafted, the corpus before this pool.
+    verify_frozen(
+        args.queries.with_name("queries.lock"),
+        md=args.queries.with_name("queries.md"),
+        yaml=args.queries,
+    )
+    verify_frozen(args.corpus.with_name("corpus.lock"), corpus=args.corpus)
     module, _, name = args.encoder.partition(":")
     encoder: Encoder = getattr(importlib.import_module(module), name)()
     summary = write_task(

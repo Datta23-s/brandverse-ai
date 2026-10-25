@@ -467,6 +467,34 @@ against another model's opinion, a confound every number would carry).
   enough for the index to approximate: thousands to tens of thousands of rows, with labels to
   match. That is far larger than Phase 4 and is recorded as future work, not scheduled.
 
+### Limitation of the relevance set: how the 50 queries were written — recorded 2026-10-25
+
+**The 50 queries were drafted with AI assistance, from `brief.md` alone, and then reviewed and
+edited by Kundan.** The AI never saw the corpus: it did not exist when the queries were written.
+They are therefore not purely the labeller's own unaided wording, and every Precision@10 figure
+computed on this set carries that fact. Stated plainly, as a limitation of the set:
+
+- *What it does not change.* The labels are still given by Kundan by hand, blind, and no model
+  labels anything (the rule above stands). The queries were written without sight of the corpus,
+  which is the independence the blind design needs from them.
+- *What it may change, direction unknown.* Queries drafted by a language model can share regularities
+  of phrasing (length, vocabulary, the way a question is shaped) that a set written unaided would not,
+  and a retrieval encoder is itself a trained language model. Whether that makes this set easier or
+  harder for the pinned encoder than a human-written one would be is not measured, and no
+  adjustment for it is made. Kundan's review and edits reduce the risk and cannot be shown to
+  remove it.
+- *What was not recorded.* Which queries Kundan changed, and how, was not kept. The set as frozen
+  is the only record.
+
+**Order of events, corrected.** The list below says the corpus is drafted before the queries are
+written. What happened is the reverse: the queries existed first (frozen and hashed,
+`evaluation/relevance/queries.lock`), then the corpus was drafted from the brief **with the queries
+in view**. The labeller still never reads the corpus before labelling. The cost is on the other
+side of the independence: the corpus author knew what would be asked, so corpus wording may echo
+query wording more than a corpus written blind would, which would inflate lexical and vector
+overlap with the queries. How the corpus was drafted to limit that, and its own limitations, are
+recorded where it is frozen (`evaluation/relevance/corpus.lock`, below).
+
 **Who writes what, and in what order (decided 2026-10-18).**
 
 1. The developer writes a one-page **brief**: three fictional brands, their sectors, product lines
@@ -475,6 +503,8 @@ against another model's opinion, a confound every number would carry).
    never reads the corpus text before labelling.**
 3. The labeller (Kundan) writes the **50 queries from the brief only** — plausible marketing
    questions about brands whose shape is known, not questions copied from documents.
+   *(Amended 2026-10-25: the queries were drafted with AI assistance and reviewed and edited by
+   Kundan; see the limitation above.)*
 4. **8 of the 50 are unanswerable by design**: written from the brief to have no good answer in the
    corpus. They are reported separately from the 42 answerable ones. Without them precision is
    measured only on answerable queries, and a retriever that always returns ten items looks
