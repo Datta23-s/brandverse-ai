@@ -879,6 +879,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0026_memory_confidence_bounds.sql` | `219d5c7` | | Confidence within [0, 1]; a live item never below the revocation threshold (`Memory.md` §6.3) |
 | `supabase/migrations/0027_memory_decay_record_nonnegative.sql` | `219d5c7` | | The decay record pattern drops the negative confidence (`Memory.md` §6.4) |
 | `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
+| `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Written and dry-run, not applied |
 
 A new migration adds its row here in the same commit, by direct edit.
 
