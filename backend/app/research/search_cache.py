@@ -33,7 +33,9 @@ from pydantic import BaseModel, ConfigDict
 from redis.exceptions import RedisError
 
 from app.research.search import (
+    EngineFailure,
     SearchProvider,
+    SearchResponse,
     SearchResult,
     check_arguments,
     normalise_query,
@@ -41,7 +43,9 @@ from app.research.search import (
 
 CacheMode = Literal["use", "bypass"]
 Outcome = Literal["reused", "fetched", "failed"]
-KEY_PREFIX = "search_cache:v1:"
+# v2: an entry carries the engines that failed when it was fetched. A v1 entry has no such record
+# and would read as "not degraded", which nobody knows, so v1 entries are never read.
+KEY_PREFIX = "search_cache:v2:"
 
 
 class KeyValue(Protocol):
@@ -60,6 +64,12 @@ class SearchRecord(BaseModel):
     results: int  # how many results the caller received (0 when failed)
     age_s: float | None = None  # reused only: how old the entry was
     cache_error: bool = False  # Redis failed on this search and the cache was skipped
+    # Degradation (owner, 2026-10-26): the engines the search engine named as not having answered
+    # when this answer was fetched (a reused entry keeps its fetch-time failures), as
+    # (engine, reason), and the engines that contributed a returned result. A search that saw one
+    # engine is not the same evidence as one that saw three.
+    failed_engines: tuple[tuple[str, str], ...] = ()
+    engines_seen: tuple[str, ...] = ()
 
 
 class SearchEvidenceReport(BaseModel):
@@ -79,6 +89,9 @@ class SearchEvidenceReport(BaseModel):
     reused_share_of_results: float | None
     oldest_reused_age_s: float | None
     cache_errors: int
+    degraded_searches: int  # answered (fetched or reused) with at least one engine named as failed
+    failed_engine_counts: dict[str, int]  # engine -> in how many answered searches it had failed
+    engines_seen: tuple[str, ...]  # every engine that contributed a result to any answered search
     records: list[SearchRecord]
 
 
@@ -91,6 +104,11 @@ class SearchLedger:
         fetched = [r for r in self.records if r.outcome == "fetched"]
         reused = [r for r in self.records if r.outcome == "reused"]
         n_fetched, n_reused = sum(r.results for r in fetched), sum(r.results for r in reused)
+        answered = fetched + reused
+        failed_counts: dict[str, int] = {}
+        for r in answered:
+            for engine in {f[0] for f in r.failed_engines}:
+                failed_counts[engine] = failed_counts.get(engine, 0) + 1
         return SearchEvidenceReport(
             mode=self.mode,
             ttl_s=self.ttl_s,
@@ -108,6 +126,9 @@ class SearchLedger:
             ),
             oldest_reused_age_s=max((r.age_s or 0.0 for r in reused), default=None),
             cache_errors=sum(1 for r in self.records if r.cache_error),
+            degraded_searches=sum(1 for r in answered if r.failed_engines),
+            failed_engine_counts=dict(sorted(failed_counts.items())),
+            engines_seen=tuple(sorted({e for r in answered for e in r.engines_seen})),
             records=list(self.records),
         )
 
@@ -142,47 +163,55 @@ class CachedSearch:
     def report(self) -> SearchEvidenceReport:
         return self.ledger.report()
 
-    async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
+    async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         text = check_arguments(query, limit)
         normalised = normalise_query(text)
         cache_error = False
         if self._mode == "use":
             hit, cache_error = await self._read(text, limit)
             if hit is not None:
-                results, age = hit
-                self._note(normalised, "reused", len(results), age_s=age)
-                return results
+                response, age = hit
+                self._note(normalised, "reused", response, age_s=age)
+                return response
         try:
-            results = await self._inner.search(text, limit=limit)
+            response = await self._inner.search(text, limit=limit)
         except Exception:
-            self._note(normalised, "failed", 0, cache_error=cache_error)
+            self._note(normalised, "failed", None, cache_error=cache_error)
             raise
         if self._mode == "use":
-            cache_error = await self._write(text, limit, results) or cache_error
-        self._note(normalised, "fetched", len(results), cache_error=cache_error)
-        return results
+            cache_error = await self._write(text, limit, response) or cache_error
+        self._note(normalised, "fetched", response, cache_error=cache_error)
+        return response
 
     def _note(
         self,
         query: str,
         outcome: Outcome,
-        results: int,
+        response: SearchResponse | None,
         *,
         age_s: float | None = None,
         cache_error: bool = False,
     ) -> None:
         self.ledger.records.append(
             SearchRecord(
-                query=query, outcome=outcome, results=results, age_s=age_s, cache_error=cache_error
+                query=query,
+                outcome=outcome,
+                results=len(response.results) if response else 0,
+                age_s=age_s,
+                cache_error=cache_error,
+                failed_engines=tuple((f.engine, f.reason) for f in response.failed_engines)
+                if response
+                else (),
+                engines_seen=response.engines_seen if response else (),
             )
         )
 
     async def _read(
         self, query: str, limit: int
-    ) -> tuple[tuple[list[SearchResult], float] | None, bool]:
-        """((results, age) or None, whether Redis failed). An entry is usable only if it is within
+    ) -> tuple[tuple[SearchResponse, float] | None, bool]:
+        """((response, age) or None, whether Redis failed). An entry is usable only if it is within
         the TTL in force, was fetched with at least this `limit`, and parses; anything else is a
-        miss."""
+        miss. The response carries the engines that had failed when the entry was fetched."""
         try:
             raw = await self._redis.get(cache_key(query))
         except RedisError:
@@ -192,21 +221,26 @@ class CachedSearch:
         try:
             entry = json.loads(raw)
             age = self._clock() - float(entry["fetched_at"])
-            stored = [SearchResult(**row) for row in entry["results"]]
+            stored = [
+                SearchResult(**{**row, "engines": tuple(row.get("engines", ()))})
+                for row in entry["results"]
+            ]
+            failed = tuple(EngineFailure(str(e), str(r)) for e, r in entry["failed_engines"])
             fetched_limit = int(entry["limit"])
         except (ValueError, KeyError, TypeError):  # corrupt: replaced by the fetch that follows
             return None, False
         if not 0 <= age <= self._ttl_s or fetched_limit < limit:
             return None, False
-        return (stored[:limit], age), False
+        return (SearchResponse(stored[:limit], failed), age), False
 
-    async def _write(self, query: str, limit: int, results: list[SearchResult]) -> bool:
+    async def _write(self, query: str, limit: int, response: SearchResponse) -> bool:
         """Whether Redis failed. The entry carries its own fetch time: age is measured from it."""
         entry = {
             "query": normalise_query(query),
             "fetched_at": self._clock(),
             "limit": limit,
-            "results": [asdict(r) for r in results],
+            "results": [asdict(r) for r in response.results],
+            "failed_engines": [[f.engine, f.reason] for f in response.failed_engines],
         }
         try:
             await self._redis.set(cache_key(query), json.dumps(entry), ex=self._ttl_s)

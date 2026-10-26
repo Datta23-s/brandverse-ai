@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.errors import SearchRateLimited, SearchUnavailable
 from app.research.search import (
     MAX_LIMIT,
+    EngineFailure,
     OfflineSearch,
     SearchProvider,
     SearchResult,
@@ -32,6 +33,7 @@ RESULTS = [
         snippet=f"Snippet {n}",
         engine="duckduckgo",
         published="2026-10-01T00:00:00" if n == 1 else None,
+        engines=("duckduckgo",),  # a real row names the engines that returned it
     )
     for n in range(1, 13)
 ]
@@ -91,22 +93,25 @@ async def provider(request: pytest.FixtureRequest) -> AsyncIterator[SearchProvid
 
 
 async def test_results_come_back_in_rank_order_up_to_the_limit(provider: SearchProvider) -> None:
-    assert await provider.search(QUERY, limit=5) == RESULTS[:5]
-    assert await provider.search(QUERY, limit=50) == RESULTS  # fewer than the limit: all of them
+    assert (await provider.search(QUERY, limit=5)).results == RESULTS[:5]
+    got = await provider.search(QUERY, limit=50)
+    assert got.results == RESULTS  # fewer than the limit: all of them
 
 
 async def test_the_default_limit_is_ten(provider: SearchProvider) -> None:
-    assert len(await provider.search(QUERY)) == 10
+    assert len((await provider.search(QUERY)).results) == 10
 
 
 async def test_a_query_with_no_hits_is_an_empty_list_not_an_error(provider: SearchProvider) -> None:
-    assert await provider.search("nothing matches this") == []
+    response = await provider.search("nothing matches this")
+    assert response.results == [] and response.failed_engines == () and not response.degraded
 
 
 async def test_the_query_is_matched_case_and_whitespace_insensitively(
     provider: SearchProvider,
 ) -> None:
-    assert await provider.search("  Kitchen   STARTER set  reviews ", limit=3) == RESULTS[:3]
+    got = await provider.search("  Kitchen   STARTER set  reviews ", limit=3)
+    assert got.results == RESULTS[:3]
 
 
 @pytest.mark.parametrize("query", ["", "   ", "\n\t"])
@@ -148,7 +153,7 @@ async def test_malformed_rows_are_dropped_and_the_rest_kept() -> None:
         {"url": "https://ok.test/d", "title": " Padded ", "content": 7, "engine": ["x"]},
     ]
     found = await searxng_over(lambda _: httpx.Response(200, json={"results": rows})).search(QUERY)
-    assert found == [
+    assert found.results == [
         SearchResult("https://ok.test/a", "Good", ""),
         SearchResult("https://ok.test/d", "Padded", ""),  # a non-string field becomes empty/None
     ]
@@ -220,14 +225,44 @@ async def test_no_results_with_an_engine_that_did_not_answer_is_unavailable() ->
 async def test_no_results_and_no_named_failure_is_a_search_with_no_hits(
     unresponsive: object,
 ) -> None:
-    assert await searxng_over(lambda _: answering([], unresponsive)).search(QUERY) == []
+    response = await searxng_over(lambda _: answering([], unresponsive)).search(QUERY)
+    assert response.results == [] and response.failed_engines == ()
 
 
-async def test_results_with_a_failed_engine_are_returned() -> None:
-    found = await searxng_over(lambda _: answering([ROW], [["duckduckgo", "CAPTCHA"]])).search(
-        QUERY
+async def test_results_with_a_failed_engine_are_returned_and_say_so() -> None:
+    row = {**ROW, "engines": ["brave"]}
+    failed = [["duckduckgo", "CAPTCHA"], ["wikipedia", "Suspended: too many requests"]]
+    found = await searxng_over(lambda _: answering([row], failed)).search(QUERY)
+    assert [r.url for r in found.results] == ["https://ok.test/a"]
+    assert found.failed_engines == (
+        EngineFailure("duckduckgo", "CAPTCHA"),
+        EngineFailure("wikipedia", "Suspended: too many requests"),
     )
-    assert [r.url for r in found] == ["https://ok.test/a"]
+    assert found.degraded and found.engines_seen == ("brave",)
+
+
+async def test_a_clean_answer_is_not_degraded_and_names_every_engine_that_returned_a_row() -> None:
+    rows = [
+        {**ROW, "engine": "brave", "engines": ["brave", "duckduckgo"]},
+        {"url": "https://ok.test/b", "title": "B", "engine": "wikipedia", "engines": ["wikipedia"]},
+    ]
+    found = await searxng_over(lambda _: answering(rows, [])).search(QUERY)
+    assert not found.degraded and found.engines_seen == ("brave", "duckduckgo", "wikipedia")
+    assert found.results[0].engines == ("brave", "duckduckgo")  # the merged row keeps both
+
+
+async def test_the_offline_provider_reports_failed_engines_beside_its_results() -> None:
+    failed = [EngineFailure("brave", "too many requests")]
+    offline = OfflineSearch({QUERY: RESULTS}, failed_engines=failed)
+    got = await offline.search(QUERY)
+    assert got.degraded and got.failed_engines == tuple(failed)
+    with pytest.raises(SearchRateLimited):  # and, with nothing returned, refuses like the real one
+        await offline.search("nothing matches this")
+
+
+def test_first_party_is_unpopulated_everywhere() -> None:
+    assert SearchResult("https://x.test", "t", "").first_party is None
+    assert all(r.first_party is None for r in RESULTS)
 
 
 async def test_rows_that_all_fail_to_parse_count_as_no_results() -> None:
@@ -259,8 +294,8 @@ async def test_the_offline_provider_records_each_call_and_can_be_told_to_fail() 
 
 async def test_the_offline_provider_never_returns_its_own_storage() -> None:
     offline = OfflineSearch({QUERY: RESULTS})
-    (await offline.search(QUERY)).clear()
-    assert len(await offline.search(QUERY)) == 10
+    (await offline.search(QUERY)).results.clear()
+    assert len((await offline.search(QUERY)).results) == 10
 
 
 # ── Configuration ────────────────────────────────────────────────────────────────────────────

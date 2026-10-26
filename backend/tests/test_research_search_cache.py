@@ -13,7 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.errors import SearchUnavailable
 from app.memory.scoring import load_scoring
-from app.research.search import OfflineSearch, SearchResult
+from app.research.search import EngineFailure, OfflineSearch, SearchResult
 from app.research.search_cache import CachedSearch, cache_key
 
 pytestmark = pytest.mark.anyio
@@ -121,9 +121,9 @@ async def test_the_age_boundary_is_inclusive_and_a_future_dated_entry_is_not_tru
 
 async def test_a_second_search_is_reused_with_its_age_recorded() -> None:
     search, kv, clock, inner = cached()
-    assert await search.search(QUERY, limit=5) == RESULTS[:5]
+    assert (await search.search(QUERY, limit=5)).results == RESULTS[:5]
     clock.now += 125.5
-    assert await search.search(QUERY, limit=5) == RESULTS[:5]
+    assert (await search.search(QUERY, limit=5)).results == RESULTS[:5]
     assert len(inner.calls) == 1
     first, second = search.report().records
     assert (first.outcome, first.age_s) == ("fetched", None)
@@ -166,8 +166,12 @@ async def test_queries_differing_only_in_case_and_spacing_share_one_entry() -> N
 async def test_an_entry_fetched_with_a_smaller_limit_does_not_answer_a_larger_one() -> None:
     search, _, _, inner = cached()
     await search.search(QUERY, limit=3)
-    assert await search.search(QUERY, limit=10) == RESULTS[:10]  # refetched with the larger limit
-    assert await search.search(QUERY, limit=4) == RESULTS[:4]  # now answered from the entry
+    assert (await search.search(QUERY, limit=10)).results == RESULTS[
+        :10
+    ]  # refetched with the larger limit
+    assert (await search.search(QUERY, limit=4)).results == RESULTS[
+        :4
+    ]  # now answered from the entry
     assert [limit for _, limit in inner.calls] == [3, 10]
 
 
@@ -197,8 +201,8 @@ async def test_a_dead_redis_degrades_to_fetching_and_is_counted() -> None:
     kv = FakeKV()
     kv.broken = True
     search, _, _, inner = cached(kv)
-    assert await search.search(QUERY, limit=2) == RESULTS[:2]
-    assert await search.search(QUERY, limit=2) == RESULTS[:2]
+    assert (await search.search(QUERY, limit=2)).results == RESULTS[:2]
+    assert (await search.search(QUERY, limit=2)).results == RESULTS[:2]
     assert len(inner.calls) == 2  # nothing could be reused
     report = search.report()
     assert (report.fetched, report.reused, report.cache_errors) == (2, 0, 2)
@@ -237,10 +241,80 @@ async def test_only_search_results_are_stored_never_a_page_body() -> None:
     await search.search(QUERY, limit=2)
     (stored,) = kv.data.values()
     entry = json.loads(stored)
-    assert set(entry) == {"query", "fetched_at", "limit", "results"}
+    assert set(entry) == {"query", "fetched_at", "limit", "results", "failed_engines"}
     assert all(
-        set(r) == {"url", "title", "snippet", "engine", "published"} for r in entry["results"]
+        set(r) == {"url", "title", "snippet", "engine", "published", "engines", "first_party"}
+        for r in entry["results"]
     )
+
+
+# ── Degradation reaches the run record (owner, 2026-10-26) ───────────────────────────────────
+
+BRAVE = SearchResult("https://example.test/b", "From brave", "", "brave", None, ("brave",))
+WIKI = SearchResult("https://example.test/w", "From wiki", "", "wikipedia", None, ("wikipedia",))
+DDG = SearchResult("https://example.test/d", "From ddg", "", "duckduckgo", None, ("duckduckgo",))
+THROTTLED = [
+    EngineFailure("duckduckgo", "CAPTCHA"),
+    EngineFailure("wikipedia", "Suspended: too many requests"),
+]
+
+
+async def test_a_degraded_answer_is_recorded_and_stays_degraded_when_reused() -> None:
+    inner = OfflineSearch({QUERY: [BRAVE]}, failed_engines=THROTTLED)
+    search, _, clock, _ = cached(inner=inner)
+    first = await search.search(QUERY)
+    clock.now += 60
+    second = await search.search(QUERY)  # from the cache: the failures were at fetch time
+    assert first.failed_engines == second.failed_engines == tuple(THROTTLED)
+    assert second.engines_seen == ("brave",)
+    fetched, reused = search.report().records
+    wanted = (("duckduckgo", "CAPTCHA"), ("wikipedia", "Suspended: too many requests"))
+    assert fetched.failed_engines == reused.failed_engines == wanted
+    assert (fetched.outcome, reused.outcome, reused.age_s) == ("fetched", "reused", 60)
+
+
+async def test_the_report_tells_a_run_that_saw_one_engine_from_one_that_saw_three() -> None:
+    clean = OfflineSearch({"clean": [BRAVE, WIKI, DDG]})
+    degraded = OfflineSearch({"thin": [BRAVE]}, failed_engines=THROTTLED)
+    search, *_ = cached(inner=clean)
+    await search.search("clean")
+    clean_report = search.report()
+    assert clean_report.degraded_searches == 0 and clean_report.failed_engine_counts == {}
+    assert clean_report.engines_seen == ("brave", "duckduckgo", "wikipedia")
+
+    search, *_ = cached(inner=degraded)
+    await search.search("thin")
+    await search.search("thin")  # reused: still a degraded answer
+    thin = search.report()
+    assert thin.degraded_searches == 2 and thin.searches == 2
+    assert thin.failed_engine_counts == {"duckduckgo": 2, "wikipedia": 2}
+    assert thin.engines_seen == ("brave",)
+    assert json.loads(thin.model_dump_json())["degraded_searches"] == 2  # ready for a run record
+
+
+async def test_a_failed_search_records_no_engines_and_is_not_counted_as_degraded() -> None:
+    down = OfflineSearch(fail_with=SearchUnavailable("down"))
+    search, *_ = cached(inner=down)
+    with pytest.raises(SearchUnavailable):
+        await search.search(QUERY)
+    (record,) = search.report().records
+    assert (record.outcome, record.failed_engines, record.engines_seen) == ("failed", (), ())
+    assert search.report().degraded_searches == 0
+
+
+async def test_an_entry_without_the_failure_record_is_a_miss_never_a_clean_answer() -> None:
+    search, kv, _, inner = cached()
+    await search.search(QUERY, limit=2)
+    (key,) = kv.data
+    entry = json.loads(kv.data[key])
+    del entry["failed_engines"]  # what an entry written before the field existed would look like
+    kv.data[key] = json.dumps(entry)
+    await search.search(QUERY, limit=2)
+    assert len(inner.calls) == 2  # fetched again rather than trusted as undegraded
+
+
+def test_entries_written_before_the_failure_record_are_under_another_key_version() -> None:
+    assert cache_key(QUERY).startswith("search_cache:v2:")
 
 
 # ── A real Redis ─────────────────────────────────────────────────────────────────────────────
@@ -255,7 +329,7 @@ async def test_against_a_real_redis_the_key_expires_with_the_ttl_and_is_reused(
         search = CachedSearch(OfflineSearch({QUERY: RESULTS}), redis, ttl_s=120)
         await search.search(QUERY, limit=3)
         assert 0 < await redis.ttl(cache_key(QUERY)) <= 120
-        assert await search.search(QUERY, limit=3) == RESULTS[:3]
+        assert (await search.search(QUERY, limit=3)).results == RESULTS[:3]
         report = search.report()
         assert (report.fetched, report.reused, report.cache_errors) == (1, 1, 0)
         assert report.records[1].age_s is not None and report.records[1].age_s >= 0

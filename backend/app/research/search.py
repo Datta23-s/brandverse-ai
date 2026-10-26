@@ -15,8 +15,12 @@ The contract:
 - SearXNG itself answers HTTP 200 with NO results when its upstream engines are throttled or
   CAPTCHA'd, naming them in `unresponsive_engines` (observed against the real engine). Zero results
   with any engine named is refused (`SearchRateLimited` if one says "too many requests", else
-  `SearchUnavailable`), not returned as a search with no hits. Results with an engine named are
-  returned; which engine failed is not reported to the caller yet.
+  `SearchUnavailable`), not returned as a search with no hits;
+- **a degraded answer says so.** Results with an engine named as failed are returned inside a
+  `SearchResponse` that carries the failed engines and their reasons, and `engines_seen`, the
+  engines that actually contributed a result. A search that saw one engine is not the same evidence
+  as one that saw three, and the run record and report keep the difference (search_cache.py; owner,
+  2026-10-26: it bears on Rules.md C4's partial-on-breach rule).
 
 Caching by normalised query (Rules.md C7) and the zero-retention page cache are separate pieces
 that sit above this interface; `normalise_query` is the key they share.
@@ -42,10 +46,42 @@ class SearchResult:
     snippet: str
     engine: str | None = None
     published: str | None = None  # as the engine reported it; source scoring parses it
+    # Every engine that returned this URL (the engine merges the same URL across engines);
+    # `engine` is only the first of them.
+    engines: tuple[str, ...] = ()
+    # Whether the page is the brand's own domain. UNPOPULATED (None) until Phase 6 supplies a brand
+    # domain, and NOTHING scores or filters on it (V6, docs/evaluation-plan.md): the field exists so
+    # the pipeline does not have to be reopened when it is filled.
+    first_party: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EngineFailure:
+    """An upstream engine the search engine named as not having answered, and why."""
+
+    engine: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResponse:
+    results: list[SearchResult]
+    failed_engines: tuple[EngineFailure, ...] = ()
+
+    @property
+    def engines_seen(self) -> tuple[str, ...]:
+        """The engines that contributed at least one returned result, sorted. An engine that
+        answered with nothing is not visible here, and not listed as failed either."""
+        names = {n for r in self.results for n in (*r.engines, *([r.engine] if r.engine else []))}
+        return tuple(sorted(names))
+
+    @property
+    def degraded(self) -> bool:
+        return bool(self.failed_engines)
 
 
 class SearchProvider(Protocol):
-    async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]: ...
+    async def search(self, query: str, *, limit: int = 10) -> SearchResponse: ...
 
 
 def normalise_query(query: str) -> str:
@@ -69,7 +105,7 @@ class SearxngSearch:
         self._endpoint = base_url.rstrip("/") + "/search"
         self._client = client
 
-    async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
+    async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         text = check_arguments(query, limit)
         try:
             response = await self._client.get(self._endpoint, params={"q": text, "format": "json"})
@@ -89,26 +125,32 @@ class SearxngSearch:
         if not isinstance(rows, list):
             raise SearchUnavailable("SearXNG did not answer with a result list")
         found = [r for r in (_parse_row(r) for r in rows) if r is not None][:limit]
+        failed = _failed_engines(body.get("unresponsive_engines"))
         if not found:
-            _refuse_if_engines_failed(body.get("unresponsive_engines"))
-        return found
+            _refuse_if_engines_failed(failed)
+        return SearchResponse(found, failed)
 
 
-def _refuse_if_engines_failed(unresponsive: Any) -> None:
+def _failed_engines(unresponsive: Any) -> tuple[EngineFailure, ...]:
+    """The engines SearXNG names as not having answered (`[[engine, reason], ...]`); anything that
+    is not that shape is ignored, as a malformed result row is."""
+    return tuple(
+        EngineFailure(str(row[0]), str(row[1]))
+        for row in (unresponsive if isinstance(unresponsive, list) else [])
+        if isinstance(row, list) and len(row) == 2
+    )
+
+
+def _refuse_if_engines_failed(failed: tuple[EngineFailure, ...]) -> None:
     """A real SearXNG whose upstream engines are throttled or CAPTCHA'd answers HTTP 200 with an
     empty result list and names the engines in `unresponsive_engines` (observed 2026-10-26,
     docs/searxng.md). Zero results with a failed engine is not a search with no hits: it cannot be
     told apart from one, so it is refused rather than reported as an absence. Results with a failed
-    engine are returned as they are."""
-    failed = [
-        (str(row[0]), str(row[1]))
-        for row in (unresponsive if isinstance(unresponsive, list) else [])
-        if isinstance(row, list) and len(row) == 2
-    ]
+    engine are returned, with the failure, by the caller."""
     if not failed:
         return
-    named = ", ".join(f"{engine}: {reason}" for engine, reason in failed)
-    if any("too many requests" in reason.casefold() for _, reason in failed):
+    named = ", ".join(f"{f.engine}: {f.reason}" for f in failed)
+    if any("too many requests" in f.reason.casefold() for f in failed):
         raise SearchRateLimited(f"SearXNG's engines are rate-limited ({named})")
     raise SearchUnavailable(f"SearXNG's engines did not answer ({named})")
 
@@ -122,12 +164,16 @@ def _parse_row(row: Any) -> SearchResult | None:
     if not isinstance(title, str) or not title.strip():
         return None
     snippet, engine, published = row.get("content"), row.get("engine"), row.get("publishedDate")
+    engines = row.get("engines")
     return SearchResult(
         url=url,
         title=title.strip(),
         snippet=snippet if isinstance(snippet, str) else "",
         engine=engine if isinstance(engine, str) else None,
         published=published if isinstance(published, str) else None,
+        engines=tuple(e for e in engines if isinstance(e, str))
+        if isinstance(engines, list)
+        else (),
     )
 
 
@@ -135,7 +181,8 @@ class OfflineSearch:
     """Canned results for CI: no network, deterministic, and every call is recorded.
 
     A query with no entry returns no results, as a real search with no hits would. `fail_with`
-    makes every call raise it, for the partial-result paths.
+    makes every call raise it, for the partial-result paths. `failed_engines` is reported on every
+    answer that has results, as a real engine reports a throttled upstream beside the others'.
     """
 
     def __init__(
@@ -143,17 +190,22 @@ class OfflineSearch:
         results: Mapping[str, Sequence[SearchResult]] | None = None,
         *,
         fail_with: SearchUnavailable | SearchRateLimited | None = None,
+        failed_engines: Sequence[EngineFailure] = (),
     ) -> None:
         self._results = {normalise_query(q): list(rs) for q, rs in (results or {}).items()}
         self._fail_with = fail_with
+        self._failed_engines = tuple(failed_engines)
         self.calls: list[tuple[str, int]] = []
 
-    async def search(self, query: str, *, limit: int = 10) -> list[SearchResult]:
+    async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         text = check_arguments(query, limit)
         self.calls.append((text, limit))
         if self._fail_with is not None:
             raise self._fail_with
-        return self._results.get(normalise_query(text), [])[:limit]
+        found = list(self._results.get(normalise_query(text), []))[:limit]
+        if not found:
+            _refuse_if_engines_failed(self._failed_engines)
+        return SearchResponse(found, self._failed_engines)
 
 
 def searxng_from_settings(settings: Settings, client: httpx.AsyncClient) -> SearxngSearch:
