@@ -79,10 +79,53 @@ ASPECTS = [
 TERMINAL = "TERMINAL"
 
 
-def distinct_queries(seed: int) -> list[str]:
+# The regulated sector (food labelling, advertising claims, cosmetics, standards): the queries a
+# claim-checking run on a regulated product would make. A second group so the share of PDF results
+# (docs/evaluation-plan.md section 8; owner, 2026-10-26) can be reported for it separately.
+REGULATED = [
+    "FSSAI labelling requirements packaged food",
+    "FSSAI licence requirement home bakery",
+    "FSSAI claims natural on food labels rules",
+    "ASCI guidelines misleading health claims advertising",
+    "ASCI guidelines influencer disclosure",
+    "CDSCO cosmetics import registration India",
+    "Legal Metrology packaged commodities declaration rules",
+    "BIS ISI mark mandatory cookware",
+    "BIS quality control order pressure cooker",
+    "AYUSH ayurvedic product claims advertising rules",
+    "Drugs and Magic Remedies objectionable advertisements act",
+    "FSSAI organic labelling Jaivik Bharat",
+    "FSSAI nutrition claims low sugar definition",
+    "FSSAI protein supplement regulations nutraceutical",
+    "FSSAI honey adulteration standards",
+    "BIS standard copper water bottle",
+    "BIS standard non stick cookware India",
+    "Consumer Protection Act misleading advertisement penalty",
+    "CCPA guidelines misleading advertisements",
+    "FSSAI vegan logo labelling",
+    "FSSAI gluten free claim requirements",
+    "CDSCO sunscreen SPF claims India rules",
+    "dermatologically tested claim regulation India",
+    "FSSAI date marking best before labelling",
+    "FSSAI allergen declaration labelling India",
+    "Agmark certification requirements edible oil",
+    "FSSAI fortified food logo requirements",
+    "export labelling requirements US FDA food India exporters",
+    "FSSAI e-commerce food business operator obligations",
+    "cold pressed oil FSSAI definition labelling",
+]
+
+
+def distinct_queries(seed: int) -> list[tuple[str, str]]:
+    """(group, query), the two groups alternating, every query distinct within the whole list."""
     pairs = list(itertools.product(PRODUCTS, ASPECTS))
     random.Random(seed).shuffle(pairs)  # noqa: S311 - a fixed order, not a secret
-    return [f"{product} {aspect}" for product, aspect in pairs]
+    general = [("general", f"{product} {aspect}") for product, aspect in pairs]
+    regulated = [("regulated", q) for q in REGULATED]
+    merged: list[tuple[str, str]] = []
+    for i in range(max(len(general), len(regulated))):
+        merged += regulated[i : i + 1] + general[i : i + 1]
+    return merged
 
 
 def classify(failed: list[list[str]]) -> dict[str, bool]:
@@ -140,7 +183,7 @@ async def main() -> None:
         )
         search = SearxngSearch(args.url, client)
         deadline = time.monotonic() + args.hours * 3600
-        for n, query in enumerate(distinct_queries(args.seed)):
+        for n, (group, query) in enumerate(distinct_queries(args.seed)):
             if time.monotonic() >= deadline:
                 break
             last.clear()
@@ -167,6 +210,11 @@ async def main() -> None:
                     "n": n,
                     "utc": datetime.now(UTC).isoformat(),
                     "query": query,
+                    "group": group,
+                    # Every URL returned, with the engine, so the content-type share (PDFs) can be
+                    # measured afterwards by scripts/classify_result_types.py; the probe fetches
+                    # no result itself.
+                    "urls": [[r.url, r.engine] for r in found],
                     "outcome": outcome,
                     "error": error,
                     "http_status": last.get("status"),

@@ -13,9 +13,40 @@ marker) or raises one of three typed errors:
 
 | Error | Meaning |
 |---|---|
-| `FetchRefused` | The fetcher's own policy said no, before anything was requested from the refused address |
-| `FetchFailed` | The page was requested and did not arrive: network failure, timeout, no DNS answer, an error status (`.status`) |
-| `FetchUnsupported` | It arrived and is not taken: not HTML, no content type, a body over the byte cap |
+| `FetchRefused` | The fetcher's own policy said no, before anything was requested from the refused page. `kind`: `scheme`, `credentials`, `host`, `port`, `address`, `redirects`, `robots` |
+| `FetchFailed` | The page was requested and did not arrive, or permission could not be established: network failure, timeout, no DNS answer, an error status (`.status`), robots.txt unreachable. `kind`: `network`, `timeout`, `dns`, `http_status`, `robots_unavailable` |
+| `FetchUnsupported` | It arrived, or its URL says, that it is not taken. `kind`: `pdf`, `not_html`, `no_content_type`, `too_large` |
+
+Every error carries its `kind`, and the page cache's report counts failures by `Class:kind`
+(`FetchUnsupported:pdf`, `FetchRefused:robots`), so what was skipped, and why, can be read off a run.
+
+## robots.txt is honoured (owner, 2026-10-26)
+
+A site that disallows crawling and is crawled anyway can block this IP, which already has a
+reputation problem, and "we ignored robots.txt" is not a sentence for an ethics section. Before a
+page is requested, and before each redirect target, the origin's `/robots.txt` is fetched once and
+kept `research.robots_ttl_s` (one fetch per origin however many pages, concurrent fetches
+included), and read **as RFC 9309 reads it** (`app/research/robots.py`): our own agent group
+(`BrandverseResearch`, the User-Agent's first word) if there is one, else `*`; the **longest**
+matching pattern wins and `Allow` wins a tie; `*` and a trailing `$` work; the query string is part
+of the path. The standard library's `robotparser` was not used because it applies the first
+matching rule, and reads `Disallow: /` then `Allow: /public/` the opposite way (a test shows it).
+Per the RFC: a 4xx robots.txt means "none, everything allowed"; a **server error or an
+unreachable server is not permission** (`FetchFailed`, `robots_unavailable`, not cached, so the next
+page retries); a robots.txt that redirects more than the limit counts as unavailable. robots.txt is
+fetched under the same address policy as pages. Checked against Google's real file: `/search` is
+refused without being requested, `/about/` is fetched. Not done: `Crawl-delay` and per-host request
+spacing.
+
+## PDFs: skipped on purpose, and measured (owner, 2026-10-26)
+
+A URL whose path ends in `.pdf` is `FetchUnsupported`/`pdf` **without being requested** (not even
+its robots.txt), and a response of type `application/pdf` is the same, so a regulator's circular is
+a counted skip, not an opaque failure or extracted garbage. There is no PDF extraction. Whether
+that matters is measured: `scripts/classify_result_types.py` classifies every result URL the rate
+probe logged by what its server answers (headers only, through the same fetcher, so robots.txt is
+honoured), and reports the PDF share overall and for the regulated query group. Report when the
+probe finishes; the owner rules again if it is a real gap (`docs/evaluation-plan.md` section 8).
 
 `CachedPages` puts a Redis cache above it: the page body under `research.page_cache_ttl_s`, **a
 parameter with no default in the code**, an entry older than the TTL in force a miss, a ledger and
@@ -64,10 +95,9 @@ Thirteen cases, real DNS and TLS, then again through the cache against the local
 
 ## Not done, and why
 
-- **`robots.txt`** is not read or honoured, and there is no per-host delay. Whether a research fetcher
-  should honour `robots.txt` is a decision for the project owner; this records that it does not yet.
+- **`Crawl-delay` and per-host request spacing**: robots.txt is honoured, its crawl-delay is not.
 - **PDFs** are unsupported (regulators publish circulars as PDFs; a search for FSSAI labelling returned
-  one as its second result in the first real probe).
+  one as its second result in the first real probe); skipped visibly, share to be measured, above.
 - **Charset sniffing** from `<meta>`: the declared charset is used, else UTF-8 with replacement.
 - **Concurrency and per-host politeness**: one page per call; the planner decides how many at once.
 - **JavaScript-rendered pages**: above.

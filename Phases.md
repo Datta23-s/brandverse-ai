@@ -392,7 +392,11 @@ is requested (public addresses only, ports 80/443, no credentials; DNS rebinding
 residual), size, timeout and redirect caps in `config/scoring.yaml`, and a Redis page-body cache
 whose TTL is a parameter with a per-run ledger. Run against the real network as well as a mock
 (`scripts/fetch_probe.py`). A client-rendered page (the FSSAI homepage) fetches with 200 and
-extracts to nothing; PDFs are unsupported; `robots.txt` is not honoured, pending the owner. Every
+extracts to nothing; `robots.txt` is honoured (RFC 9309 longest-match, cached per origin; owner,
+2026-10-26); PDFs are skipped visibly as an unsupported content type and their share of results is
+being measured. A degraded search is cached for its own shorter TTL (one hour), and is never
+recorded into the evaluation snapshot. Search is held constant across the arms of a request, so the
+planner runs once per request (`docs/evaluation-plan.md` section 8). Every
 search result and fetched page carries an unpopulated `first_party` marker (V6).
 *Search with SearXNG* verified against the real engine (`docs/searxng.md`): a throttled search is
 refused rather than reported as no results, and failed engines reach the run report.

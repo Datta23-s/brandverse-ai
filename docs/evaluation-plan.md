@@ -872,10 +872,11 @@ would at least be *visible* in the report. Visible is not controlled.
 **Ruling: option 3** (2026-10-25, project owner), with the window defined per request, not
 globally. Evaluation runs use a dedicated snapshot namespace in which an entry is written on the
 first miss and **never expires and is never overwritten** for the duration of the evaluation; the
-TTL does not apply to it. Every arm that issues the same normalised query gets the same results. A
-query no earlier arm issued (the planner's queries differ by arm) is fetched live once and
-recorded, so later arms issuing it see the same thing. The D0 arm searches nothing and is
-unaffected.
+TTL does not apply to it. Every arm that issues the same normalised query gets the same results.
+~~A query no earlier arm issued (the planner's queries differ by arm) is fetched live once and
+recorded, so later arms issuing it see the same thing.~~ **Superseded 2026-10-26** by the ruling
+below, which has the planner run once per request, so no arm issues a query another did not. The D0
+arm searches nothing and is unaffected.
 
 *The window is per request.* The comparison is between arms on the same request, so what must be
 held constant is that the arms of one request (R07's three, say) saw the same web, not that R01 and
@@ -909,6 +910,48 @@ tagged with the request that first fetched it); until then the cache has only `u
 its request's N-day window, as it refuses a tuning brand in the evaluation set (D1). (c)
 Development, tuning and calibration runs use the ordinary TTL cache.
 
+### Search is held constant across the arms of a request — RULED 2026-10-26
+
+**Why (attribution).** If the arms issued different queries, any difference in their outputs could
+come from the memory mechanism or from having seen different evidence, and the comparison could not
+say which. The thesis claims a contribution from memory and adaptive depth; the comparison has to
+isolate exactly that. **Rule:** all arms of a request use the same query set and the same recorded
+snapshot, replayed for each. **The query planner runs once per request, not once per arm**, and its
+queries are fixed when the request is recorded.
+
+**Consequence (cost).** The recording needs `S = 30 × q` searches, not `30 × 3 × q`: 90 rather than
+270 at three queries per request. The saving follows from the rule and is not the reason for it.
+
+**`q` is a parameter, not a constant.** The number of queries per request is configured
+(`research` in `config/scoring.yaml`, when the planner is built) and **reported beside every result**.
+It is not fixed tonight and the throttle does not design the experiment: it is set from the measured
+search rate once the probe has run (below), and the rate informs the choice rather than dictating
+the experiment.
+
+**Open, to be decided before the planner is built.** The arms do not research equally by design:
+Baseline A does no research, Baseline B researches at full depth (D2), and Proposed chooses a depth
+(D0, D1, D2) per request. Holding the query set and the web constant means every arm has the same
+evidence *available*; how much of it an arm uses is arm behaviour (none for A and for D0, some for
+D1, all for B). What is not decided is what D1 searches: a subset of the request's recorded queries
+(say a prefix of the planner's ranked list), or something else. If it were something else, the
+constant-search rule would not hold for it. This must be fixed before the planner exists, because it
+determines whether the planner emits one ranked list that depths cut, or a set per depth.
+
+**The recording procedure (owner, 2026-10-26).** *A degraded search is never recorded into the
+snapshot.* A search for which any engine was named as failed (`docs/searxng.md`) is not written; it
+is retried later and the entry stays empty until a clean answer arrives. A frozen snapshot holding a
+degraded search would make every arm replay the degradation permanently, and nobody reading the
+results would see it. Development, tuning and calibration use the ordinary cache, which does hold a
+degraded search but for its own, much shorter TTL (`research.search_cache_degraded_ttl_s`, one hour,
+against a day for a clean one), marked degraded, so one bad minute cannot poison a day of runs.
+
+*This rule has a consequence that is not yet resolved.* "Clean" means no engine named as failed, and
+on this laptop duckduckgo has returned a CAPTCHA on every search since the first real one
+(`docs/searxng.md`). If an engine stays down, no search is ever clean and the recording can never
+finish. The rule needs the recording's engine set to be declared in advance, as those that answer,
+and stated with the results; whether to do that or to fix the engine is for the owner once the probe
+has shown which engines recover.
+
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 
 The snapshot ruling means the arms replay one recording, but the recording itself needs real
@@ -917,29 +960,34 @@ few minutes, then no recovery in twenty-five. How many searches per hour the thr
 unmeasured, so **the length of the recording phase is not yet known**, and no figure below is a
 result.
 
-*The measurement.* `backend/scripts/searxng_rate_probe.py`, started 2026-10-26 15:16 UTC: one search
-every 10 minutes for 14 hours, each a distinct query, unattended, logged to
-`evaluation/search_rate/probe-20261026T151600Z.jsonl`. It starts from the throttled state, so it
-measures recovery time as well as the clean rate. `backend/scripts/summarise_search_rate.py` reports
-the rate at which it stays clean, the time to first clean search, and each engine's record. If the
-clean rate at 10-minute spacing is high, a second run at a shorter spacing is needed to find the
-ceiling; 10 minutes is a starting point, not a finding.
+*The measurement.* `backend/scripts/searxng_rate_probe.py`: one search every 10 minutes for 14 hours,
+each a distinct query, unattended. The first run (from 15:16 UTC, four searches,
+`evaluation/search_rate/probe-20261026T151600Z.jsonl`) logged counts only and was stopped at 15:55
+UTC; the **second run from 15:55 UTC** (`probe-20261026T155534Z.jsonl`) also logs every URL returned,
+and alternates two groups of queries (general kitchen and food products; the regulated sector: FSSAI,
+ASCI, BIS, CDSCO), so the content-type share of results (PDFs, below) can be reported per group.
+It starts from the throttled state, so it measures recovery time as well as the clean rate.
+`backend/scripts/summarise_search_rate.py` reports the clean and the answered rate, time to first
+clean search, and each engine's record. If the clean rate at 10-minute spacing is high, a second run
+at a shorter spacing is needed to find the ceiling; 10 minutes is a starting point, not a finding.
 
-*The arithmetic that turns a rate into a duration.* Searches to record, `S`:
-
-- `S = 30 requests × q` if every arm issues the same normalised queries (the replayed case);
-- `S = 30 × 3 arms × q` at the other extreme, if the planner's queries differ by arm and none
-  coincide (`q` = queries the planner issues per run; not yet built, taken as 3 for the bound).
-
-With `q = 3` that is **90 to 270 searches**. At a sustained rate of `R` searches per hour the
-recording phase takes `S / R` hours of wall clock, and the laptop must stay on for all of it. For
-illustration only, at `R = 6` (one per 10 minutes, the probe's own spacing): 15 to 45 hours, i.e. one
-to about three and a half overnight sessions of 14 hours. At `R = 3`: 30 to 90 hours. These are
-bounds from the arithmetic, not a measured figure; the measured `R` replaces them.
+*The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
+runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
+sustained rate of `R` searches per hour the recording phase takes `S / R` hours of wall clock, and
+the laptop must stay on for all of it. For illustration only, `q = 3`: 90 searches; at `R = 6` (one
+per 10 minutes, the probe's own spacing) that is 15 hours, just over one 14-hour overnight session;
+at `R = 3`, 30 hours. These come from the arithmetic, not a measurement; the measured `R`
+replaces them. A degraded search being retried (above) lowers the effective `R`.
 
 *The decision rule (owner, 2026-10-26).* If the measured recording phase is more than a few overnight
-sessions, **the design changes** (a different search source, fewer queries per run, or a smaller
+sessions, **the design changes** (a different search source, fewer queries per request, or a smaller
 recording) rather than being discovered in November. The figure goes here when the probe has run.
+
+*PDFs (owner, 2026-10-26).* PDFs are not supported (`docs/fetcher.md`); a PDF is skipped visibly as
+an unsupported content type. Whether that matters is measured, not assumed: the share of result URLs
+that are PDFs, overall and for the regulated group, is reported when the probe finishes. If it is a
+couple of percent it stays a footnote; if it is a fifth of the regulated sector's results it is a
+real gap and the owner rules again.
 
 ## 9. Required items
 
