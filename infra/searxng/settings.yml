@@ -1,0 +1,41 @@
+# SearXNG settings for the local research search (Architecture.md §11; docs/searxng.md).
+# Layered on the image's defaults: only what differs is stated here.
+use_default_settings:
+  engines:
+    # The engines this project searches with. Everything else in the defaults is removed, so the
+    # set of engines behind every reported search result is exactly this list (it is a parameter of
+    # the results: Rules.md A5). Changing it is a change to the results and is recorded in
+    # docs/searxng.md.
+    #
+    # `keep_only` keeps an engine as the image defines it: bing is DISABLED by default, so it is
+    # not listed here (listing it would suggest it runs; GET /config shows what does). Enabled:
+    # brave, duckduckgo, wikipedia (read from /config, docs/searxng.md).
+    keep_only:
+      - duckduckgo
+      - brave
+      - wikipedia
+
+general:
+  instance_name: "brandverse-local"
+  debug: false
+
+search:
+  # `json` must be listed or the JSON API answers 403 (SearxngSearch turns that into a message
+  # that says so). `html` stays so the instance can be looked at in a browser.
+  formats: [html, json]
+  safe_search: 0
+  autocomplete: ""
+
+server:
+  # Overridden by SEARXNG_SECRET in compose.yaml; this is only a placeholder so a bare start works.
+  secret_key: "dev-only-placeholder-not-a-secret"
+  # The bot limiter needs a key-value store and, with it on, answers 429 to clients it does not
+  # recognise. Off: this instance is bound to 127.0.0.1 and has one client, the worker. The 429 a
+  # REAL upstream engine gives is a different thing (see docs/searxng.md, "Rate limiting").
+  limiter: false
+  image_proxy: false
+
+outgoing:
+  # Per-engine request timeout in seconds; a slow engine is dropped from the answer, not waited on.
+  request_timeout: 5.0
+  max_request_timeout: 10.0

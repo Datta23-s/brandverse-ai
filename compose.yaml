@@ -1,5 +1,5 @@
 # Local services on the worker host (Architecture.md §11: the laptop is the worker host).
-# Start with:  docker compose up -d redis
+# Start with:  docker compose up -d redis searxng
 name: brandverse
 
 services:
@@ -19,6 +19,22 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  searxng:
+    # Pinned by tag AND digest (docs/searxng.md records both and when). `latest` is never used: the
+    # engine set and the JSON shape are parameters of the results the thesis reports.
+    image: searxng/searxng:2026.10.19-81371861f
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-dev-only-local-searxng-secret}
+      SEARXNG_BASE_URL: http://127.0.0.1:8888/
+    ports:
+      # Host port 8888, not 8080: 8080 is commonly held by another local service (here, httpd), and
+      # Windows reserves ranges of ports at random (`netsh interface ipv4 show excludedportrange
+      # protocol=tcp`). Localhost only. SEARXNG_URL=http://127.0.0.1:8888
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
     restart: unless-stopped
 
 volumes:

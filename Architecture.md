@@ -974,8 +974,12 @@ execute on the laptop.**
 Docker): Docker Desktop started and `docker info` answered (server 29.7.2). `redis:7.4-alpine`
 (Redis 7.4.11) ran with `--appendonly yes`, answered `PING` with `PONG`, and reported
 `appendonly yes`. Docker was used; the WSL2 Ubuntu + `redis-server` fallback was not needed. Docker
-Desktop must be running whenever the worker runs. **SearXNG in Docker is not yet verified** — its
-JSON API is checked in Phase 5.
+Desktop must be running whenever the worker runs. **SearXNG in Docker, verified 2026-10-26**
+(`docs/searxng.md`): image `searxng/searxng:2026.10.19-81371861f` pinned by digest, host port 8888,
+engines brave, duckduckgo, wikipedia. The JSON API works through `SearxngSearch`; the real engine
+answers HTTP 200 with no results when its upstream engines are throttled (the provider now refuses
+that rather than reporting "no hits"), and about ten searches in a few minutes got this laptop's IP
+throttled for over twenty minutes, so the live search budget is an open question, not a given.
 
 ### Redis free tier — checked, and why Redis runs locally
 
