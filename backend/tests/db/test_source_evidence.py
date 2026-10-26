@@ -221,6 +221,27 @@ def test_anon_holds_no_write_privilege_on_memory_items_whatever_the_column(tx: T
             assert rows == [(False,)], f"anon holds {privilege} on memory_items.{column}"
 
 
+def test_authenticated_holds_no_insert_on_memory_items_but_may_still_revoke(tx: Tx) -> None:
+    """0030: authenticated's table-level INSERT (from 0006) is revoked, so no column can be
+    inserted, source_score included; its column-limited UPDATE for revocation is unchanged."""
+    rows = tx.execute(
+        "select has_table_privilege('authenticated', 'public.memory_items', 'INSERT')"
+    )
+    assert rows == [(False,)]
+    for column in ("source_score", "confidence", "content", "revoked"):
+        rows = tx.execute(
+            "select has_column_privilege("
+            f"'authenticated', 'public.memory_items', '{column}', 'INSERT')"
+        )
+        assert rows == [(False,)], f"authenticated holds INSERT on memory_items.{column}"
+    for column in ("revoked", "revoked_by", "revoked_at", "revoked_reason"):
+        rows = tx.execute(
+            "select has_column_privilege("
+            f"'authenticated', 'public.memory_items', '{column}', 'UPDATE')"
+        )
+        assert rows == [(True,)], f"authenticated lost UPDATE on memory_items.{column}"
+
+
 @pytest.mark.parametrize("table", ["sources", "memory_item_sources"])
 def test_the_backend_role_may_insert_and_select_and_nothing_else(tx: Tx, table: str) -> None:
     held = {

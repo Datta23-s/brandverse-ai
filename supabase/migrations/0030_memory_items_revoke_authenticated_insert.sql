@@ -1,0 +1,14 @@
+-- 0030: authenticated holds no INSERT privilege on memory_items (Architecture.md section 9).
+--
+-- Same class as 0029. Since 0006, authenticated has held table-level INSERT on memory_items, and
+-- therefore on every column, source_score included. It was blocked only by row-level security
+-- (no INSERT policy for it) and the derivation guard trigger of 0028, not by the grant. Owner,
+-- 2026-10-26: make the exemption impossible rather than defended in depth. Memory is written by
+-- the backend (service_role) at write-back; a signed-in user's only write is revocation, through
+-- the column-limited UPDATE grant of 0006, which is not changed here.
+--
+-- Scope, stated: INSERT for authenticated on memory_items only. Not touched: SELECT, the
+-- revocation-column UPDATE grant, REFERENCES and TRIGGER, and anything held by service_role.
+--
+-- Down: grant insert on memory_items to authenticated;
+revoke insert on memory_items from authenticated;
