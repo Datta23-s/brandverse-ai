@@ -77,28 +77,37 @@ class SearchRateLimited(SearchError):
 
 
 class FetchError(BrandverseError):
-    """A page could not be fetched. Research drops the page and goes on with the others."""
+    """A page could not be fetched. Research drops the page and goes on with the others.
+
+    `kind` names the specific reason, so a skipped page is visibly skipped and says why (the run
+    report counts failures by it); None when the class says it all."""
+
+    def __init__(self, message: str, *, kind: str | None = None) -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 class FetchRefused(FetchError):
-    """The fetcher's own policy refused the URL before or while fetching it: a scheme other than
-    http(s), credentials in the URL, a port other than 80/443, an address that is not on the public
-    internet (at any hop of a redirect chain), or too many redirects. Nothing was requested from
-    the refused address."""
+    """The fetcher's own policy refused the URL before or while fetching it. `kind`: "scheme",
+    "credentials", "host", "port", "address" (not on the public internet, at any hop of a redirect
+    chain), "redirects" (too many), or "robots" (the site's robots.txt disallows it for this
+    fetcher). Nothing was requested from the refused page or address."""
 
 
 class FetchFailed(FetchError):
-    """The page was requested and did not arrive: the network failed or timed out, or the server
-    answered with an error status (`status`, None when there was no HTTP answer)."""
+    """The page was requested and did not arrive: the network failed or timed out, the host did not
+    resolve, robots.txt could not be retrieved, or the server answered with an error status
+    (`status`, None when there was no HTTP answer)."""
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
-        super().__init__(message)
+    def __init__(self, message: str, *, status: int | None = None, kind: str | None = None) -> None:
+        super().__init__(message, kind=kind)
         self.status = status
 
 
 class FetchUnsupported(FetchError):
-    """The server answered, but not with something the pipeline takes as a page: not HTML (a PDF,
-    an image), no declared content type, or a body over the size cap."""
+    """The server answered, or the URL says, that this is not something the pipeline takes as a
+    page. `kind`: "pdf" (not supported yet: skipped on purpose, and counted so the cost of that is
+    measured), "not_html", "no_content_type", or "too_large" (a body over the size cap)."""
 
 
 class ExtractionFailed(BrandverseError):

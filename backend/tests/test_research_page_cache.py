@@ -151,6 +151,33 @@ async def test_a_failure_is_recorded_by_kind_and_never_cached(error: Exception, 
     assert (report.failed, report.fetched, report.failures_by_kind) == (2, 0, {kind: 2})
 
 
+async def test_the_report_counts_skips_and_refusals_by_their_kind() -> None:
+    """A PDF skipped on purpose and a page robots.txt forbids must be visible as such, so the cost
+    of not supporting PDFs and of honouring robots.txt can be read off a run (owner, 2026-10-26)."""
+    errors = {
+        "https://a.example.test/c.pdf": FetchUnsupported("pdf", kind="pdf"),
+        "https://b.example.test/c.pdf": FetchUnsupported("pdf", kind="pdf"),
+        "https://c.example.test/x": FetchRefused("robots", kind="robots"),
+        "https://d.example.test/x": FetchFailed("503", status=503, kind="http_status"),
+        "https://e.example.test/x": FetchFailed("?"),
+    }
+
+    class Failing:
+        async def fetch(self, url: str) -> FetchedPage:
+            raise errors[url]
+
+    cache, *_ = cached(inner=Failing())  # type: ignore[arg-type]
+    for url in errors:
+        with pytest.raises(type(errors[url])):
+            await cache.fetch(url)
+    assert cache.report().failures_by_kind == {
+        "FetchFailed": 1,
+        "FetchFailed:http_status": 1,
+        "FetchRefused:robots": 1,
+        "FetchUnsupported:pdf": 2,
+    }
+
+
 async def test_a_dead_redis_degrades_to_fetching_and_is_counted() -> None:
     kv = FakeKV()
     kv.broken = True

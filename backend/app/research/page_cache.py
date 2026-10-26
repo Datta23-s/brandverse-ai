@@ -49,6 +49,7 @@ class PageRecord(BaseModel):
     bytes: int = 0  # the body's size in characters as held; 0 when failed
     age_s: float | None = None  # reused only
     error: str | None = None  # failed only: the error class, e.g. FetchRefused
+    kind: str | None = None  # failed only: why, e.g. "robots", "pdf", "address", "http_status"
     cache_error: bool = False
 
 
@@ -112,7 +113,11 @@ class CachedPages:
         except FetchError as e:
             self.records.append(
                 PageRecord(
-                    url=url, outcome="failed", error=type(e).__name__, cache_error=cache_error
+                    url=url,
+                    outcome="failed",
+                    error=type(e).__name__,
+                    kind=e.kind,
+                    cache_error=cache_error,
                 )
             )
             raise
@@ -129,7 +134,8 @@ class CachedPages:
         failed = [r for r in self.records if r.outcome == "failed"]
         kinds: dict[str, int] = {}
         for r in failed:
-            kinds[str(r.error)] = kinds.get(str(r.error), 0) + 1
+            label = f"{r.error}:{r.kind}" if r.kind else str(r.error)
+            kinds[label] = kinds.get(label, 0) + 1
         return PageEvidenceReport(
             mode=self.mode,
             ttl_s=self.ttl_s,

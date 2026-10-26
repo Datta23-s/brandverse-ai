@@ -105,6 +105,9 @@ class Retrieval(_Strict):
 
 class Research(_Strict):
     search_cache_ttl_s: int = Field(ge=1)  # a parameter of the results, never a constant
+    # A search answered while some engines failed is a transient failure: it is cached, marked
+    # degraded, for this (much shorter) time instead. It must not exceed the clean TTL.
+    search_cache_degraded_ttl_s: int = Field(ge=1)
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
     # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.
@@ -114,6 +117,14 @@ class Research(_Strict):
     fetch_max_bytes: int = Field(ge=1)  # a longer body is refused, not truncated
     fetch_max_redirects: int = Field(ge=0)
     fetch_user_agent: str = Field(min_length=1)
+    robots_ttl_s: int = Field(ge=1)  # how long one origin's robots.txt is kept (RFC 9309: <= 24 h)
+    robots_max_bytes: int = Field(ge=1)  # only this much of a robots.txt is read (RFC: >= 500 KiB)
+
+    @model_validator(mode="after")
+    def _degraded_cache_is_shorter(self) -> "Research":
+        if self.search_cache_degraded_ttl_s > self.search_cache_ttl_s:
+            raise ValueError("search_cache_degraded_ttl_s must not exceed search_cache_ttl_s")
+        return self
 
 
 class SourceWeights(_Strict):

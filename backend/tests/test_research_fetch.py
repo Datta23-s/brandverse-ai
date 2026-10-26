@@ -40,18 +40,34 @@ def html_response(body: str = HTML, **headers: str) -> httpx.Response:
 
 
 class Web:
-    """A mock web: records every request, answers with `handler`."""
+    """A mock web: records every page request in `seen` and every robots.txt request in
+    `robots_seen`, answers pages with `handler` and robots.txt with `robots` (default: 404, which
+    allows everything), so the tests about pages do not have to know robots.txt exists."""
 
-    def __init__(self, handler: Callable[[httpx.Request], httpx.Response]) -> None:
-        self.handler, self.seen = handler, []
+    def __init__(
+        self,
+        handler: Callable[[httpx.Request], httpx.Response],
+        robots: Callable[[httpx.Request], httpx.Response] | None = None,
+    ) -> None:
+        self.handler, self.seen, self.robots_seen = handler, [], []
+        self.robots = robots or (lambda _: httpx.Response(404))
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            self.robots_seen.append(request)
+            return self.robots(request)
         self.seen.append(request)
         return self.handler(request)
 
     @property
     def hosts(self) -> list[str]:
         return [r.url.host for r in self.seen]
+
+
+def robots_file(text: str) -> Callable[[httpx.Request], httpx.Response]:
+    return lambda _: httpx.Response(
+        200, content=text.encode(), headers={"content-type": "text/plain"}
+    )
 
 
 async def resolver(host: str, port: int) -> list[str]:
@@ -62,14 +78,25 @@ async def resolver(host: str, port: int) -> list[str]:
     return [host]  # an IP literal resolves to itself, as getaddrinfo does
 
 
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1_700_000_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
 def fetcher(
     handler: Callable[[httpx.Request], httpx.Response] = lambda _: html_response(),
+    *,
+    robots: Callable[[httpx.Request], httpx.Response] | None = None,
+    clock: Callable[[], float] | None = None,
     **cfg: object,
 ) -> tuple[PageFetcher, Web]:
-    web = Web(handler)
+    web = Web(handler, robots)
     client = httpx.AsyncClient(transport=httpx.MockTransport(web))
     config: Research = CONFIG.model_copy(update=cfg)
-    return PageFetcher(client, config, resolver=resolver, clock=lambda: 1_700_000_000.0), web
+    return PageFetcher(client, config, resolver=resolver, clock=clock or Clock()), web
 
 
 # ── A page ───────────────────────────────────────────────────────────────────────────────────
@@ -107,23 +134,59 @@ async def test_html_content_types_are_taken(content_type: str) -> None:
     assert (await f.fetch(PAGE_URL)).html == HTML
 
 
-@pytest.mark.parametrize(
-    "content_type", ["application/pdf", "image/png", "application/json", "text/plain"]
-)
-async def test_what_is_not_html_is_unsupported_not_a_crash(content_type: str) -> None:
+@pytest.mark.parametrize("content_type", ["image/png", "application/json", "text/plain"])
+async def test_what_is_not_html_is_unsupported_with_its_kind(content_type: str) -> None:
     f, _ = fetcher(
-        lambda _: httpx.Response(200, content=b"%PDF-1.7", headers={"content-type": content_type})
+        lambda _: httpx.Response(200, content=b"data", headers={"content-type": content_type})
     )
-    with pytest.raises(FetchUnsupported, match="not HTML"):
+    with pytest.raises(FetchUnsupported, match="not HTML") as raised:
         await f.fetch(PAGE_URL)
+    assert raised.value.kind == "not_html"
 
 
 async def test_a_response_with_no_content_type_is_refused_not_sniffed() -> None:
     f, _ = fetcher(
         lambda _: httpx.Response(200, content=HTML.encode(), headers={"content-type": ""})
     )
-    with pytest.raises(FetchUnsupported, match="missing"):
+    with pytest.raises(FetchUnsupported, match="no content type") as raised:
         await f.fetch(PAGE_URL)
+    assert raised.value.kind == "no_content_type"
+
+
+# ── PDFs: skipped on purpose, visibly (owner, 2026-10-26) ────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://shop.example.test/files/circular.pdf",
+        "https://shop.example.test/files/CIRCULAR.PDF",
+        "https://shop.example.test/files/circular.pdf?download=1",
+        "https://shop.example.test/files/circular.pdf#page=3",
+    ],
+)
+async def test_a_pdf_url_is_skipped_as_kind_pdf_without_any_request(url: str) -> None:
+    f, web = fetcher()
+    with pytest.raises(FetchUnsupported, match="PDF") as raised:
+        await f.fetch(url)
+    assert raised.value.kind == "pdf"
+    assert web.seen == [] and web.robots_seen == []  # not even robots.txt was fetched for it
+
+
+async def test_a_pdf_served_at_a_url_that_does_not_say_so_is_kind_pdf_too() -> None:
+    f, _ = fetcher(
+        lambda _: httpx.Response(
+            200, content=b"%PDF-1.7", headers={"content-type": "application/pdf"}
+        )
+    )
+    with pytest.raises(FetchUnsupported, match="PDF") as raised:
+        await f.fetch("https://shop.example.test/download?id=7")
+    assert raised.value.kind == "pdf"
+
+
+async def test_a_page_whose_name_merely_contains_pdf_is_not_skipped() -> None:
+    f, _ = fetcher()
+    assert (await f.fetch("https://shop.example.test/pdf-guide/kadai")).status == 200
 
 
 async def test_the_declared_charset_is_used_and_a_bad_one_falls_back_to_utf8() -> None:
@@ -329,8 +392,9 @@ async def test_a_slow_drip_is_cut_by_the_total_timeout() -> None:
 
 async def test_a_declared_length_over_the_cap_is_refused_unread() -> None:
     f, _ = fetcher(lambda _: html_response("x" * 500), fetch_max_bytes=100)
-    with pytest.raises(FetchUnsupported, match="declared"):
+    with pytest.raises(FetchUnsupported, match="declared") as raised:
         await f.fetch(PAGE_URL)
+    assert raised.value.kind == "too_large"
 
 
 async def test_a_body_that_outgrows_the_cap_while_streaming_is_refused_not_truncated() -> None:
@@ -376,3 +440,240 @@ def test_the_fetch_limits_are_configuration_not_constants() -> None:
     assert CONFIG.fetch_timeout_s > 0 and CONFIG.fetch_total_timeout_s >= CONFIG.fetch_timeout_s
     assert CONFIG.fetch_max_bytes >= 1 and CONFIG.fetch_max_redirects >= 0
     assert CONFIG.page_cache_ttl_s >= 1 and CONFIG.fetch_user_agent
+
+
+# ── robots.txt is honoured (owner, 2026-10-26) ───────────────────────────────────────────────
+
+BLOCK_PRODUCTS = "User-agent: *\nDisallow: /products/\n"
+
+
+async def test_a_page_robots_txt_disallows_is_refused_and_never_requested() -> None:
+    f, web = fetcher(robots=robots_file(BLOCK_PRODUCTS))
+    with pytest.raises(FetchRefused, match="robots.txt") as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots"
+    assert web.seen == [] and len(web.robots_seen) == 1
+
+
+async def test_a_page_it_allows_is_fetched_and_the_robots_request_says_who_asks() -> None:
+    f, web = fetcher(robots=robots_file(BLOCK_PRODUCTS))
+    assert (await f.fetch("https://shop.example.test/about")).status == 200
+    (robots_request,) = web.robots_seen
+    assert str(robots_request.url) == "https://shop.example.test/robots.txt"
+    assert robots_request.headers["user-agent"] == CONFIG.fetch_user_agent
+
+
+async def test_a_site_can_block_this_fetcher_by_name() -> None:
+    text = "User-agent: BrandverseResearch\nDisallow: /\n\nUser-agent: *\nDisallow:\n"
+    f, web = fetcher(robots=robots_file(text))
+    with pytest.raises(FetchRefused) as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots" and web.seen == []
+
+
+async def test_the_longest_rule_decides_as_the_rfc_says() -> None:
+    f, _ = fetcher(robots=robots_file("User-agent: *\nDisallow: /\nAllow: /products/\n"))
+    assert (await f.fetch(PAGE_URL)).status == 200
+
+
+async def test_robots_txt_is_fetched_once_per_origin_not_once_per_page() -> None:
+    f, web = fetcher(robots=robots_file(BLOCK_PRODUCTS))
+    for path in ("/a", "/b", "/c"):
+        await f.fetch("https://shop.example.test" + path)
+    await f.fetch("https://other.example.test/a")
+    assert len(web.seen) == 4 and f.robots_fetches == 2
+    hosts = sorted(r.url.host for r in web.robots_seen)
+    assert hosts == ["other.example.test", "shop.example.test"]
+
+
+async def test_concurrent_fetches_of_one_origin_share_one_robots_request() -> None:
+    f, web = fetcher(robots=robots_file(BLOCK_PRODUCTS))
+    pages = await asyncio.gather(*(f.fetch(f"https://shop.example.test/p{n}") for n in range(5)))
+    assert len(pages) == 5 and len(web.robots_seen) == 1
+
+
+async def test_the_cached_file_expires_after_the_ttl_in_force() -> None:
+    clock = Clock()
+    f, web = fetcher(clock=clock, robots_ttl_s=100)
+    await f.fetch("https://shop.example.test/a")
+    clock.now += 99
+    await f.fetch("https://shop.example.test/b")
+    assert len(web.robots_seen) == 1
+    clock.now += 2  # 101 s old
+    await f.fetch("https://shop.example.test/c")
+    assert len(web.robots_seen) == 2
+
+
+async def test_a_changed_robots_txt_is_picked_up_after_expiry() -> None:
+    clock = Clock()
+    state = {"text": ""}
+    f, _ = fetcher(clock=clock, robots_ttl_s=100, robots=lambda r: robots_file(state["text"])(r))
+    assert (await f.fetch(PAGE_URL)).status == 200
+    state["text"] = BLOCK_PRODUCTS
+    assert (await f.fetch(PAGE_URL)).status == 200  # still within the TTL: the old file stands
+    clock.now += 101
+    with pytest.raises(FetchRefused):
+        await f.fetch(PAGE_URL)
+
+
+@pytest.mark.parametrize("status", [404, 410, 401, 403, 429])
+async def test_a_robots_txt_that_is_unavailable_to_us_allows_everything(status: int) -> None:
+    f, web = fetcher(robots=lambda _: httpx.Response(status))
+    assert (await f.fetch(PAGE_URL)).status == 200 and len(web.seen) == 1  # RFC 9309 2.3.1.3
+
+
+@pytest.mark.parametrize("status", [500, 502, 503])
+async def test_a_robots_txt_server_error_is_not_permission(status: int) -> None:
+    f, web = fetcher(robots=lambda _: httpx.Response(status))
+    with pytest.raises(FetchFailed) as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots_unavailable" and raised.value.status == status
+    assert web.seen == []  # the page was not requested
+
+
+async def test_an_unreachable_robots_txt_is_not_permission_and_is_retried_not_cached() -> None:
+    def broken(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    f, web = fetcher(robots=broken)
+    for _ in range(2):
+        with pytest.raises(FetchFailed) as raised:
+            await f.fetch(PAGE_URL)
+        assert raised.value.kind == "robots_unavailable"
+    assert len(web.robots_seen) == 2 and web.seen == []
+
+
+async def test_robots_txt_redirects_are_followed_under_the_same_address_policy() -> None:
+    def robots(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "shop.example.test":
+            to = "https://other.example.test/robots.txt"
+            return httpx.Response(301, headers={"location": to})
+        return robots_file(BLOCK_PRODUCTS)(request)
+
+    f, web = fetcher(robots=robots)
+    with pytest.raises(FetchRefused) as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots" and web.seen == []
+
+
+async def test_a_robots_txt_that_redirects_to_a_private_host_is_not_permission() -> None:
+    to = "https://internal.example.test/robots.txt"
+    f, web = fetcher(robots=lambda _: httpx.Response(302, headers={"location": to}))
+    with pytest.raises(FetchFailed) as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots_unavailable"
+    assert "internal.example.test" not in [r.url.host for r in web.robots_seen]  # never contacted
+    assert web.seen == []
+
+
+async def test_a_robots_txt_that_redirects_forever_counts_as_unavailable_and_allows() -> None:
+    f, web = fetcher(
+        robots=lambda r: httpx.Response(
+            302, headers={"location": "/robots.txt?" + r.url.query.decode() + "x"}
+        ),
+        fetch_max_redirects=2,
+    )
+    assert (await f.fetch(PAGE_URL)).status == 200  # RFC 9309 2.3.1.2
+    assert len(web.robots_seen) == 3
+
+
+async def test_only_the_first_robots_max_bytes_are_read() -> None:
+    padding = "# " + "x" * 100 + "\n"
+    text = "User-agent: *\nDisallow: /early/\n" + padding * 3 + "Disallow: /products/\n"
+    f, _ = fetcher(robots=robots_file(text), robots_max_bytes=len(padding) + 40)
+    assert (await f.fetch(PAGE_URL)).status == 200  # the late rule was beyond the cap
+    with pytest.raises(FetchRefused):
+        await f.fetch("https://shop.example.test/early/x")
+
+
+async def test_a_redirect_target_on_another_origin_is_judged_by_its_own_robots_txt() -> None:
+    def pages(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "shop.example.test":
+            return httpx.Response(302, headers={"location": "https://other.example.test/blocked/p"})
+        return html_response()
+
+    def robots(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "other.example.test":
+            return robots_file("User-agent: *\nDisallow: /blocked/\n")(request)
+        return httpx.Response(404)
+
+    f, web = fetcher(pages, robots=robots)
+    with pytest.raises(FetchRefused) as raised:
+        await f.fetch(PAGE_URL)
+    assert raised.value.kind == "robots"
+    assert web.hosts == ["shop.example.test"]  # the other origin's page was never requested
+
+
+async def test_the_query_string_is_part_of_what_robots_txt_is_asked_about() -> None:
+    f, _ = fetcher(robots=robots_file("User-agent: *\nDisallow: /*?session=\n"))
+    assert (await f.fetch(PAGE_URL)).status == 200
+    with pytest.raises(FetchRefused):
+        await f.fetch(PAGE_URL + "?session=abc")
+
+
+async def test_refusals_by_the_address_policy_never_reach_robots_txt() -> None:
+    f, web = fetcher()
+    with pytest.raises(FetchRefused):
+        await f.fetch("https://loopback.example.test/")
+    assert web.robots_seen == [] and web.seen == []
+
+
+@pytest.mark.parametrize(
+    ("url", "error", "kind"),
+    [
+        ("ftp://shop.example.test/x", FetchRefused, "scheme"),
+        ("https://u:p@shop.example.test/x", FetchRefused, "credentials"),
+        ("https://shop.example.test:8443/x", FetchRefused, "port"),
+        ("https://loopback.example.test/", FetchRefused, "address"),
+        ("https://gone.example.test/", FetchFailed, "dns"),
+    ],
+)
+async def test_every_refusal_and_failure_says_why(
+    url: str, error: type[Exception], kind: str
+) -> None:
+    f, _ = fetcher()
+    with pytest.raises(error) as raised:
+        await f.fetch(url)
+    assert raised.value.kind == kind  # type: ignore[attr-defined]
+
+
+# ── content_type_of: what a URL answers with, for measuring the share of PDFs ────────────────
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("application/pdf", "application/pdf"),
+        ("TEXT/HTML; charset=utf-8", "text/html"),
+        ("", ""),
+    ],
+)
+async def test_content_type_of_reads_the_media_type_from_the_headers(
+    header: str, expected: str
+) -> None:
+    f, web = fetcher(lambda _: httpx.Response(200, content=b"x", headers={"content-type": header}))
+    assert await f.content_type_of("https://shop.example.test/download?id=7") == expected
+    assert len(web.seen) == 1
+
+
+async def test_content_type_of_does_not_special_case_a_pdf_name() -> None:
+    f, web = fetcher()  # the server says HTML, whatever the URL looks like
+    assert await f.content_type_of("https://shop.example.test/page.pdf") == "text/html"
+    assert len(web.seen) == 1
+
+
+async def test_content_type_of_obeys_robots_and_the_address_policy_like_fetch() -> None:
+    f, web = fetcher(robots=robots_file(BLOCK_PRODUCTS))
+    with pytest.raises(FetchRefused) as raised:
+        await f.content_type_of(PAGE_URL)
+    assert raised.value.kind == "robots" and web.seen == []
+    with pytest.raises(FetchRefused) as raised:
+        await f.content_type_of("http://169.254.169.254/")
+    assert raised.value.kind == "address"
+
+
+async def test_content_type_of_reports_an_error_status_as_a_failure() -> None:
+    f, _ = fetcher(lambda _: httpx.Response(404))
+    with pytest.raises(FetchFailed) as raised:
+        await f.content_type_of(PAGE_URL)
+    assert raised.value.status == 404 and raised.value.kind == "http_status"

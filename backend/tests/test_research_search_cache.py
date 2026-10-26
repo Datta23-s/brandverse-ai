@@ -13,7 +13,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.errors import SearchUnavailable
 from app.memory.scoring import load_scoring
-from app.research.search import EngineFailure, OfflineSearch, SearchResult
+from app.research.search import EngineFailure, OfflineSearch, SearchResponse, SearchResult
 from app.research.search_cache import CachedSearch, cache_key
 
 pytestmark = pytest.mark.anyio
@@ -23,6 +23,7 @@ RESULTS = [
     SearchResult(f"https://example.test/{n}", f"Result {n}", f"Snippet {n}") for n in range(12)
 ]
 TTL = 3600
+DEGRADED_TTL = 600
 
 
 class FakeKV:
@@ -61,23 +62,38 @@ def cached(
     clock: Clock | None = None,
     *,
     ttl_s: int = TTL,
+    degraded_ttl_s: int | None = None,
     mode: str = "use",
     inner: OfflineSearch | None = None,
 ) -> tuple[CachedSearch, FakeKV, Clock, OfflineSearch]:
     kv, clock = kv or FakeKV(), clock or Clock()
     inner = inner or OfflineSearch({QUERY: RESULTS})
-    return CachedSearch(inner, kv, ttl_s=ttl_s, mode=mode, clock=clock), kv, clock, inner  # type: ignore[arg-type]
+    short = degraded_ttl_s or min(DEGRADED_TTL, ttl_s)
+    search = CachedSearch(
+        inner,
+        kv,
+        ttl_s=ttl_s,
+        degraded_ttl_s=short,
+        mode=mode,
+        clock=clock,  # type: ignore[arg-type]
+    )
+    return search, kv, clock, inner
 
 
 # ── The TTL is a parameter ───────────────────────────────────────────────────────────────────
 
 
 def test_the_ttl_comes_from_scoring_config_and_the_cache_has_no_default_for_it() -> None:
-    assert load_scoring().research.search_cache_ttl_s >= 1
+    research = load_scoring().research
+    assert 1 <= research.search_cache_degraded_ttl_s <= research.search_cache_ttl_s
     with pytest.raises(TypeError, match="ttl_s"):
         CachedSearch(OfflineSearch(), FakeKV())  # type: ignore[call-arg, arg-type]
+    with pytest.raises(TypeError, match="degraded_ttl_s"):  # neither TTL has a default
+        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=60)  # type: ignore[call-arg, arg-type]
     with pytest.raises(ValueError, match="ttl_s"):
-        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=0)  # type: ignore[arg-type]
+        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=0, degraded_ttl_s=0)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="must not exceed"):
+        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=60, degraded_ttl_s=61)  # type: ignore[arg-type]
 
 
 async def test_the_entry_expires_in_redis_after_exactly_the_ttl_in_force() -> None:
@@ -317,6 +333,68 @@ def test_entries_written_before_the_failure_record_are_under_another_key_version
     assert cache_key(QUERY).startswith("search_cache:v2:")
 
 
+# ── A degraded answer is cached for its own, shorter TTL (owner, 2026-10-26) ─────────────────
+
+
+async def test_a_degraded_answer_gets_the_short_expiry_and_a_clean_one_the_long() -> None:
+    degraded = OfflineSearch({"thin": [BRAVE]}, failed_engines=THROTTLED)
+    clean = OfflineSearch({"full": [BRAVE, WIKI, DDG]})
+    search, kv, *_ = cached(inner=degraded)
+    await search.search("thin")
+    (key,) = kv.expiries
+    assert kv.expiries[key] == DEGRADED_TTL  # stored with the short expiry, not the day's
+    search, kv, *_ = cached(inner=clean)
+    await search.search("full")
+    (key,) = kv.expiries
+    assert kv.expiries[key] == TTL
+
+
+async def test_one_bad_minute_does_not_poison_the_rest_of_the_day() -> None:
+    clock = Clock()
+    state = {"failed": list(THROTTLED)}
+
+    class Recovering:
+        calls = 0
+
+        async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
+            self.calls += 1
+            return SearchResponse([BRAVE, WIKI, DDG][:limit], tuple(state["failed"]))
+
+    inner = Recovering()
+    search = CachedSearch(inner, FakeKV(), ttl_s=TTL, degraded_ttl_s=DEGRADED_TTL, clock=clock)  # type: ignore[arg-type]
+    assert (await search.search(QUERY)).degraded
+    clock.now += DEGRADED_TTL - 1
+    assert (await search.search(QUERY)).degraded and inner.calls == 1  # still within the short TTL
+    state["failed"] = []  # the engines are back
+    clock.now += 2  # past it, though far short of a day
+    assert not (await search.search(QUERY)).degraded and inner.calls == 2
+    clock.now += TTL - 10  # the clean answer is kept the long TTL
+    assert not (await search.search(QUERY)).degraded and inner.calls == 2
+
+
+async def test_a_degraded_entry_older_than_the_short_ttl_is_a_miss_even_if_redis_holds_it() -> None:
+    inner = OfflineSearch({QUERY: [BRAVE]}, failed_engines=THROTTLED)
+    search, _, clock, _ = cached(inner=inner)
+    await search.search(QUERY)
+    clock.now += DEGRADED_TTL + 1
+    await search.search(QUERY)
+    assert len(inner.calls) == 2
+
+
+async def test_a_reused_degraded_answer_stays_marked_and_the_report_states_both_ttls() -> None:
+    inner = OfflineSearch({QUERY: [BRAVE]}, failed_engines=THROTTLED)
+    search, *_ = cached(inner=inner)
+    await search.search(QUERY)
+    reused = await search.search(QUERY)
+    assert reused.degraded and len(inner.calls) == 1
+    report = search.report()
+    assert (report.ttl_s, report.degraded_ttl_s, report.degraded_searches) == (
+        TTL,
+        DEGRADED_TTL,
+        2,
+    )
+
+
 # ── A real Redis ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -326,7 +404,7 @@ async def test_against_a_real_redis_the_key_expires_with_the_ttl_and_is_reused(
 ) -> None:
     redis = Redis.from_url(str(redis_settings.redis_url))  # type: ignore[attr-defined]
     try:
-        search = CachedSearch(OfflineSearch({QUERY: RESULTS}), redis, ttl_s=120)
+        search = CachedSearch(OfflineSearch({QUERY: RESULTS}), redis, ttl_s=120, degraded_ttl_s=30)
         await search.search(QUERY, limit=3)
         assert 0 < await redis.ttl(cache_key(QUERY)) <= 120
         assert (await search.search(QUERY, limit=3)).results == RESULTS[:3]

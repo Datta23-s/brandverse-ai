@@ -50,6 +50,11 @@ research:
   # in force and the age of each entry it reused. DEFAULT, NOT TUNED. An entry older than the TTL
   # in force is a miss even if Redis still holds it, so lowering this takes effect immediately.
   search_cache_ttl_s: 86400                            # one day
+  # A search answered while some engines failed (a degraded answer, docs/searxng.md) is a transient
+  # failure, so one bad minute must not poison a day of runs: it is cached, marked degraded, for
+  # this much shorter time (owner, 2026-10-26). Evaluation recording does not cache a degraded
+  # search at all (docs/evaluation-plan.md section 8). Never longer than search_cache_ttl_s.
+  search_cache_degraded_ttl_s: 3600                    # one hour
   # Page-content extraction (backend/app/research/extraction.py). Main text shorter than the
   # minimum is no content (a login wall, a listing): the page is refused rather than passed on as
   # evidence. Longer than the maximum is cut at a paragraph boundary and flagged `truncated`, so no
@@ -66,6 +71,11 @@ research:
   fetch_max_bytes: 2000000                             # 2 MB
   fetch_max_redirects: 5
   fetch_user_agent: "BrandverseResearch/0.1 (academic research project)"
+  # robots.txt is honoured (backend/app/research/fetch.py, robots.py): one fetch per origin, kept this
+  # long (RFC 9309 allows up to a day), and only the first robots_max_bytes of it read (the RFC asks
+  # for at least 500 KiB). The agent token is the User-Agent's first word.
+  robots_ttl_s: 86400
+  robots_max_bytes: 524288
 source:
   # Source scoring (backend/app/research/source_scoring.py; Architecture.md §6.2): how far one web
   # page is trusted as evidence, in [0, 1]. DEFAULTS, NOT TUNED: every number here is a parameter of

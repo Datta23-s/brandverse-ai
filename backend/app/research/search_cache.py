@@ -14,6 +14,13 @@ what a run saw. Three consequences are built in:
 - `report()` states how much of a run's evidence was fetched and how much was reused, in searches
   and in results, which the evaluation compares between arms.
 
+**A degraded answer has its own, much shorter TTL** (`research.search_cache_degraded_ttl_s`, also
+passed in, never longer than the other; owner, 2026-10-26). A search answered while some engines
+failed is a transient failure, and caching it for a day would let one bad minute poison a day of
+runs. It is cached for the short TTL, still marked degraded. This is the development cache. The
+evaluation's snapshot does not hold a degraded search at all (docs/evaluation-plan.md section 8);
+it is retried later.
+
 `mode="bypass"` neither reads nor writes the cache; the ledger still records every fetch. Whether
 evaluation runs use the cache at all is a decision recorded in docs/evaluation-plan.md, not here.
 
@@ -79,6 +86,7 @@ class SearchEvidenceReport(BaseModel):
 
     mode: CacheMode
     ttl_s: int  # the TTL in force for the whole run
+    degraded_ttl_s: int  # the (shorter) TTL for an answer with failed engines
     searches: int
     fetched: int
     reused: int
@@ -96,8 +104,8 @@ class SearchEvidenceReport(BaseModel):
 
 
 class SearchLedger:
-    def __init__(self, *, mode: CacheMode, ttl_s: int) -> None:
-        self.mode, self.ttl_s = mode, ttl_s
+    def __init__(self, *, mode: CacheMode, ttl_s: int, degraded_ttl_s: int) -> None:
+        self.mode, self.ttl_s, self.degraded_ttl_s = mode, ttl_s, degraded_ttl_s
         self.records: list[SearchRecord] = []
 
     def report(self) -> SearchEvidenceReport:
@@ -112,6 +120,7 @@ class SearchLedger:
         return SearchEvidenceReport(
             mode=self.mode,
             ttl_s=self.ttl_s,
+            degraded_ttl_s=self.degraded_ttl_s,
             searches=len(self.records),
             fetched=len(fetched),
             reused=len(reused),
@@ -146,11 +155,14 @@ class CachedSearch:
         redis: KeyValue,
         *,
         ttl_s: int,
+        degraded_ttl_s: int,
         mode: CacheMode = "use",
         clock: Callable[[], float] = time.time,
     ) -> None:
-        if ttl_s < 1:
-            raise ValueError("ttl_s must be at least 1 second")
+        if ttl_s < 1 or degraded_ttl_s < 1:
+            raise ValueError("ttl_s and degraded_ttl_s must each be at least 1 second")
+        if degraded_ttl_s > ttl_s:
+            raise ValueError("degraded_ttl_s must not exceed ttl_s")
         self._inner, self._redis, self._ttl_s, self._mode, self._clock = (
             inner,
             redis,
@@ -158,7 +170,8 @@ class CachedSearch:
             mode,
             clock,
         )
-        self.ledger = SearchLedger(mode=mode, ttl_s=ttl_s)
+        self._degraded_ttl_s = degraded_ttl_s
+        self.ledger = SearchLedger(mode=mode, ttl_s=ttl_s, degraded_ttl_s=degraded_ttl_s)
 
     def report(self) -> SearchEvidenceReport:
         return self.ledger.report()
@@ -229,7 +242,8 @@ class CachedSearch:
             fetched_limit = int(entry["limit"])
         except (ValueError, KeyError, TypeError):  # corrupt: replaced by the fetch that follows
             return None, False
-        if not 0 <= age <= self._ttl_s or fetched_limit < limit:
+        usable_for = self._degraded_ttl_s if failed else self._ttl_s  # the TTL in force for it
+        if not 0 <= age <= usable_for or fetched_limit < limit:
             return None, False
         return (SearchResponse(stored[:limit], failed), age), False
 
@@ -242,8 +256,9 @@ class CachedSearch:
             "results": [asdict(r) for r in response.results],
             "failed_engines": [[f.engine, f.reason] for f in response.failed_engines],
         }
+        expires_in = self._degraded_ttl_s if response.failed_engines else self._ttl_s
         try:
-            await self._redis.set(cache_key(query), json.dumps(entry), ex=self._ttl_s)
+            await self._redis.set(cache_key(query), json.dumps(entry), ex=expires_in)
         except RedisError:
             return True
         return False
