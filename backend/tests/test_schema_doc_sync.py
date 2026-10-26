@@ -75,6 +75,42 @@ def test_architecture_section_9_lists_every_migration_once_in_order() -> None:
     assert listed == files, f"§9 lists {listed}, the directory holds {files}"
 
 
+def test_no_migration_file_carries_a_byte_order_mark() -> None:
+    """A byte-order mark in a migration breaks it outright: Postgres reads the leading bytes as
+    part of the first statement, so the file fails to apply. That is the worst failure shape —
+    on 2026-10-26 a BOM written by `Set-Content -Encoding utf8` (PowerShell 5.1 adds one) made the
+    database suite ERROR while building its schema, which reads as a broken test run rather than a
+    broken file, and a `db push` would have failed the same way against the live project. The
+    characters are invisible in an editor and survive a diff, so this scan reads bytes: a BOM at the
+    start of a file, and a zero-width no-break space anywhere in it (Rules.md §3.3's hazard, made
+    impossible rather than remembered). Every file in the directory is scanned, not only `*.sql`.
+    """
+    # Every BOM the Unicode standard defines, as bytes, so a file in the wrong encoding entirely
+    # is named as such rather than raising while being decoded.
+    marks = {
+        "UTF-8": b"\xef\xbb\xbf",
+        "UTF-32 little-endian": b"\xff\xfe\x00\x00",
+        "UTF-32 big-endian": b"\x00\x00\xfe\xff",
+        "UTF-16 little-endian": b"\xff\xfe",
+        "UTF-16 big-endian": b"\xfe\xff",
+    }
+    files = sorted(p for p in MIGRATIONS_DIR.rglob("*") if p.is_file())
+    assert files, f"no files found in {MIGRATIONS_DIR}"
+    offenders = []
+    for path in files:
+        raw = path.read_bytes()
+        name = path.relative_to(REPO_ROOT).as_posix()
+        for encoding, mark in marks.items():  # UTF-32 LE before UTF-16 LE: it starts with one
+            if raw.startswith(mark):
+                offenders.append(f"{name}: starts with a {encoding} byte-order mark")
+                break
+        else:
+            if b"\xef\xbb\xbf" in raw:
+                at = raw.index(b"\xef\xbb\xbf")
+                offenders.append(f"{name}: zero-width no-break space at byte {at}")
+    assert not offenders, "byte-order marks in migration files:\n  " + "\n  ".join(offenders)
+
+
 def test_architecture_section_9_holds_no_copy_of_the_sql() -> None:
     assert "```sql" not in _section_9(), "§9 references the migration files; it does not copy them"
 
