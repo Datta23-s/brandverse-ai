@@ -928,14 +928,28 @@ It is not fixed tonight and the throttle does not design the experiment: it is s
 search rate once the probe has run (below), and the rate informs the choice rather than dictating
 the experiment.
 
-**Open, to be decided before the planner is built.** The arms do not research equally by design:
-Baseline A does no research, Baseline B researches at full depth (D2), and Proposed chooses a depth
-(D0, D1, D2) per request. Holding the query set and the web constant means every arm has the same
-evidence *available*; how much of it an arm uses is arm behaviour (none for A and for D0, some for
-D1, all for B). What is not decided is what D1 searches: a subset of the request's recorded queries
-(say a prefix of the planner's ranked list), or something else. If it were something else, the
-constant-search rule would not hold for it. This must be fixed before the planner exists, because it
-determines whether the planner emits one ranked list that depths cut, or a set per depth.
+**Depths cut one shared ranked list — RULED 2026-10-26 (owner; this closes the question the rule
+above left open).** The arms do not research equally by design: Baseline A does no research,
+Baseline B researches at full depth (D2), and Proposed chooses a depth (D0, D1, D2) per request. The
+planner runs once per request and emits **one ranked query list**. **D0 takes none, D1 takes a
+prefix, D2 takes all.** Every arm that researches draws from the same ordered list, so the evidence
+*available* is identical and only how much an arm consumes varies. The recording covers the full
+list once; any depth replays a prefix of it. That keeps attribution clean: if Proposed at D1 beats
+Baseline B at full depth, the difference is how it selected and used evidence, not that it saw
+different evidence. Two conditions:
+
+1. **The ranking is the shared planner's, not the Proposed arm's own logic.** If Proposed ranked
+   the list and then took a prefix of its own ranking, the prefix would be privileged and the
+   comparison contaminated. The ranking is computed before, and independently of, any arm's choice
+   of depth, from the request alone.
+2. **Which depth was chosen, and on what basis, is recorded per run.** Run state already carries
+   `depth`, `research_score` (R) and `memory_coverage` (`Architecture.md` section 5.2); the record
+   keeps all three and the threshold the depth was cut at. "Adaptive depth" is a claim that needs
+   evidence the adaptivity actually varied, so the distribution of chosen depths over the 30
+   requests is reported. If Proposed chooses D2 every time it contributes nothing, and the result
+   reduces to "more search is better", which has to be known before the write-up, not after. The
+   prefix length for D1 and the number of queries `q` are configured parameters, reported beside
+   every result.
 
 **The recording procedure (owner, 2026-10-26).** *A degraded search is never recorded into the
 snapshot.* A search for which any engine was named as failed (`docs/searxng.md`) is not written; it
@@ -945,12 +959,31 @@ results would see it. Development, tuning and calibration use the ordinary cache
 degraded search but for its own, much shorter TTL (`research.search_cache_degraded_ttl_s`, one hour,
 against a day for a clean one), marked degraded, so one bad minute cannot poison a day of runs.
 
-*This rule has a consequence that is not yet resolved.* "Clean" means no engine named as failed, and
-on this laptop duckduckgo has returned a CAPTCHA on every search since the first real one
-(`docs/searxng.md`). If an engine stays down, no search is ever clean and the recording can never
-finish. The rule needs the recording's engine set to be declared in advance, as those that answer,
-and stated with the results; whether to do that or to fix the engine is for the owner once the probe
-has shown which engines recover.
+**Degradation is measured against the declared engine set — RULED 2026-10-26 (owner).** "Degraded"
+means an engine *in the declared set* failed, not that an engine SearXNG could have run did.
+Without this the rule above could never be satisfied here: duckduckgo has returned a CAPTCHA on
+every search since the first real one and wikipedia stays throttled (`docs/searxng.md`), so no
+search would ever be complete. If those two stay down, the honest declared set may be brave alone,
+and a brave-only search that brave answered is then **complete**, not degraded: complete with
+respect to a configuration declared in advance and reported beside every result.
+
+- **The set is NOT declared yet, and not by choice of the developer.** The rate probe decides it:
+  the set is declared from the engines that actually answer, and recorded here, with the date and
+  the evidence, before any recording. Until then `research.declared_engines` is `null`: undeclared,
+  every engine SearXNG names counts as before, and the run report says `null`, visibly.
+- **Where it is stated.** The declared set is in this section and in every run report
+  (`SearchEvidenceReport.declared_engines`); a search carries it, a cached search is reused only
+  under the set it was fetched under, and failures of engines outside the set are kept in the
+  record (`undeclared_failures`) but do not make an answer degraded. The evaluation harness refuses
+  to start a run while the set is `null` (when the harness exists, as it refuses a non-snapshot cache
+  mode).
+- **The cost, stated plainly.** *A single-engine configuration gives narrower coverage than a
+  multi-engine one*: one engine's index and ranking, one engine's blind spots, and results that
+  differ from what a multi-engine metasearch would find. *If that engine throttles mid-recording,
+  the recording stops*: there is no second engine to carry on with, and the retry of a degraded
+  search (above) waits for the one engine to recover. This is a real fragility of the evaluation's
+  evidence, named here and to be named in the limitations of the write-up, not discovered during the
+  recording.
 
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 

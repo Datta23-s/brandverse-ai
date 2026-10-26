@@ -53,7 +53,13 @@ into a `SearchUnavailable` whose message names `search.formats`. Confirmed again
    fetch-time failures, and `SearchEvidenceReport` states `degraded_searches`, `failed_engine_counts`
    and `engines_seen`, so a run that saw one engine is told from one that saw three. Tests in
    `tests/test_research_search.py` and `tests/test_research_search_cache.py`. The mock now carries
-   `unresponsive_engines` and the other fields below.
+   `unresponsive_engines` and the other fields below. **"Failed" is measured against the declared
+   engine set** (owner, 2026-10-26; `docs/evaluation-plan.md` section 8): `research.declared_engines`
+   is `null` (not declared) until the rate probe has shown which engines answer, and with a set
+   declared only a failure of an engine in it degrades an answer or turns an empty one into a
+   refusal; failures outside it are kept as `undeclared_failures`. If the set ends up being brave
+   alone, a brave-only answer is complete for that declaration, and the narrower coverage and the
+   single point of failure are named in the limitations.
 2. **Extra keys.** Top level: `answers, corrections, infoboxes, query, results, suggestions,
    unresponsive_engines`. Per row: `audio_src, author, category, close_group, content, engine, engines,
    iframe_src, img_src, length, metadata, open_group, parsed_url, positions, priority, pubdate,

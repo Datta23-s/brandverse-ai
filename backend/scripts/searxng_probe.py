@@ -39,7 +39,7 @@ async def provider_run(url: str, pause: float) -> None:
         last["status"], last["body"] = response.status_code, response.json()
 
     async with httpx.AsyncClient(timeout=15, event_hooks={"response": [keep]}) as client:
-        await _queries(SearxngSearch(url, client), last, pause)
+        await _queries(SearxngSearch(url, client, declared_engines=None), last, pause)
 
 
 async def _queries(search: SearxngSearch, last: dict[str, Any], pause: float) -> None:
@@ -99,11 +99,16 @@ async def error_paths(url: str) -> None:
             print(f"{label}: {type(e).__name__}: {e} ({time.perf_counter() - t0:.2f}s)")
 
     async with httpx.AsyncClient(timeout=10) as c:
-        await attempt("closed port", SearxngSearch("http://127.0.0.1:1", c))
-        await attempt("wrong path / not SearXNG", SearxngSearch(base + "/nope", c))
-        await attempt("host that does not resolve", SearxngSearch("http://searxng.invalid:8888", c))
+        await attempt("closed port", SearxngSearch("http://127.0.0.1:1", c, declared_engines=None))
+        await attempt(
+            "wrong path / not SearXNG", SearxngSearch(base + "/nope", c, declared_engines=None)
+        )
+        await attempt(
+            "host that does not resolve",
+            SearxngSearch("http://searxng.invalid:8888", c, declared_engines=None),
+        )
     async with httpx.AsyncClient(timeout=httpx.Timeout(0.001)) as c:
-        await attempt("timeout 1 ms", SearxngSearch(base, c))
+        await attempt("timeout 1 ms", SearxngSearch(base, c, declared_engines=None))
     async with httpx.AsyncClient(timeout=10) as c:
         # json format asked of an engine that has it disabled is a 403: exercised by the
         # `formats` settings, see docs/searxng.md; here we ask for an impossible format directly.

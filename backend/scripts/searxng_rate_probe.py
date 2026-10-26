@@ -181,7 +181,7 @@ async def main() -> None:
                 "url": args.url,
             }
         )
-        search = SearxngSearch(args.url, client)
+        search = SearxngSearch(args.url, client, declared_engines=None)
         deadline = time.monotonic() + args.hours * 3600
         for n, (group, query) in enumerate(distinct_queries(args.seed)):
             if time.monotonic() >= deadline:

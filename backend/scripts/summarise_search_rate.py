@@ -9,15 +9,18 @@ Reports, from the log alone and with nothing assumed:
   in), and the longest run of consecutive clean searches;
 - per engine: in how many searches it was named as failed, with which reasons, and in how many it
   contributed rows;
-- the recording-phase duration the CLEAN rate implies for 90 and 270 searches. The clean rate at one
-  fixed spacing is a lower bound on what the engines sustain (a shorter spacing may also be clean);
-  the figure is only as good as that and says so.
+- for every candidate declared engine set (each subset of the enabled engines), how many searches
+  were complete with respect to it, the rate, and the hours to record 30 x q searches for q = 1, 2,
+  3, 5. The rate at one fixed spacing is a lower bound on what the engines sustain (a shorter
+  spacing may also be complete); the figure is only as good as that and says so. The table informs
+  the declaration; it does not make it (docs/evaluation-plan.md section 8).
 """
 
 import json
 import sys
 from collections import Counter
 from datetime import datetime
+from itertools import combinations
 from pathlib import Path
 
 
@@ -31,6 +34,16 @@ def kind_of(search: dict[str, object]) -> str:
     if search["outcome"] != "ok":
         return "refused"
     return "degraded" if search["unresponsive"] else "clean"
+
+
+def complete_for(search: dict[str, object], declared: tuple[str, ...]) -> bool:
+    """Complete with respect to a declared set: SearXNG itself answered (HTTP 200), and none of the
+    set's engines is among those it named as unresponsive. Results are not required: a search that
+    the declared engines answered and that found nothing is a genuine absence, not a failure."""
+    if search["http_status"] != 200:
+        return False
+    named = {str(u[0]).casefold() for u in search["unresponsive"]}  # type: ignore[attr-defined]
+    return not named & {e.casefold() for e in declared}
 
 
 def hours_between(a: object, b: object) -> float:
@@ -73,23 +86,30 @@ def main(path: Path) -> None:
         print(f"  {engine}: failed {sum(reasons.values())}, rows in {rows}  {dict(reasons)}")
 
     elapsed = window_h + float(header["interval_min"]) / 60  # type: ignore[arg-type]
-    for label, n in (
-        ("clean (no engine named as failed)", counts.get("clean", 0)),
-        (
-            "answered (clean or degraded: returned results)",
-            counts.get("clean", 0) + counts.get("degraded", 0),
-        ),
-    ):
-        rate = n / elapsed if elapsed else 0.0
-        print(f"\n{label} at this spacing: {n} in {elapsed:.1f} h = {rate:.2f} per hour")
-        if rate > 0:
-            for needed in (90, 270):
-                print(f"  {needed} searches would take {needed / rate:.0f} h at that rate")
-        else:
-            print("  none: the rate is 0 at this spacing and no duration follows")
+    engines: list[str] = list(header["engines_enabled"])  # type: ignore[call-overload]
     print(
-        "\nA degraded answer saw fewer engines than a clean one; a recording made of degraded"
-        "\nanswers is evidence from fewer sources, and the run report says which (section 8)."
+        f"\nSearches complete with respect to each candidate declared engine set"
+        f"\n(complete = SearXNG answered and none of the set's engines was named as failed;"
+        f"\nrate = per hour over {elapsed:.1f} h at {header['interval_min']}-minute spacing):"
+    )
+    searches_needed = (30, 60, 90, 150)  # 30 requests x q, q = 1, 2, 3, 5 (section 8)
+    print(
+        f"  {'declared set':36} {'complete':>9} {'rate/h':>7}   hours to record 30 x q, q = 1/2/3/5"
+    )
+    for size in range(1, len(engines) + 1):
+        for subset in combinations(engines, size):
+            n = sum(1 for s in searches if complete_for(s, subset))
+            rate = n / elapsed if elapsed else 0.0
+            hours = (
+                "/".join(f"{needed / rate:.0f}" for needed in searches_needed)
+                if rate > 0
+                else "no complete search: no duration follows"
+            )
+            print(f"  {'+'.join(subset):36} {n:>4}/{len(searches):<4} {rate:>7.2f}   {hours}")
+    print(
+        "\nThe set is declared from what actually answers, not from this table alone: a smaller"
+        "\nset is narrower coverage, and if its engine throttles mid-recording the recording stops"
+        "\n(docs/evaluation-plan.md section 8). Early rates over a few searches are not rates."
     )
 
 
