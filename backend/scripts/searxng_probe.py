@@ -49,7 +49,7 @@ async def _queries(search: SearxngSearch, last: dict[str, Any], pause: float) ->
         t0 = time.perf_counter()
         last.clear()
         try:
-            found = await search.search(query, limit=50)
+            found = (await search.search(query, limit=50)).results
         except (SearchUnavailable, SearchRateLimited) as e:
             print(f"\n[{query!r}] {type(e).__name__}: {e}")
             continue
@@ -93,7 +93,7 @@ async def error_paths(url: str) -> None:
     async def attempt(label: str, search: SearxngSearch, query: str = "kadai") -> None:
         t0 = time.perf_counter()
         try:
-            r = await search.search(query)
+            r = (await search.search(query)).results
             print(f"{label}: returned {len(r)} results in {time.perf_counter() - t0:.2f}s")
         except (SearchUnavailable, SearchRateLimited) as e:
             print(f"{label}: {type(e).__name__}: {e} ({time.perf_counter() - t0:.2f}s)")
