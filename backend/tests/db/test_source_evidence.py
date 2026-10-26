@@ -205,6 +205,19 @@ def test_no_api_role_but_the_backend_can_write_the_evidence(tx: Tx, table: str, 
         assert rows == [(False,)], f"{role} holds {privilege} on {table}"
 
 
+def test_anon_holds_no_write_privilege_on_memory_items_whatever_the_column(tx: Tx) -> None:
+    """0029: anon's table-level INSERT and UPDATE (from 0006) are revoked, so the column grants
+    that follow from them are gone too, source_score included."""
+    for privilege in ("INSERT", "UPDATE"):
+        rows = tx.execute(f"select has_table_privilege('anon', 'public.memory_items', '{privilege}')")
+        assert rows == [(False,)], f"anon holds {privilege} on memory_items"
+        for column in ("source_score", "confidence", "content", "revoked"):
+            rows = tx.execute(
+                f"select has_column_privilege('anon', 'public.memory_items', '{column}', '{privilege}')"
+            )
+            assert rows == [(False,)], f"anon holds {privilege} on memory_items.{column}"
+
+
 @pytest.mark.parametrize("table", ["sources", "memory_item_sources"])
 def test_the_backend_role_may_insert_and_select_and_nothing_else(tx: Tx, table: str) -> None:
     held = {

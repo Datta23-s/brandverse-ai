@@ -1,0 +1,15 @@
+-- 0029: anon holds no write privilege on memory_items (Architecture.md section 9, 0028 note).
+--
+-- Since 0006, anon has held table-level INSERT and UPDATE on memory_items - therefore on every
+-- column, source_score included. It was blocked only by row-level security (no anon policy) and
+-- the derivation guard trigger of 0028, not by the grant. Owner, 2026-10-25: make the exemption
+-- impossible rather than defended in depth. anon is the role of unauthenticated requests; nothing
+-- in the design has it writing memory.
+--
+-- Scope, stated: INSERT and UPDATE for anon on memory_items only. Not touched: anon's SELECT
+-- (no policy, so no rows), and the REFERENCES and TRIGGER grants (neither writes a row).
+-- authenticated also holds table-level INSERT (RLS has no INSERT policy for it); that is a
+-- separate decision and is not changed here.
+--
+-- Down: grant insert, update on memory_items to anon;
+revoke insert, update on memory_items from anon;
