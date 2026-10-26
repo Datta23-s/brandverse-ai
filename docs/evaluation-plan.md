@@ -450,6 +450,40 @@ search pipeline carries a `first_party` marker on every result, unpopulated and 
 6, with the domain field, the rule above and an independence factor separate from authority. The
 independence factor is not designed here. (`Memory.md` §3.1; `Phases.md` Phases 5 and 6.)
 
+### A defect found and fixed: a throttled search was indistinguishable from no evidence — 2026-10-26
+
+*Infrastructure failure masquerading as a system result.* The search provider was written against a
+mock that was the developer's own model of SearXNG. Run against the real engine for the first time,
+it showed a case the mock did not contain: when SearXNG's upstream engines are throttled (brave and
+wikipedia answering 429, duckduckgo showing a CAPTCHA) it answers **HTTP 200 with an empty result
+list**, naming the failed engines in a separate `unresponsive_engines` field. The provider read only
+`results`, so it returned an empty list, which is also exactly what a search for something that does
+not exist on the web returns. The two were the same value.
+
+*What it would have caused.* Every consumer downstream would have read a throttled search as a
+finding about the world: the topic has no web evidence. Research would have staged nothing for it; a
+claim that needed that evidence would have been unsupported, and the claim gate would have blocked or
+flagged the claim *for lack of evidence* when the truth was that the laptop's IP had been throttled.
+In the evaluation, an arm's quality would then have varied with how recently the harness had searched,
+not with the system under test, and a run that hit the throttle would have looked like a run that
+found nothing. Nothing in the output would have said which. The real engine began throttling this
+laptop after about ten searches in a few minutes and had not recovered twenty-five minutes later
+(`docs/searxng.md`), so this was the normal condition of the live engine under load, not a corner.
+
+*Fixed.* Zero results with any engine named as failed is refused (`SearchRateLimited` if a reason says
+"too many requests", else `SearchUnavailable`), so it surfaces as a failed search and degrades to a
+partial result (`Rules.md` C4) instead of an absence. The same defect has a second form, now also
+closed: a search that returns results while some engines failed is a *degraded* result set, and the
+failed engines and their reasons are carried through the search record into the run report
+(`SearchEvidenceReport.degraded_searches`, `failed_engine_counts`, `engines_seen`), so that a run that
+saw one engine can be told from a run that saw three. Tests pin both.
+
+*What it means for the write-up.* The search layer's failures must be reported separately from the
+system's results: a run's evidence is only as complete as the engines that answered, and the report
+says which did. The defect was found because the provider was exercised against the real engine
+rather than the mock; the mock now has the real answer's shape, and a real response has still to be
+recorded as a fixture (`docs/searxng.md`, "Not verified").
+
 ## 5. Statistics
 
 - Mean and SD per metric per arm.
@@ -874,6 +908,38 @@ tagged with the request that first fetched it); until then the cache has only `u
 (b) The harness refuses to start an evaluation run in any other mode, and refuses an arm outside
 its request's N-day window, as it refuses a tuning brand in the evaluation set (D1). (c)
 Development, tuning and calibration runs use the ordinary TTL cache.
+
+### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
+
+The snapshot ruling means the arms replay one recording, but the recording itself needs real
+searches, and the live engines throttle this laptop's IP (`docs/searxng.md`): about ten searches in a
+few minutes, then no recovery in twenty-five. How many searches per hour the three engines sustain is
+unmeasured, so **the length of the recording phase is not yet known**, and no figure below is a
+result.
+
+*The measurement.* `backend/scripts/searxng_rate_probe.py`, started 2026-10-26 15:16 UTC: one search
+every 10 minutes for 14 hours, each a distinct query, unattended, logged to
+`evaluation/search_rate/probe-20261026T151600Z.jsonl`. It starts from the throttled state, so it
+measures recovery time as well as the clean rate. `backend/scripts/summarise_search_rate.py` reports
+the rate at which it stays clean, the time to first clean search, and each engine's record. If the
+clean rate at 10-minute spacing is high, a second run at a shorter spacing is needed to find the
+ceiling; 10 minutes is a starting point, not a finding.
+
+*The arithmetic that turns a rate into a duration.* Searches to record, `S`:
+
+- `S = 30 requests × q` if every arm issues the same normalised queries (the replayed case);
+- `S = 30 × 3 arms × q` at the other extreme, if the planner's queries differ by arm and none
+  coincide (`q` = queries the planner issues per run; not yet built, taken as 3 for the bound).
+
+With `q = 3` that is **90 to 270 searches**. At a sustained rate of `R` searches per hour the
+recording phase takes `S / R` hours of wall clock, and the laptop must stay on for all of it. For
+illustration only, at `R = 6` (one per 10 minutes, the probe's own spacing): 15 to 45 hours, i.e. one
+to about three and a half overnight sessions of 14 hours. At `R = 3`: 30 to 90 hours. These are
+bounds from the arithmetic, not a measured figure; the measured `R` replaces them.
+
+*The decision rule (owner, 2026-10-26).* If the measured recording phase is more than a few overnight
+sessions, **the design changes** (a different search source, fewer queries per run, or a smaller
+recording) rather than being discovered in November. The figure goes here when the probe has run.
 
 ## 9. Required items
 

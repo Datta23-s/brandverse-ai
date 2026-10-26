@@ -88,6 +88,18 @@ a brand domain, so it is not a scoring tweak: Phase 5 carries an unpopulated `fi
 on every search result; Phase 6 adds the domain field, the rule and an independence factor
 (`docs/evaluation-plan.md` V6).
 
+**A defect found and fixed, 2026-10-26: a throttled search is not an absence of evidence.** Memory
+items rest on evidence the search layer fetches, and the real SearXNG answers HTTP 200 with an empty
+result list, naming the failed engines in `unresponsive_engines`, when its upstream engines are
+throttled. The provider returned that as an empty list, indistinguishable from a search that found
+nothing; a topic would have been recorded as having no web evidence, no item would have been staged
+for it, and a claim needing it would have been blocked for lack of evidence when the cause was a
+throttled IP. It is refused now (a failed search, not an absence), and a result set returned while
+some engines failed carries the failed engines and reasons into the run record and report, so a run
+that saw one engine is told from one that saw three. The mechanism and what it means for the
+evaluation are in `docs/evaluation-plan.md` ("A defect found and fixed"); the engines and the
+observed throttling are in `docs/searxng.md`.
+
 ### 3.2 Reuse decision bands
 
 | `M` | Decision | Behaviour |

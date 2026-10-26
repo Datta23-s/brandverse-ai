@@ -47,9 +47,13 @@ into a `SearchUnavailable` whose message names `search.formats`. Confirmed again
    requests"]]`). The provider reported that as "a search with no hits". A query whose results were
    all lost to throttling would have been recorded as the topic having no evidence. **Fixed:** zero
    results with any engine named is refused (`SearchRateLimited` if a reason says "too many requests",
-   else `SearchUnavailable`); results with a failed engine are returned. Tests in
-   `tests/test_research_search.py`. The mock now carries `unresponsive_engines` and the other fields
-   below.
+   else `SearchUnavailable`). Results returned while some engines failed come back inside a
+   `SearchResponse` that carries the failed engines with their reasons and `engines_seen` (the
+   engines that contributed a row); `CachedSearch` keeps them per search, a reused entry keeps its
+   fetch-time failures, and `SearchEvidenceReport` states `degraded_searches`, `failed_engine_counts`
+   and `engines_seen`, so a run that saw one engine is told from one that saw three. Tests in
+   `tests/test_research_search.py` and `tests/test_research_search_cache.py`. The mock now carries
+   `unresponsive_engines` and the other fields below.
 2. **Extra keys.** Top level: `answers, corrections, infoboxes, query, results, suggestions,
    unresponsive_engines`. Per row: `audio_src, author, category, close_group, content, engine, engines,
    iframe_src, img_src, length, metadata, open_group, parsed_url, positions, priority, pubdate,
@@ -109,6 +113,38 @@ state). Consequences, stated as open:
   recorded fixture of a real response has been committed yet** (the throttle began before one was
   saved), so the mock's shape rests on what was printed, not on a replayed file. The probe script
   stores nothing.
+
+## Fallback investigated, not approved: the Brave Search API
+
+Costed on 2026-10-26 in case the throttle measurement (`docs/evaluation-plan.md` section 8) comes back
+bad. **Nothing is built or approved.** Provenance: the figures below were read from Brave's own pages
+through a summarising fetch tool and cross-checked against secondary pages that disagree with each
+other; read the pricing page and the terms yourself before relying on any of it.
+
+- **Free allowance.** Not the 2,000 queries a month older pages still quote. Brave's page lists a
+  Search plan at "$5 per 1,000 requests" that "includes $5 in free credits every month" (about 1,000
+  queries a month), a 50 queries-per-second limit, and, inconsistently, "up to $20 in free calls
+  every month" at the top of the same page. Some sources say accounts from the earlier free plan are
+  grandfathered at 2,000. Whichever it is, it is on the order of 1,000 to 2,000 queries a month.
+- **A key and a card.** A key is required. The FAQ says a credit card is asked for "to prevent abuse"
+  and usage past the credit is billed to it; no default spending cap was found. That sits badly
+  with the zero-spend constraint: free only if the card is never charged, which needs a cap set on
+  Brave's side that has not been checked.
+- **The terms are the larger problem for this project.** Per the terms of service as fetched
+  (Section 3(b)): no "store, cache, or create a database of Search Results" beyond transient
+  operational storage; no retaining results after the agreement ends; no using results to "create,
+  evaluate, train, re-train, fine-tune, benchmark" AI models or services; no derivative works. The page
+  says storage needs "a plan that includes storage rights", without saying which. The evaluation's
+  frozen snapshot is a stored database of search results, and the thesis evaluates a system built on
+  them, so **the standard terms appear to forbid exactly what the snapshot ruling needs.** This
+  could only be settled by reading the terms and asking Brave, and it may rule the API out regardless
+  of the quota.
+- **Cost to add it as a second `SearchProvider`.** Small: one class beside `SearxngSearch` doing a
+  GET with the key in a header, a 429 mapped to `SearchRateLimited`, rows mapped to `SearchResult`
+  (the endpoint path, the `X-Subscription-Token` header and the `count` limit of 20 are from memory,
+  not checked this session), a key in `Settings`, and contract tests over a mock transport. Roughly
+  a day including a real call. Its answer would have no `unresponsive_engines`; its failure mode is
+  a plain 429, which the provider interface already handles.
 
 ## Not verified
 
