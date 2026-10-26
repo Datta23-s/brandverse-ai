@@ -76,5 +76,30 @@ class SearchRateLimited(SearchError):
     """The search engine asked the caller to slow down."""
 
 
+class FetchError(BrandverseError):
+    """A page could not be fetched. Research drops the page and goes on with the others."""
+
+
+class FetchRefused(FetchError):
+    """The fetcher's own policy refused the URL before or while fetching it: a scheme other than
+    http(s), credentials in the URL, a port other than 80/443, an address that is not on the public
+    internet (at any hop of a redirect chain), or too many redirects. Nothing was requested from
+    the refused address."""
+
+
+class FetchFailed(FetchError):
+    """The page was requested and did not arrive: the network failed or timed out, or the server
+    answered with an error status (`status`, None when there was no HTTP answer)."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class FetchUnsupported(FetchError):
+    """The server answered, but not with something the pipeline takes as a page: not HTML (a PDF,
+    an image), no declared content type, or a body over the size cap."""
+
+
 class ExtractionFailed(BrandverseError):
     """A page yielded no usable main content (a login wall, a listing, boilerplate only)."""

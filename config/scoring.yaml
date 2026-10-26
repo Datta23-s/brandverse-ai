@@ -56,6 +56,16 @@ research:
   # single page fills an agent's context. DEFAULTS, NOT TUNED.
   extraction_min_chars: 200
   extraction_max_chars: 20000
+  # The page fetcher (backend/app/research/fetch.py). Raw page bodies live in Redis under this TTL
+  # and nowhere else (zero-retention, Architecture.md section 6): an entry older than the TTL in
+  # force is a miss even if Redis still holds it. A body over the byte cap is REFUSED, not cut: half
+  # a page is not a page. The user agent says what the fetcher is. DEFAULTS, NOT TUNED.
+  page_cache_ttl_s: 3600                               # one hour
+  fetch_timeout_s: 10.0
+  fetch_total_timeout_s: 20.0
+  fetch_max_bytes: 2000000                             # 2 MB
+  fetch_max_redirects: 5
+  fetch_user_agent: "BrandverseResearch/0.1 (academic research project)"
 source:
   # Source scoring (backend/app/research/source_scoring.py; Architecture.md §6.2): how far one web
   # page is trusted as evidence, in [0, 1]. DEFAULTS, NOT TUNED: every number here is a parameter of

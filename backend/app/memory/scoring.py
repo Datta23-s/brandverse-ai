@@ -107,6 +107,13 @@ class Research(_Strict):
     search_cache_ttl_s: int = Field(ge=1)  # a parameter of the results, never a constant
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
+    # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.
+    page_cache_ttl_s: int = Field(ge=1)  # how long a fetched page body may live in Redis
+    fetch_timeout_s: float = Field(gt=0)  # per network operation (connect, each read)
+    fetch_total_timeout_s: float = Field(gt=0)  # the whole fetch, redirects included
+    fetch_max_bytes: int = Field(ge=1)  # a longer body is refused, not truncated
+    fetch_max_redirects: int = Field(ge=0)
+    fetch_user_agent: str = Field(min_length=1)
 
 
 class SourceWeights(_Strict):
