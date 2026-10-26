@@ -879,7 +879,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0026_memory_confidence_bounds.sql` | `219d5c7` | | Confidence within [0, 1]; a live item never below the revocation threshold (`Memory.md` §6.3) |
 | `supabase/migrations/0027_memory_decay_record_nonnegative.sql` | `219d5c7` | | The decay record pattern drops the negative confidence (`Memory.md` §6.4) |
 | `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
-| `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Written and dry-run, not applied |
+| `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Applied live 2026-10-26 |
 
 A new migration adds its row here in the same commit, by direct edit.
 
@@ -1233,6 +1233,19 @@ UPDATE on `memory_items.source_score`, as on every `memory_items` column since 0
 row-level security (no `anon` policy) and the derivation guard trigger but not by a revoke. The
 owner wants it revoked, as making the exemption impossible rather than defended in depth: 0029,
 with its own dry run.
+
+**Migration 0029 (anon write grants on `memory_items`) — applied 2026-10-26.** Live dry run on a
+fresh backend as `postgres` (not a superuser): the only catalog changes were anon's table-level
+INSERT and UPDATE and the column grants that follow from them; inside the transaction anon held
+neither on `source_score`, `confidence`, `content` or `revoked`, while service_role kept INSERT and
+UPDATE and authenticated kept its revocation-column UPDATE; the rollback left the catalog equal to
+the snapshot. CI green on `57c5a6a` (two earlier CI failures on this migration were a test line over
+the limit and a missing section 9 row, now a rule: the CI job runs locally before every push).
+Pushed with the CLI; `migration list` identical through 0029; a direct read of the live grants shows
+anon with SELECT, REFERENCES and TRIGGER only; the live posture read matched, **120 of 120** (the
+posture suite covers delete and truncate, so its count is unchanged). A first apply attempt was
+interrupted before it ran; the list and the grants were read to confirm nothing had applied before
+it was run again. `authenticated` still holds INSERT (blocked by RLS, not by a revoke): 0030.
 
 ### Live project — permanent footprint
 
