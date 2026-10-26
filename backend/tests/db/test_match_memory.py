@@ -206,3 +206,76 @@ def test_a_product_whose_claim_backs_memory_cannot_be_deleted(tx: Tx) -> None:
     tx.as_user("owner_a")
     with pytest.raises(errors.ForeignKeyViolation):
         tx.execute("delete from products where id = %s", (product,))
+
+
+# ── 0031: the source score reaches retrieval, so E can enter the M-score ─────────────────────
+
+
+def evidence(tx: Tx, item_id: UUID, *scores: float) -> None:
+    """Score `item_id` from one source per score, as the backend does (0028: service_role only)."""
+    for n, s in enumerate(scores):
+        url = f"https://source{n}.test/a"
+        rows = tx.execute(
+            "insert into sources (org_id, url, host, published_on) values "
+            "(%s, %s, %s, '2026-03-14') returning id",
+            (tx.seed.org_a, url, f"source{n}.test"),
+        )
+        tx.execute(
+            "insert into memory_item_sources (memory_item_id, source_id, org_id, score, "
+            "components, scorer, config_version) values (%s, %s, %s, %s, '{\"authority\": 0.5}', "
+            "'source_scoring/1', 'defaults-2026-10-18')",
+            (item_id, rows[0][0], tx.seed.org_a, s),
+        )
+
+
+def retrieved(tx: Tx, item_id: UUID) -> dict[str, object]:
+    rows = tx.execute(
+        "select id, source_score, confidence from app.match_memory(%s, %s::vector, 'scored') "
+        "where id = %s",
+        (tx.seed.org_a, vec(31), item_id),
+    )
+    assert rows, "the item was not retrieved at all"
+    return {"id": rows[0][0], "source_score": rows[0][1], "confidence": rows[0][2]}
+
+
+def test_an_items_source_score_is_returned_as_the_maximum_of_its_sources(tx: Tx) -> None:
+    scored = item(tx, "scored by two sources", vec(31))
+    evidence(tx, scored, 0.4, 0.8, 0.6)  # the maximum, as 0028 derives it
+    tx.as_user("owner_a")
+    assert float(str(retrieved(tx, scored)["source_score"])) == pytest.approx(0.8)
+
+
+def test_an_item_with_no_sources_returns_a_null_source_score_not_a_default(tx: Tx) -> None:
+    unscored = item(tx, "scored by nothing", vec(31))
+    tx.as_user("owner_a")
+    assert retrieved(tx, unscored)["source_score"] is None  # E is left out, not given a value
+
+
+def test_the_source_score_is_returned_beside_the_confidence_it_multiplies(tx: Tx) -> None:
+    # E = source_score x confidence (Memory.md 3.1): a caller needs both from one row.
+    scored = item(tx, "scored for E", vec(31))
+    evidence(tx, scored, 0.75)
+    tx.as_user("owner_a")
+    row = retrieved(tx, scored)
+    assert float(str(row["source_score"])) == pytest.approx(0.75)
+    assert float(str(row["confidence"])) == pytest.approx(0.5)
+
+
+def test_the_retrieval_function_is_otherwise_unchanged_by_0031(tx: Tx) -> None:
+    # The properties 0022 and 0023 established, re-asserted after the drop and create: the grants,
+    # SECURITY INVOKER and the pinned search_path.
+    held = {
+        role: tx.execute(
+            "select has_function_privilege(%s, 'app.match_memory(uuid, public.vector, text, "
+            "uuid, boolean, integer)', 'EXECUTE')",
+            (role,),
+        )[0][0]
+        for role in ("anon", "authenticated", "service_role")
+    }
+    assert held == {"anon": False, "authenticated": True, "service_role": True}
+    rows = tx.execute(
+        "select p.prosecdef, p.proconfig from pg_proc p "
+        "join pg_namespace n on n.oid = p.pronamespace "
+        "where n.nspname = 'app' and p.proname = 'match_memory'"
+    )
+    assert rows == [(False, ['search_path=""'])]  # invoker, search_path pinned to empty

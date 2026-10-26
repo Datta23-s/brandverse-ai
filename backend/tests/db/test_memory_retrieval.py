@@ -102,3 +102,29 @@ async def test_refused_outside_a_transaction_and_out_of_range(db_url: str, seed:
     async with await AsyncConnection.connect(db_url) as c:
         with pytest.raises(ValueError, match="1..1000"):
             await match_memory(c, seed.org_a, UNIT, "x", ef_search=0)
+
+
+async def test_every_m_score_field_retrieval_supplies_is_a_column_of_the_returned_row(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    """The M-score's `Candidate` reads retrieval's rows by field name (the Phase 6 caller builds
+    one per row), so a name the function does not return would leave that component silently out
+    of M. `source_score` is the one 0031 added: E was always left out before it.
+
+    Two fields are NOT retrieval's to supply and are excluded here: `customer_similarity` (C, from
+    persona vectors, Phase 6) and `id`, which the row has under the same name anyway.
+    """
+    from dataclasses import fields
+
+    from app.memory.scoring import Candidate
+
+    await act_as(conn, seed, "owner_a")
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "select * from app.match_memory(%s, %s::vector, 'anything') limit 0", (seed.org_a, UNIT)
+        )
+        assert cur.description is not None
+        columns = {c.name for c in cur.description}
+    wanted = {f.name for f in fields(Candidate)} - {"customer_similarity"}
+    assert wanted <= columns, f"retrieval does not return {sorted(wanted - columns)}"
+    assert "source_score" in columns  # 0031, named so the E input cannot be missed
