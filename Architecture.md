@@ -881,7 +881,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
 | `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Applied live 2026-10-26 |
 | `supabase/migrations/0030_memory_items_revoke_authenticated_insert.sql` | `f2401cb` | | `authenticated` loses table-level INSERT on `memory_items` (held since 0006, `source_score` included; blocked only by the absence of an RLS INSERT policy): same class as 0029. Applied live 2026-10-26 |
-| `supabase/migrations/0031_match_memory_source_score.sql` | `91b7cc3` | | `app.match_memory` returns `memory_items.source_score` (0028's derived maximum), so `E` can enter the M-score; dropped and created, since the returned columns change, with the 0022 body and grants otherwise unchanged (`Memory.md` §3.1). Written and dry-run, not applied |
+| `supabase/migrations/0031_match_memory_source_score.sql` | `91b7cc3` | | `app.match_memory` returns `memory_items.source_score` (0028's derived maximum), so `E` can enter the M-score; dropped and created, since the returned columns change, with the 0022 body and grants otherwise unchanged (`Memory.md` §3.1). Applied live 2026-10-26 |
 A new migration adds its row here in the same commit, by direct edit.
 
 ---
@@ -1266,6 +1266,25 @@ list` identical through 0030 (no unmatched row); a direct read of the live grant
 column UPDATE limited to the four revocation columns; the live posture read matched, **120 of 120**.
 Since 0030 no API role other than service_role can write a `memory_items` row except that revocation
 update, by grant and not only by row-level security and the derivation trigger.
+
+**Migration 0031 (`app.match_memory` returns the source score) — applied 2026-10-26.** A defect
+fix, not a feature: 0028 wrote `memory_items.source_score` and the retrieval function did not
+return it, so the application's `Candidate.source_score` was `None` whatever the project held and
+`E` could never enter the M-score (`Memory.md` §3.1, "the stored source score arrived nowhere").
+The returned columns change, which `CREATE OR REPLACE` cannot do, so the function is dropped and
+created; the 0022 body is otherwise unchanged and the grants are restored, because `DROP` takes them
+with it. Live dry run on a fresh backend as `postgres` (not a superuser): the only catalog change was
+the function's body hash — the signature, `SECURITY INVOKER`, the pinned `search_path` and the grant
+set were identical before and after, and the rollback left the catalog equal to the snapshot. CI
+green on `aa8bf87`, the HEAD holding both the migration and its §9 row. Pushed with the CLI;
+`migration list` identical through 0031 with no unmatched row; a direct read of the live project
+shows `source_score` returned immediately after `confidence`, `prosecdef` false, `search_path=""`,
+and EXECUTE held by `authenticated` and `service_role` but not `anon`; the live posture read matched,
+**120 of 120** (the posture suite counts function EXECUTE, which is unchanged). `E` is still absent
+from every M-score until something writes a score and the Phase 6 caller reads it: this makes the
+stored value reachable. A merge-blocking db test asserts that every `Candidate` field retrieval
+supplies is a column the function returns, checked by mutation in both directions, so the two cannot
+drift apart again.
 
 ### Live project — permanent footprint
 

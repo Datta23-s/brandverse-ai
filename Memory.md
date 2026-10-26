@@ -100,6 +100,33 @@ that saw one engine is told from one that saw three. The mechanism and what it m
 evaluation are in `docs/evaluation-plan.md` ("A defect found and fixed"); the engines and the
 observed throttling are in `docs/searxng.md`.
 
+**A defect found and fixed, 2026-10-26: the stored source score arrived nowhere, so `E` could never
+enter `M`.** 0028 wrote `memory_items.source_score` (the derived maximum of an item's per-source
+rows) and `app.match_memory` did not return it, so `Candidate.source_score` was `None` in the
+application **whatever the database held**. `E` is left out when it is None and the remaining
+weights are renormalised, so the omission was silent by construction: once sources were populated
+the scores would have looked complete, every `M` would still have been computed from four
+components, and the dissertation would have reported a six-component `M` that was always four. An
+earlier audit recorded `E` and `C` as honestly left out while unbuilt; this is the layer underneath
+it, the value arriving nowhere. Fixed by 0031 (the function returns it beside the `confidence` it
+multiplies). **The guard that matters is not the fix but the test**: a db test takes the fields of
+`Candidate` and the column names the function actually returns and asserts the first is a subset of
+the second, so a rename on either side fails the database suite, which is merge-blocking. Checked by
+mutation in both directions (2026-10-26): renaming the dataclass field fails it, naming the field;
+renaming the returned column fails it, naming the column.
+
+**Three instances now of something silently absent from a mechanism that claimed to include it**
+(the pattern, worth naming in the write-up): **V4**, where the claim gate confirms a cited claim
+exists, belongs to the product and is verified but never that it *entails* the statement citing it,
+so an overstatement passes a check that looks like it covered this (`docs/evaluation-plan.md` V4,
+still open); **the throttled empty 200** read as an absence of evidence (above, closed); and **this
+one**, a stored trust input no reader could reach (closed). In each case the output looked complete:
+nothing was wrong in it, something was missing from it, and the mechanism's own report could not
+show the difference. The lesson applied here is the standing rule that a mechanism meant to cover
+everything gets a constraint or a test rather than a documented gap — V4 is the one still carried as
+a stated limitation, because entailment needs a detector that does not exist, not a check that was
+forgotten.
+
 ### 3.2 Reuse decision bands
 
 | `M` | Decision | Behaviour |
