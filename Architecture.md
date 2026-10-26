@@ -880,7 +880,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0027_memory_decay_record_nonnegative.sql` | `219d5c7` | | The decay record pattern drops the negative confidence (`Memory.md` §6.4) |
 | `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
 | `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Applied live 2026-10-26 |
-| `supabase/migrations/0030_memory_items_revoke_authenticated_insert.sql` | `f2401cb` | | `authenticated` loses table-level INSERT on `memory_items` (held since 0006, `source_score` included; blocked only by the absence of an RLS INSERT policy): same class as 0029. Written and dry-run, not applied |
+| `supabase/migrations/0030_memory_items_revoke_authenticated_insert.sql` | `f2401cb` | | `authenticated` loses table-level INSERT on `memory_items` (held since 0006, `source_score` included; blocked only by the absence of an RLS INSERT policy): same class as 0029. Applied live 2026-10-26 |
 A new migration adds its row here in the same commit, by direct edit.
 
 ---
@@ -1082,7 +1082,10 @@ the change touches `supabase/` or `tests/db/`. The reason is the same as the dry
 that runs somewhere cheaper first costs a minute, and one that runs only in CI costs a push, a wait
 and a round trip. It was missed twice on 0029 (a test line over the limit; a migration absent from
 section 9, which `tests/test_schema_doc_sync.py` requires), each caught by CI and each avoidable by
-this. A migration is applied live only after CI is green on the commit being applied.
+this. A migration is applied live only after CI is green on the HEAD commit that contains both the
+migration and its section 9 row. The row must carry the migration's own commit hash
+(`tests/test_schema_doc_sync.py`), so the migration-only commit can never pass doc-sync and is never
+the commit to wait on: for 0030 that is the row's commit `e6df56b`, not the migration's `f2401cb`.
 
 ### Applying migrations — Supabase CLI (adopted 2026-10-14)
 
@@ -1245,7 +1248,19 @@ Pushed with the CLI; `migration list` identical through 0029; a direct read of t
 anon with SELECT, REFERENCES and TRIGGER only; the live posture read matched, **120 of 120** (the
 posture suite covers delete and truncate, so its count is unchanged). A first apply attempt was
 interrupted before it ran; the list and the grants were read to confirm nothing had applied before
-it was run again. `authenticated` still holds INSERT (blocked by RLS, not by a revoke): 0030.
+it was run again. `authenticated` still held INSERT (blocked by RLS, not by a revoke): 0030.
+
+**Migration 0030 (authenticated INSERT on `memory_items`) — applied 2026-10-26.** Same class as
+0029, with its own dry run on a fresh backend as `postgres`: the only catalog change was
+authenticated's table-level INSERT; inside the transaction it held INSERT on none of
+`source_score`, `confidence`, `content` or `revoked`, kept UPDATE on exactly the four revocation
+columns (none on `source_score`), and service_role kept INSERT and UPDATE. CI green on `e6df56b`, the
+HEAD holding both the migration (`f2401cb`) and its section 9 row. Pushed with the CLI; `migration
+list` identical through 0030 (no unmatched row); a direct read of the live grants shows `anon` and
+`authenticated` each holding SELECT, REFERENCES and TRIGGER only on `memory_items`, and authenticated's
+column UPDATE limited to the four revocation columns; the live posture read matched, **120 of 120**.
+Since 0030 no API role other than service_role can write a `memory_items` row except that revocation
+update, by grant and not only by row-level security and the derivation trigger.
 
 ### Live project — permanent footprint
 
