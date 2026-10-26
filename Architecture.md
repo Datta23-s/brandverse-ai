@@ -881,6 +881,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0028_source_evidence.sql` | `dc96c3d` | | `sources` and `memory_item_sources`: append-only, backend-written, tenant-scoped evidence; `memory_items.source_score` derived as the maximum of an item's rows (`Memory.md` §3.1). Applied live 2026-10-25 |
 | `supabase/migrations/0029_memory_items_revoke_anon_writes.sql` | `e9ca954` | | `anon` loses table-level INSERT and UPDATE on `memory_items` (held since 0006, `source_score` included): the exemption made impossible, not defended in depth. Applied live 2026-10-26 |
 | `supabase/migrations/0030_memory_items_revoke_authenticated_insert.sql` | `f2401cb` | | `authenticated` loses table-level INSERT on `memory_items` (held since 0006, `source_score` included; blocked only by the absence of an RLS INSERT policy): same class as 0029. Applied live 2026-10-26 |
+| `supabase/migrations/0031_match_memory_source_score.sql` | `91b7cc3` | | `app.match_memory` returns `memory_items.source_score` (0028's derived maximum), so `E` can enter the M-score; dropped and created, since the returned columns change, with the 0022 body and grants otherwise unchanged (`Memory.md` §3.1). Written and dry-run, not applied |
 A new migration adds its row here in the same commit, by direct edit.
 
 ---
