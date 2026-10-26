@@ -421,15 +421,34 @@ carrying the claim, and one sentence says so; if it does not survive, that is a 
 before a viva, not during one. (Flattening changes only the authority factor; recency and
 specificity are unchanged, and `E` is still the maximum across an item's sources.)
 
-**V6 — The source model does not treat a brand's own domain as non-independent (recorded
-2026-10-25).** A host in none of the configured classes scores 0.50 for authority, the same as an
-unknown blog. But the brand's own domain is the least independent source possible for a claim about
-that brand's own product, and this system exists to verify marketing claims. A manufacturer saying
-something about itself is not neutral evidence of it, yet the model rates it as an unknown host,
-above the 0.25 given to forum posts. This is worse than a missing refinement for *this* system, and
-it is **not solved**. Open check, at Phase 6: whether any brand's own domain can in fact end up
-backing a claim about that brand. If it can, the project owner rules on it before any evaluation
-run. (`Memory.md` §3.1; `Phases.md` Phase 6.)
+**V6 — The source model conflates authority and independence (recorded 2026-10-25; ruled and
+restated 2026-10-26).** The scorer has one axis where two are needed. A brand's own domain is
+**high authority** (does this source know?) and **zero independence** (does it have an interest in
+the answer?) about its own product, and the two are different properties. A manufacturer is the best
+possible source for its product's dimensions, materials and ingredients, often the only one, and has
+the maximum possible interest in claims about its performance. The model gives such a host the
+`unknown` prior, 0.50, above the 0.25 of forum posts: wrong in both directions at once.
+
+*Excluding first-party sources would be wrong*: for "the kadai is 3 mm thick" the brand's own site
+is the correct evidence and nobody else holds it. **The rule (owner, 2026-10-26):** a first-party
+source is acceptable evidence for a *factual property* of the brand's own product; it is **not**
+acceptable as the *sole* evidence for a *comparative or efficacy* claim. The tests already exist: a
+claim that trips the superlative list is comparative by construction, and a claim in a regulated
+sector carries efficacy weight by construction.
+
+*The check asked for at Phase 6 is answered early (2026-10-26): yes, by two paths.* (1) `deduced`
+claims: write-back refuses them today, unconditionally; once the Phase 6 caller wires `source_score`
+in, a deduced claim resting on the brand's own page passes on score alone (about 0.73 for a matching
+page that states no date). (2) `verified` claims: **live now.** `product_claims.evidence_url` has no
+host check (0017 requires only a URL), so a claim verified against the brand's own domain is
+unmarked and indistinguishable from independent evidence, and is eligible for write-back if the gate
+resolves it. This is a live gap, not a future one.
+
+*It cannot be a scoring tweak.* Nothing in the system records a brand's own domain (`brands` holds
+name, voice, embedding and sector), so the fix needs new data: a brand domain. Order: Phase 5, the
+search pipeline carries a `first_party` marker on every result, unpopulated and not scored on; Phase
+6, with the domain field, the rule above and an independence factor separate from authority. The
+independence factor is not designed here. (`Memory.md` §3.1; `Phases.md` Phases 5 and 6.)
 
 ## 5. Statistics
 

@@ -364,6 +364,8 @@ Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds 
 - [ ] Low-scored sources are discarded before reaching an agent
 - [ ] No raw page body exists in Postgres after a run
 - [ ] Rate-limit failures degrade to partial results, not a crash
+- [ ] Every search result carries a `first_party` marker (V6, ruled 2026-10-26): the field exists and
+  is unpopulated until Phase 6 supplies a brand domain; nothing scores on it
 
 **Phase 5 progress.** Started 2026-10-25, in dependency order. *Search abstraction* built:
 `app/research/search.py` (`SearchProvider`; `SearxngSearch` over the JSON API; `OfflineSearch` for
@@ -441,9 +443,12 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
 - [ ] A real end-to-end campaign is produced and approved
 - [ ] A killed worker mid-run resumes from its checkpoint
 - [ ] Forcing an agent to fail still yields a campaign with a declared gap
-- [ ] **Open check (recorded 2026-10-25):** establish whether any brand's own domain can end up backing a
-  claim about that brand (source scoring treats it as an ordinary unknown host: `Memory.md` §3.1,
-  `docs/evaluation-plan.md` V6). If it can, the owner rules on it before any evaluation run
+- [ ] **V6, ruled 2026-10-26** (`Memory.md` §3.1, `docs/evaluation-plan.md` V6): a brand's own domain
+  can back a claim (deduced once `source_score` is wired in; verified claims already, as
+  `evidence_url` has no host check). Add the brand domain field; a first-party source is acceptable
+  for a factual property of the brand's own product and not as the sole evidence for a comparative
+  (superlative list) or efficacy (regulated sector) claim; add an independence factor separate from
+  authority. Until then a verified claim whose `evidence_url` is the brand's own domain is unmarked and indistinguishable from independent evidence
 
 ---
 

@@ -75,12 +75,18 @@ returning the stored score, then the caller in Phase 6.
 untuned judgement of the developer*: the classes and their values (`config/scoring.yaml` `source:`)
 have no citation behind them. The evaluation reports its headline result with the prior as
 configured and with it flattened to 0.5 for every host, so that the prior cannot carry the claim
-unseen (`docs/evaluation-plan.md` V5). (2) *A brand's own domain is scored as an ordinary unknown
-host (0.50), above forum posts (0.25), although it is the least independent source possible for a
-claim about that brand's own product.* A system whose purpose is verifying marketing claims should
-not treat the marketer's own site as neutral evidence about itself. This is not solved here
-(`docs/evaluation-plan.md` V6); Phase 6 checks whether a brand's own domain can end up backing a
-claim about that brand, and if it can, the owner rules before any evaluation run.
+unseen (`docs/evaluation-plan.md` V5). (2) *The scorer conflates authority with independence* (ruled 2026-10-26). A brand's own domain
+is high authority (it knows) and zero independence (it has an interest) about its own product, yet
+scores as an ordinary unknown host (0.50), above forum posts (0.25). The rule: a first-party source
+is acceptable evidence for a factual property of the brand's own product, and not acceptable as the
+sole evidence for a comparative or efficacy claim (a claim that trips the superlative list, or one
+in a regulated sector). Excluding first-party sources would be wrong. A brand's own domain can
+back a claim by two paths: `deduced` claims once the Phase 6 caller wires `source_score` in, and
+`verified` claims **now**, because `product_claims.evidence_url` has no host check, so such a claim
+is unmarked and indistinguishable from independent evidence (a live gap). The fix needs new data,
+a brand domain, so it is not a scoring tweak: Phase 5 carries an unpopulated `first_party` marker
+on every search result; Phase 6 adds the domain field, the rule and an independence factor
+(`docs/evaluation-plan.md` V6).
 
 ### 3.2 Reuse decision bands
 
