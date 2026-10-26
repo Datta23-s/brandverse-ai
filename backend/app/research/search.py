@@ -11,7 +11,12 @@ The contract:
 - a blank query or a `limit` outside 1..MAX_LIMIT is a programming error (ValueError);
 - an engine that cannot be reached, answers with an error, or answers with something that is not a
   result list raises `SearchUnavailable`; one that says "slow down" raises `SearchRateLimited`.
-  Callers turn both into a partial result (Phase 5 exit criteria); neither is retried here.
+  Callers turn both into a partial result (Phase 5 exit criteria); neither is retried here;
+- SearXNG itself answers HTTP 200 with NO results when its upstream engines are throttled or
+  CAPTCHA'd, naming them in `unresponsive_engines` (observed against the real engine). Zero results
+  with any engine named is refused (`SearchRateLimited` if one says "too many requests", else
+  `SearchUnavailable`), not returned as a search with no hits. Results with an engine named are
+  returned; which engine failed is not reported to the caller yet.
 
 Caching by normalised query (Rules.md C7) and the zero-retention page cache are separate pieces
 that sit above this interface; `normalise_query` is the key they share.
@@ -77,13 +82,35 @@ class SearxngSearch:
         if response.status_code != 200:
             raise SearchUnavailable(f"SearXNG answered HTTP {response.status_code}")
         try:
-            rows = response.json()["results"]
+            body = response.json()
+            rows = body["results"]
         except (ValueError, KeyError, TypeError) as e:
             raise SearchUnavailable("SearXNG did not answer with a result list") from e
         if not isinstance(rows, list):
             raise SearchUnavailable("SearXNG did not answer with a result list")
-        found = (_parse_row(r) for r in rows)
-        return [r for r in found if r is not None][:limit]
+        found = [r for r in (_parse_row(r) for r in rows) if r is not None][:limit]
+        if not found:
+            _refuse_if_engines_failed(body.get("unresponsive_engines"))
+        return found
+
+
+def _refuse_if_engines_failed(unresponsive: Any) -> None:
+    """A real SearXNG whose upstream engines are throttled or CAPTCHA'd answers HTTP 200 with an
+    empty result list and names the engines in `unresponsive_engines` (observed 2026-10-26,
+    docs/searxng.md). Zero results with a failed engine is not a search with no hits: it cannot be
+    told apart from one, so it is refused rather than reported as an absence. Results with a failed
+    engine are returned as they are."""
+    failed = [
+        (str(row[0]), str(row[1]))
+        for row in (unresponsive if isinstance(unresponsive, list) else [])
+        if isinstance(row, list) and len(row) == 2
+    ]
+    if not failed:
+        return
+    named = ", ".join(f"{engine}: {reason}" for engine, reason in failed)
+    if any("too many requests" in reason.casefold() for _, reason in failed):
+        raise SearchRateLimited(f"SearXNG's engines are rate-limited ({named})")
+    raise SearchUnavailable(f"SearXNG's engines did not answer ({named})")
 
 
 def _parse_row(row: Any) -> SearchResult | None:

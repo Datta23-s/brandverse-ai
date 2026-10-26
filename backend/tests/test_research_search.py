@@ -38,15 +38,30 @@ RESULTS = [
 
 
 def searxng_payload(results: list[SearchResult]) -> dict[str, object]:
+    # The shape of a real SearXNG 2026.10.19 answer (docs/searxng.md): the other top-level keys, the
+    # per-row keys this provider ignores, and `unresponsive_engines`, which is always present.
     return {
         "query": QUERY,
+        "answers": [],
+        "corrections": [],
+        "infoboxes": [],
+        "suggestions": [],
+        "unresponsive_engines": [],
         "results": [
             {
                 "url": r.url,
                 "title": r.title,
                 "content": r.snippet,
                 "engine": r.engine,
-                **({"publishedDate": r.published} if r.published else {}),
+                "engines": [r.engine],
+                "category": "general",
+                "template": "default.html",
+                "score": 1.0,
+                "positions": [1],
+                "priority": "",
+                "parsed_url": ["https", "example.test", "/", "", "", ""],
+                "thumbnail": "",
+                **({"publishedDate": r.published, "pubdate": r.published} if r.published else {}),
             }
             for r in results
         ],
@@ -176,6 +191,49 @@ async def test_an_unreachable_engine_is_unavailable_never_a_crash(failure: Excep
     with pytest.raises(SearchUnavailable, match="unreachable") as raised:
         await searxng_over(handler).search(QUERY)
     assert raised.value.__cause__ is failure
+
+
+def answering(results: list[dict[str, object]], unresponsive: object) -> httpx.Response:
+    return httpx.Response(200, json={"results": results, "unresponsive_engines": unresponsive})
+
+
+ROW = {"url": "https://ok.test/a", "title": "Good", "engine": "brave"}
+
+
+async def test_no_results_with_a_throttled_engine_is_rate_limited_not_an_empty_search() -> None:
+    # Observed against the real engine: HTTP 200, no rows, every upstream engine throttled.
+    failed = [
+        ["brave", "too many requests"],
+        ["duckduckgo", "CAPTCHA"],
+        ["wikipedia", "Suspended: too many requests"],
+    ]
+    with pytest.raises(SearchRateLimited, match="brave: too many requests"):
+        await searxng_over(lambda _: answering([], failed)).search(QUERY)
+
+
+async def test_no_results_with_an_engine_that_did_not_answer_is_unavailable() -> None:
+    with pytest.raises(SearchUnavailable, match="duckduckgo: CAPTCHA"):
+        await searxng_over(lambda _: answering([], [["duckduckgo", "CAPTCHA"]])).search(QUERY)
+
+
+@pytest.mark.parametrize("unresponsive", [[], None, "not a list", [["only-a-name"]], [[1, 2, 3]]])
+async def test_no_results_and_no_named_failure_is_a_search_with_no_hits(
+    unresponsive: object,
+) -> None:
+    assert await searxng_over(lambda _: answering([], unresponsive)).search(QUERY) == []
+
+
+async def test_results_with_a_failed_engine_are_returned() -> None:
+    found = await searxng_over(lambda _: answering([ROW], [["duckduckgo", "CAPTCHA"]])).search(
+        QUERY
+    )
+    assert [r.url for r in found] == ["https://ok.test/a"]
+
+
+async def test_rows_that_all_fail_to_parse_count_as_no_results() -> None:
+    rows = [{"url": "ftp://x.test", "title": "No"}]
+    with pytest.raises(SearchUnavailable):
+        await searxng_over(lambda _: answering(rows, [["duckduckgo", "CAPTCHA"]])).search(QUERY)
 
 
 def test_rate_limited_and_unavailable_are_both_search_errors() -> None:
