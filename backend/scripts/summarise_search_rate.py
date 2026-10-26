@@ -72,15 +72,25 @@ def main(path: Path) -> None:
         rows = sum(1 for s in searches if s["per_engine_rows"].get(engine))  # type: ignore[attr-defined]
         print(f"  {engine}: failed {sum(reasons.values())}, rows in {rows}  {dict(reasons)}")
 
-    clean = counts.get("clean", 0)
     elapsed = window_h + float(header["interval_min"]) / 60  # type: ignore[arg-type]
-    rate = clean / elapsed if elapsed else 0.0
-    print(f"\nclean rate at this spacing: {clean} in {elapsed:.1f} h = {rate:.2f} per hour")
-    if rate > 0:
-        for needed in (90, 270):
-            print(f"  {needed} searches would take {needed / rate:.0f} h at that rate")
-    else:
-        print("  no clean search: the rate is 0 at this spacing and no duration follows")
+    for label, n in (
+        ("clean (no engine named as failed)", counts.get("clean", 0)),
+        (
+            "answered (clean or degraded: returned results)",
+            counts.get("clean", 0) + counts.get("degraded", 0),
+        ),
+    ):
+        rate = n / elapsed if elapsed else 0.0
+        print(f"\n{label} at this spacing: {n} in {elapsed:.1f} h = {rate:.2f} per hour")
+        if rate > 0:
+            for needed in (90, 270):
+                print(f"  {needed} searches would take {needed / rate:.0f} h at that rate")
+        else:
+            print("  none: the rate is 0 at this spacing and no duration follows")
+    print(
+        "\nA degraded answer saw fewer engines than a clean one; a recording made of degraded"
+        "\nanswers is evidence from fewer sources, and the run report says which (section 8)."
+    )
 
 
 if __name__ == "__main__":
