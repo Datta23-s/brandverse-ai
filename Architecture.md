@@ -1075,6 +1075,15 @@ applied. **Rule: every migration that creates or changes an `app.*` function get
 dry run against the live project before it is applied** (below), because the stub cannot catch
 this surface.
 
+**Rule (owner, 2026-10-26): the CI backend job is run locally before every push, in full.** From
+`backend/`: `uv run ruff format --check .`, `uv run ruff check .`, `uv run mypy`, and
+`uv run pytest -q -m "not db"` (the whole suite, not the files touched), plus the db suite when
+the change touches `supabase/` or `tests/db/`. The reason is the same as the dry run's: a check
+that runs somewhere cheaper first costs a minute, and one that runs only in CI costs a push, a wait
+and a round trip. It was missed twice on 0029 (a test line over the limit; a migration absent from
+section 9, which `tests/test_schema_doc_sync.py` requires), each caught by CI and each avoidable by
+this. A migration is applied live only after CI is green on the commit being applied.
+
 ### Applying migrations — Supabase CLI (adopted 2026-10-14)
 
 Every migration from 0010 on is applied with the Supabase CLI, pinned to **2.120.0** and run
