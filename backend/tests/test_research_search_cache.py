@@ -12,7 +12,7 @@ from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from app.errors import SearchUnavailable
-from app.memory.scoring import load_scoring
+from app.memory.scoring import Research, load_scoring
 from app.research.search import EngineFailure, OfflineSearch, SearchResponse, SearchResult
 from app.research.search_cache import CachedSearch, cache_key
 
@@ -65,6 +65,7 @@ def cached(
     degraded_ttl_s: int | None = None,
     mode: str = "use",
     inner: OfflineSearch | None = None,
+    declared: tuple[str, ...] | None = None,  # must equal what `inner` was built with
 ) -> tuple[CachedSearch, FakeKV, Clock, OfflineSearch]:
     kv, clock = kv or FakeKV(), clock or Clock()
     inner = inner or OfflineSearch({QUERY: RESULTS})
@@ -74,6 +75,7 @@ def cached(
         kv,
         ttl_s=ttl_s,
         degraded_ttl_s=short,
+        declared_engines=declared,
         mode=mode,
         clock=clock,  # type: ignore[arg-type]
     )
@@ -91,9 +93,9 @@ def test_the_ttl_comes_from_scoring_config_and_the_cache_has_no_default_for_it()
     with pytest.raises(TypeError, match="degraded_ttl_s"):  # neither TTL has a default
         CachedSearch(OfflineSearch(), FakeKV(), ttl_s=60)  # type: ignore[call-arg, arg-type]
     with pytest.raises(ValueError, match="ttl_s"):
-        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=0, degraded_ttl_s=0)  # type: ignore[arg-type]
+        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=0, degraded_ttl_s=0, declared_engines=None)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="must not exceed"):
-        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=60, degraded_ttl_s=61)  # type: ignore[arg-type]
+        CachedSearch(OfflineSearch(), FakeKV(), ttl_s=60, degraded_ttl_s=61, declared_engines=None)  # type: ignore[arg-type]
 
 
 async def test_the_entry_expires_in_redis_after_exactly_the_ttl_in_force() -> None:
@@ -257,7 +259,15 @@ async def test_only_search_results_are_stored_never_a_page_body() -> None:
     await search.search(QUERY, limit=2)
     (stored,) = kv.data.values()
     entry = json.loads(stored)
-    assert set(entry) == {"query", "fetched_at", "limit", "results", "failed_engines"}
+    assert set(entry) == {
+        "query",
+        "fetched_at",
+        "limit",
+        "results",
+        "failed_engines",
+        "undeclared_failures",
+        "declared_engines",
+    }
     assert all(
         set(r) == {"url", "title", "snippet", "engine", "published", "engines", "first_party"}
         for r in entry["results"]
@@ -330,7 +340,7 @@ async def test_an_entry_without_the_failure_record_is_a_miss_never_a_clean_answe
 
 
 def test_entries_written_before_the_failure_record_are_under_another_key_version() -> None:
-    assert cache_key(QUERY).startswith("search_cache:v2:")
+    assert cache_key(QUERY).startswith("search_cache:v3:")  # v3 also records the declared set
 
 
 # ── A degraded answer is cached for its own, shorter TTL (owner, 2026-10-26) ─────────────────
@@ -361,7 +371,9 @@ async def test_one_bad_minute_does_not_poison_the_rest_of_the_day() -> None:
             return SearchResponse([BRAVE, WIKI, DDG][:limit], tuple(state["failed"]))
 
     inner = Recovering()
-    search = CachedSearch(inner, FakeKV(), ttl_s=TTL, degraded_ttl_s=DEGRADED_TTL, clock=clock)  # type: ignore[arg-type]
+    search = CachedSearch(
+        inner, FakeKV(), ttl_s=TTL, degraded_ttl_s=DEGRADED_TTL, declared_engines=None, clock=clock
+    )  # type: ignore[arg-type]
     assert (await search.search(QUERY)).degraded
     clock.now += DEGRADED_TTL - 1
     assert (await search.search(QUERY)).degraded and inner.calls == 1  # still within the short TTL
@@ -395,6 +407,89 @@ async def test_a_reused_degraded_answer_stays_marked_and_the_report_states_both_
     )
 
 
+# ── The declared engine set reaches the report and governs reuse (owner, 2026-10-26) ─────────
+
+BRAVE_ONLY = ("brave",)
+OTHERS_DOWN = [
+    EngineFailure("duckduckgo", "CAPTCHA"),
+    EngineFailure("wikipedia", "too many requests"),
+]
+
+
+def brave_only(kv: FakeKV | None = None, *, declared: tuple[str, ...] | None = BRAVE_ONLY):
+    inner = OfflineSearch({QUERY: [BRAVE]}, failed_engines=OTHERS_DOWN, declared_engines=declared)
+    return cached(kv, inner=inner, declared=declared)
+
+
+async def test_a_brave_only_run_is_complete_and_the_report_says_which_set_it_is_complete_for() -> (
+    None
+):
+    search, *_ = brave_only()
+    got = await search.search(QUERY)
+    assert not got.degraded
+    report = search.report()
+    assert report.declared_engines == BRAVE_ONLY
+    assert report.degraded_searches == 0 and report.failed_engine_counts == {}
+    assert report.undeclared_failure_counts == {"duckduckgo": 1, "wikipedia": 1}
+    assert report.engines_seen == ("brave",) and report.undeclared_engines_seen == ()
+    assert json.loads(report.model_dump_json())["declared_engines"] == ["brave"]  # in the record
+
+
+async def test_an_undeclared_run_says_so_in_its_report() -> None:
+    search, *_ = brave_only(declared=None)
+    assert (await search.search(QUERY)).degraded  # nothing declared: every failure counts
+    report = search.report()
+    assert report.declared_engines is None and report.degraded_searches == 1
+    assert json.loads(report.model_dump_json())["declared_engines"] is None
+
+
+async def test_an_entry_fetched_under_another_declared_set_is_never_reused() -> None:
+    kv = FakeKV()
+    search, *_ = brave_only(kv)
+    await search.search(QUERY)
+    for other in (None, ("brave", "duckduckgo"), ("duckduckgo",)):
+        inner = OfflineSearch({QUERY: [BRAVE]}, failed_engines=OTHERS_DOWN, declared_engines=other)
+        again, _, _, spy = cached(kv, inner=inner, declared=other)
+        await again.search(QUERY)
+        assert len(spy.calls) == 1, f"reused an entry fetched under {BRAVE_ONLY} for {other}"
+    same, _, _, spy = brave_only(kv)
+    await same.search(QUERY)
+    assert spy.calls == []  # under the same declared set it is reused
+
+
+async def test_a_provider_declared_differently_from_the_run_is_refused() -> None:
+    inner = OfflineSearch({QUERY: [BRAVE]}, declared_engines=["brave"])
+    search, *_ = cached(inner=inner, declared=("brave", "duckduckgo"))
+    with pytest.raises(ValueError, match="must be the same set"):
+        await search.search(QUERY)
+
+
+async def test_an_undeclared_engine_that_returns_a_result_is_reported() -> None:
+    inner = OfflineSearch({QUERY: [BRAVE, WIKI]}, declared_engines=["brave"])
+    search, *_ = cached(inner=inner, declared=("brave",))
+    await search.search(QUERY)
+    assert search.report().undeclared_engines_seen == ("wikipedia",)
+
+
+def test_the_declared_set_is_null_in_config_until_the_probe_decides_it() -> None:
+    assert load_scoring().research.declared_engines is None  # not declared, on purpose
+
+
+@pytest.mark.parametrize("bad", [[], [""], ["brave", "Brave"], ["brave", " "]])
+def test_a_declared_set_in_config_must_be_null_or_a_real_set(bad: list[str]) -> None:
+    raw = load_scoring().research.model_dump()
+    with pytest.raises(ValueError, match="declared_engines"):
+        Research.model_validate({**raw, "declared_engines": bad})
+    Research.model_validate({**raw, "declared_engines": ["brave"]})
+
+
+def test_declared_engines_is_a_required_key_not_a_default() -> None:
+    raw = load_scoring().research.model_dump()
+    del raw["declared_engines"]
+    with pytest.raises(ValueError, match="declared_engines"):
+        Research.model_validate(raw)
+
+
 # ── A real Redis ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -404,7 +499,13 @@ async def test_against_a_real_redis_the_key_expires_with_the_ttl_and_is_reused(
 ) -> None:
     redis = Redis.from_url(str(redis_settings.redis_url))  # type: ignore[attr-defined]
     try:
-        search = CachedSearch(OfflineSearch({QUERY: RESULTS}), redis, ttl_s=120, degraded_ttl_s=30)
+        search = CachedSearch(
+            OfflineSearch({QUERY: RESULTS}),
+            redis,
+            ttl_s=120,
+            degraded_ttl_s=30,
+            declared_engines=None,
+        )
         await search.search(QUERY, limit=3)
         assert 0 < await redis.ttl(cache_key(QUERY)) <= 120
         assert (await search.search(QUERY, limit=3)).results == RESULTS[:3]
@@ -413,3 +514,21 @@ async def test_against_a_real_redis_the_key_expires_with_the_ttl_and_is_reused(
         assert report.records[1].age_s is not None and report.records[1].age_s >= 0
     finally:
         await redis.aclose()
+
+
+async def test_an_entry_that_records_another_declared_set_is_a_miss_even_under_this_key() -> None:
+    kv = FakeKV()
+    search, *_ = brave_only(kv)
+    await search.search(QUERY)
+    (key,) = kv.data
+    entry = json.loads(kv.data[key])
+    entry["declared_engines"] = ["duckduckgo"]  # the record disagrees with the key it sits under
+    kv.data[key] = json.dumps(entry)
+    again, _, _, spy = brave_only(kv)
+    await again.search(QUERY)
+    assert len(spy.calls) == 1  # refetched
+
+
+def test_the_declared_set_is_part_of_the_cache_key() -> None:
+    assert cache_key(QUERY) != cache_key(QUERY, ("brave",)) != cache_key(QUERY, ("brave", "x"))
+    assert cache_key(QUERY, ("brave",)) == cache_key("  KITCHEN starter  set REVIEWS ", ("brave",))

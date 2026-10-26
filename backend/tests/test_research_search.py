@@ -19,6 +19,7 @@ from app.research.search import (
     SearchProvider,
     SearchResult,
     SearxngSearch,
+    declare,
     normalise_query,
     searxng_from_settings,
 )
@@ -72,7 +73,7 @@ def searxng_payload(results: list[SearchResult]) -> dict[str, object]:
 
 def searxng_over(handler: Callable[[httpx.Request], httpx.Response]) -> SearxngSearch:
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    return SearxngSearch("http://searxng.test:8080/", client)
+    return SearxngSearch("http://searxng.test:8080/", client, declared_engines=None)
 
 
 def serving_canned(request: httpx.Request) -> httpx.Response:
@@ -307,7 +308,7 @@ def settings(**values: object) -> Settings:
 
 def test_an_unset_searxng_url_is_search_unavailable_not_a_crash() -> None:
     with pytest.raises(SearchUnavailable, match="SEARXNG_URL"):
-        searxng_from_settings(settings(), httpx.AsyncClient())
+        searxng_from_settings(settings(), httpx.AsyncClient(), declared_engines=None)
 
 
 async def test_the_provider_is_built_from_the_configured_url() -> None:
@@ -318,7 +319,9 @@ async def test_the_provider_is_built_from_the_configured_url() -> None:
         return httpx.Response(200, json={"results": []})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    built = searxng_from_settings(settings(searxng_url="http://127.0.0.1:8080"), client)
+    built = searxng_from_settings(
+        settings(searxng_url="http://127.0.0.1:8080"), client, declared_engines=None
+    )
     await built.search(QUERY)
     assert str(seen[0].url).startswith("http://127.0.0.1:8080/search?")
 
@@ -326,3 +329,114 @@ async def test_the_provider_is_built_from_the_configured_url() -> None:
 def test_normalise_query_is_the_shared_cache_key() -> None:
     assert normalise_query("  A\tb\n C ") == "a b c"
     assert normalise_query("STRASSE") == normalise_query("straße")  # casefold, not lower
+
+
+# ── Degradation is measured against the declared engine set (owner, 2026-10-26) ──────────────
+
+
+def declared(engines: list[str] | None) -> SearxngSearch:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(500)))
+    return SearxngSearch("http://searxng.test:8080/", client, declared_engines=engines)
+
+
+def answered_by(
+    rows: list[dict[str, object]], unresponsive: list[list[str]], engines: list[str] | None
+) -> SearxngSearch:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: answering(rows, unresponsive))
+    )
+    return SearxngSearch("http://searxng.test:8080/", client, declared_engines=engines)
+
+
+BRAVE_ROW = {"url": "https://ok.test/a", "title": "Good", "engine": "brave", "engines": ["brave"]}
+THROTTLED_OTHERS = [["duckduckgo", "CAPTCHA"], ["wikipedia", "Suspended: too many requests"]]
+
+
+async def test_a_brave_only_search_that_brave_answered_is_complete_not_degraded() -> None:
+    found = await answered_by([BRAVE_ROW], THROTTLED_OTHERS, ["brave"]).search(QUERY)
+    assert not found.degraded and found.failed_engines == ()
+    assert found.declared_engines == ("brave",)
+    # What failed outside the declared set is kept, not dropped and not counted against it.
+    assert found.undeclared_failures == (
+        EngineFailure("duckduckgo", "CAPTCHA"),
+        EngineFailure("wikipedia", "Suspended: too many requests"),
+    )
+
+
+async def test_a_failure_of_a_declared_engine_is_what_makes_an_answer_degraded() -> None:
+    rows = [BRAVE_ROW]
+    unresponsive = [["brave", "too many requests"], ["wikipedia", "CAPTCHA"]]
+    found = await answered_by(rows, unresponsive, ["brave", "duckduckgo"]).search(QUERY)
+    assert found.degraded and found.failed_engines == (EngineFailure("brave", "too many requests"),)
+    assert found.undeclared_failures == (EngineFailure("wikipedia", "CAPTCHA"),)
+
+
+async def test_no_results_with_only_undeclared_engines_failed_is_a_genuine_empty() -> None:
+    found = await answered_by([], THROTTLED_OTHERS, ["brave"]).search(QUERY)
+    assert found.results == [] and not found.degraded  # brave answered; nothing was found
+
+
+async def test_no_results_with_the_declared_engine_throttled_is_still_refused() -> None:
+    unresponsive = [["brave", "Suspended: too many requests"], *THROTTLED_OTHERS]
+    with pytest.raises(SearchRateLimited, match="brave"):
+        await answered_by([], unresponsive, ["brave"]).search(QUERY)
+
+
+async def test_nothing_declared_means_every_engine_counts_as_before() -> None:
+    found = await answered_by([BRAVE_ROW], THROTTLED_OTHERS, None).search(QUERY)
+    assert found.degraded and found.declared_engines is None and found.undeclared_failures == ()
+    with pytest.raises(SearchUnavailable):
+        await answered_by([], [["duckduckgo", "CAPTCHA"]], None).search(QUERY)
+
+
+async def test_an_engine_outside_the_declared_set_that_returns_results_is_flagged() -> None:
+    wiki = {
+        "url": "https://ok.test/w",
+        "title": "Wiki",
+        "engine": "wikipedia",
+        "engines": ["wikipedia"],
+    }
+    found = await answered_by([BRAVE_ROW, wiki], [], ["brave"]).search(QUERY)
+    assert found.engines_seen == ("brave", "wikipedia") and found.undeclared_seen == ("wikipedia",)
+    assert (await answered_by([BRAVE_ROW], [], None).search(QUERY)).undeclared_seen == ()
+
+
+async def test_engine_names_are_compared_case_insensitively() -> None:
+    row = {**BRAVE_ROW, "engine": "Brave"}
+    found = await answered_by(
+        [row], [["Brave", "CAPTCHA"], ["DuckDuckGo", "CAPTCHA"]], ["BRAVE"]
+    ).search(QUERY)
+    assert found.declared_engines == ("brave",)
+    assert found.failed_engines == (EngineFailure("Brave", "CAPTCHA"),)
+    assert found.undeclared_failures == (EngineFailure("DuckDuckGo", "CAPTCHA"),)
+
+
+def test_a_declared_set_is_normalised_and_cannot_be_empty_or_blank() -> None:
+    assert declare(["Brave", " duckduckgo ", "brave"]) == ("brave", "duckduckgo")
+    assert declare(None) is None
+    for bad in ([], [""], ["brave", "  "]):
+        with pytest.raises(ValueError, match="at least one engine"):
+            declare(bad)
+        with pytest.raises(ValueError, match="at least one engine"):
+            declared(bad)
+
+
+def test_the_provider_has_no_default_for_the_declared_set() -> None:
+    with pytest.raises(TypeError, match="declared_engines"):
+        SearxngSearch("http://x.test", httpx.AsyncClient())  # type: ignore[call-arg]
+
+
+async def test_the_offline_provider_applies_the_same_rule() -> None:
+    failures = [EngineFailure("duckduckgo", "CAPTCHA")]
+    one = OfflineSearch({QUERY: RESULTS}, failed_engines=failures, declared_engines=["brave"])
+    got = await one.search(QUERY)
+    assert not got.degraded and got.undeclared_failures == tuple(failures)
+    assert (
+        await OfflineSearch({"x": []}, failed_engines=failures, declared_engines=["brave"]).search(
+            "x"
+        )
+    ).results == []
+    with pytest.raises(SearchUnavailable):
+        await OfflineSearch(
+            {"x": []}, failed_engines=failures, declared_engines=["duckduckgo"]
+        ).search("x")

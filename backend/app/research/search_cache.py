@@ -32,7 +32,7 @@ engine error is not cached and propagates unchanged.
 import hashlib
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Literal, Protocol
 
@@ -45,6 +45,7 @@ from app.research.search import (
     SearchResponse,
     SearchResult,
     check_arguments,
+    declare,
     normalise_query,
 )
 
@@ -52,7 +53,9 @@ CacheMode = Literal["use", "bypass"]
 Outcome = Literal["reused", "fetched", "failed"]
 # v2: an entry carries the engines that failed when it was fetched. A v1 entry has no such record
 # and would read as "not degraded", which nobody knows, so v1 entries are never read.
-KEY_PREFIX = "search_cache:v2:"
+# v3: an entry also carries the declared engine set it was fetched under, and is reused only under
+# the same set; a v2 entry does not say, so it is never read either.
+KEY_PREFIX = "search_cache:v3:"
 
 
 class KeyValue(Protocol):
@@ -75,8 +78,11 @@ class SearchRecord(BaseModel):
     # when this answer was fetched (a reused entry keeps its fetch-time failures), as
     # (engine, reason), and the engines that contributed a returned result. A search that saw one
     # engine is not the same evidence as one that saw three.
-    failed_engines: tuple[tuple[str, str], ...] = ()
+    failed_engines: tuple[tuple[str, str], ...] = ()  # failures of DECLARED engines only
     engines_seen: tuple[str, ...] = ()
+    # Failures of engines outside the declared set: kept, and not degradation (section 8).
+    undeclared_failures: tuple[tuple[str, str], ...] = ()
+    undeclared_seen: tuple[str, ...] = ()  # outside the set, and returned a result anyway
 
 
 class SearchEvidenceReport(BaseModel):
@@ -100,12 +106,25 @@ class SearchEvidenceReport(BaseModel):
     degraded_searches: int  # answered (fetched or reused) with at least one engine named as failed
     failed_engine_counts: dict[str, int]  # engine -> in how many answered searches it had failed
     engines_seen: tuple[str, ...]  # every engine that contributed a result to any answered search
+    # The configuration "degraded" is measured against, declared in advance (None: not declared, so
+    # every engine counted). Reported beside every result (docs/evaluation-plan.md section 8).
+    declared_engines: tuple[str, ...] | None
+    undeclared_failure_counts: dict[str, int]  # engines outside the set that failed, kept apart
+    undeclared_engines_seen: tuple[str, ...]  # outside the set, yet returned a result: a mismatch
     records: list[SearchRecord]
 
 
 class SearchLedger:
-    def __init__(self, *, mode: CacheMode, ttl_s: int, degraded_ttl_s: int) -> None:
+    def __init__(
+        self,
+        *,
+        mode: CacheMode,
+        ttl_s: int,
+        degraded_ttl_s: int,
+        declared_engines: tuple[str, ...] | None,
+    ) -> None:
         self.mode, self.ttl_s, self.degraded_ttl_s = mode, ttl_s, degraded_ttl_s
+        self.declared_engines = declared_engines
         self.records: list[SearchRecord] = []
 
     def report(self) -> SearchEvidenceReport:
@@ -114,9 +133,12 @@ class SearchLedger:
         n_fetched, n_reused = sum(r.results for r in fetched), sum(r.results for r in reused)
         answered = fetched + reused
         failed_counts: dict[str, int] = {}
+        undeclared_counts: dict[str, int] = {}
         for r in answered:
             for engine in {f[0] for f in r.failed_engines}:
                 failed_counts[engine] = failed_counts.get(engine, 0) + 1
+            for engine in {f[0] for f in r.undeclared_failures}:
+                undeclared_counts[engine] = undeclared_counts.get(engine, 0) + 1
         return SearchEvidenceReport(
             mode=self.mode,
             ttl_s=self.ttl_s,
@@ -138,12 +160,20 @@ class SearchLedger:
             degraded_searches=sum(1 for r in answered if r.failed_engines),
             failed_engine_counts=dict(sorted(failed_counts.items())),
             engines_seen=tuple(sorted({e for r in answered for e in r.engines_seen})),
+            declared_engines=self.declared_engines,
+            undeclared_failure_counts=dict(sorted(undeclared_counts.items())),
+            undeclared_engines_seen=tuple(sorted({e for r in answered for e in r.undeclared_seen})),
             records=list(self.records),
         )
 
 
-def cache_key(query: str) -> str:
-    return KEY_PREFIX + hashlib.sha256(normalise_query(query).encode("utf-8")).hexdigest()
+def cache_key(query: str, declared: tuple[str, ...] | None = None) -> str:
+    """The normalised query under the declared engine set (None: undeclared). The set is part of
+    the key so runs under different sets keep separate entries instead of overwriting each other;
+    the entry also records it, and a mismatch on read is still a miss."""
+    scope = "*" if declared is None else ",".join(declared)
+    digest = hashlib.sha256(f"{scope}\n{normalise_query(query)}".encode()).hexdigest()
+    return KEY_PREFIX + digest
 
 
 class CachedSearch:
@@ -156,13 +186,17 @@ class CachedSearch:
         *,
         ttl_s: int,
         degraded_ttl_s: int,
+        declared_engines: Sequence[str] | None,
         mode: CacheMode = "use",
         clock: Callable[[], float] = time.time,
     ) -> None:
+        """`declared_engines` is `research.declared_engines` and has no default; it must be the set
+        the inner provider was built with (a mismatch is refused on the first search)."""
         if ttl_s < 1 or degraded_ttl_s < 1:
             raise ValueError("ttl_s and degraded_ttl_s must each be at least 1 second")
         if degraded_ttl_s > ttl_s:
             raise ValueError("degraded_ttl_s must not exceed ttl_s")
+        self._declared = declare(declared_engines)
         self._inner, self._redis, self._ttl_s, self._mode, self._clock = (
             inner,
             redis,
@@ -171,7 +205,9 @@ class CachedSearch:
             clock,
         )
         self._degraded_ttl_s = degraded_ttl_s
-        self.ledger = SearchLedger(mode=mode, ttl_s=ttl_s, degraded_ttl_s=degraded_ttl_s)
+        self.ledger = SearchLedger(
+            mode=mode, ttl_s=ttl_s, degraded_ttl_s=degraded_ttl_s, declared_engines=self._declared
+        )
 
     def report(self) -> SearchEvidenceReport:
         return self.ledger.report()
@@ -191,6 +227,11 @@ class CachedSearch:
         except Exception:
             self._note(normalised, "failed", None, cache_error=cache_error)
             raise
+        if response.declared_engines != self._declared:
+            raise ValueError(
+                f"the provider answered under declared engines {response.declared_engines}, "
+                f"the run declares {self._declared}: they must be the same set"
+            )
         if self._mode == "use":
             cache_error = await self._write(text, limit, response) or cache_error
         self._note(normalised, "fetched", response, cache_error=cache_error)
@@ -216,6 +257,12 @@ class CachedSearch:
                 if response
                 else (),
                 engines_seen=response.engines_seen if response else (),
+                undeclared_failures=tuple(
+                    (f.engine, f.reason) for f in response.undeclared_failures
+                )
+                if response
+                else (),
+                undeclared_seen=response.undeclared_seen if response else (),
             )
         )
 
@@ -226,7 +273,7 @@ class CachedSearch:
         the TTL in force, was fetched with at least this `limit`, and parses; anything else is a
         miss. The response carries the engines that had failed when the entry was fetched."""
         try:
-            raw = await self._redis.get(cache_key(query))
+            raw = await self._redis.get(cache_key(query, self._declared))
         except RedisError:
             return None, True
         if raw is None:
@@ -239,13 +286,19 @@ class CachedSearch:
                 for row in entry["results"]
             ]
             failed = tuple(EngineFailure(str(e), str(r)) for e, r in entry["failed_engines"])
+            undeclared = tuple(
+                EngineFailure(str(e), str(r)) for e, r in entry["undeclared_failures"]
+            )
+            stored_declared = declare(entry["declared_engines"])
             fetched_limit = int(entry["limit"])
         except (ValueError, KeyError, TypeError):  # corrupt: replaced by the fetch that follows
+            return None, False
+        if stored_declared != self._declared:  # fetched under another configuration: not this run's
             return None, False
         usable_for = self._degraded_ttl_s if failed else self._ttl_s  # the TTL in force for it
         if not 0 <= age <= usable_for or fetched_limit < limit:
             return None, False
-        return (SearchResponse(stored[:limit], failed), age), False
+        return (SearchResponse(stored[:limit], failed, undeclared, stored_declared), age), False
 
     async def _write(self, query: str, limit: int, response: SearchResponse) -> bool:
         """Whether Redis failed. The entry carries its own fetch time: age is measured from it."""
@@ -255,10 +308,16 @@ class CachedSearch:
             "limit": limit,
             "results": [asdict(r) for r in response.results],
             "failed_engines": [[f.engine, f.reason] for f in response.failed_engines],
+            "undeclared_failures": [[f.engine, f.reason] for f in response.undeclared_failures],
+            "declared_engines": list(response.declared_engines)
+            if response.declared_engines is not None
+            else None,
         }
         expires_in = self._degraded_ttl_s if response.failed_engines else self._ttl_s
         try:
-            await self._redis.set(cache_key(query), json.dumps(entry), ex=expires_in)
+            await self._redis.set(
+                cache_key(query, self._declared), json.dumps(entry), ex=expires_in
+            )
         except RedisError:
             return True
         return False

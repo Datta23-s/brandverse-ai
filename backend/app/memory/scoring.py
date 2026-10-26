@@ -108,6 +108,11 @@ class Research(_Strict):
     # A search answered while some engines failed is a transient failure: it is cached, marked
     # degraded, for this (much shorter) time instead. It must not exceed the clean TTL.
     search_cache_degraded_ttl_s: int = Field(ge=1)
+    # The search engines the search configuration is declared to be, in advance and reported beside
+    # every result; "degraded" means one of THESE failed. None: not declared yet (the rate probe
+    # decides it, docs/evaluation-plan.md section 8), so every engine counts. A required key: it is
+    # written as null on purpose, not left out.
+    declared_engines: list[str] | None
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
     # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.
@@ -124,6 +129,15 @@ class Research(_Strict):
     def _degraded_cache_is_shorter(self) -> "Research":
         if self.search_cache_degraded_ttl_s > self.search_cache_ttl_s:
             raise ValueError("search_cache_degraded_ttl_s must not exceed search_cache_ttl_s")
+        return self
+
+    @model_validator(mode="after")
+    def _declared_engines_are_a_real_set(self) -> "Research":
+        if self.declared_engines is None:
+            return self
+        names = [e.strip().casefold() for e in self.declared_engines]
+        if not names or "" in names or len(set(names)) != len(names):
+            raise ValueError("declared_engines must be null or a non-empty list of distinct names")
         return self
 
 

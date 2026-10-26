@@ -55,6 +55,13 @@ research:
   # this much shorter time (owner, 2026-10-26). Evaluation recording does not cache a degraded
   # search at all (docs/evaluation-plan.md section 8). Never longer than search_cache_ttl_s.
   search_cache_degraded_ttl_s: 3600                    # one hour
+  # The engines the search configuration is DECLARED to be, in advance, reported beside every result
+  # (owner, 2026-10-26): "degraded" means one of these failed, not that an engine SearXNG could have
+  # run did. NOT DECLARED YET (null): the rate probe decides it from what actually answers, and the
+  # declaration is recorded in docs/evaluation-plan.md section 8 with its evidence before any
+  # recording. While null every engine SearXNG names counts, and the evaluation harness (when it
+  # exists) refuses to start. Never edited to make a run look complete.
+  declared_engines: null
   # Page-content extraction (backend/app/research/extraction.py). Main text shorter than the
   # minimum is no content (a login wall, a listing): the page is refused rather than passed on as
   # evidence. Longer than the maximum is cut at a paragraph boundary and flagged `truncated`, so no

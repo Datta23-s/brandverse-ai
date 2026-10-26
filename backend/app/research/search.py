@@ -20,7 +20,12 @@ The contract:
   `SearchResponse` that carries the failed engines and their reasons, and `engines_seen`, the
   engines that actually contributed a result. A search that saw one engine is not the same evidence
   as one that saw three, and the run record and report keep the difference (search_cache.py; owner,
-  2026-10-26: it bears on Rules.md C4's partial-on-breach rule).
+  2026-10-26: it bears on Rules.md C4's partial-on-breach rule);
+- **degraded is measured against the DECLARED engine set**, not against every engine SearXNG could
+  run (owner, 2026-10-26). `declared_engines` has no default: it is `research.declared_engines`,
+  None until the rate probe has shown which engines answer. With a set declared, only a failure of
+  an engine in it makes an answer degraded or a zero-result answer a refusal; failures outside it
+  are kept as `undeclared_failures`; a result from an engine outside it is `undeclared_seen`.
 
 Caching by normalised query (Rules.md C7) and the zero-retention page cache are separate pieces
 that sit above this interface; `normalise_query` is the key they share.
@@ -65,8 +70,26 @@ class EngineFailure:
 
 @dataclass(frozen=True, slots=True)
 class SearchResponse:
+    """What a search returned, and how complete that is **with respect to the declared engine set**.
+
+    `declared_engines` is the configuration declared in advance and reported beside every result
+    (None: not declared, so every engine the search engine names counts). `failed_engines` are the
+    declared engines that failed, and only they make an answer degraded; `undeclared_failures` are
+    engines outside the declared set that failed, kept in the record and otherwise ignored (owner,
+    2026-10-26, docs/evaluation-plan.md section 8)."""
+
     results: list[SearchResult]
     failed_engines: tuple[EngineFailure, ...] = ()
+    undeclared_failures: tuple[EngineFailure, ...] = ()
+    declared_engines: tuple[str, ...] | None = None
+
+    @property
+    def undeclared_seen(self) -> tuple[str, ...]:
+        """Engines outside the declared set that nonetheless returned a result: a mismatch between
+        the declaration and the search engine's own configuration, visible rather than silent."""
+        if self.declared_engines is None:
+            return ()
+        return tuple(e for e in self.engines_seen if e not in self.declared_engines)
 
     @property
     def engines_seen(self) -> tuple[str, ...]:
@@ -82,6 +105,28 @@ class SearchResponse:
 
 class SearchProvider(Protocol):
     async def search(self, query: str, *, limit: int = 10) -> SearchResponse: ...
+
+
+def declare(engines: Sequence[str] | None) -> tuple[str, ...] | None:
+    """The declared engine set in its one form: lower-case, sorted, distinct. None is "not
+    declared"; an empty or blank declaration is a programming error, not a way to say "none"."""
+    if engines is None:
+        return None
+    names = tuple(sorted({e.strip().casefold() for e in engines}))
+    if not names or "" in names:
+        raise ValueError("a declared engine set must name at least one engine, none blank")
+    return names
+
+
+def split_failures(
+    failed: Sequence[EngineFailure], declared: tuple[str, ...] | None
+) -> tuple[tuple[EngineFailure, ...], tuple[EngineFailure, ...]]:
+    """(failures that count, failures outside the declared set). With nothing declared every
+    failure counts."""
+    if declared is None:
+        return tuple(failed), ()
+    counted = tuple(f for f in failed if f.engine.casefold() in declared)
+    return counted, tuple(f for f in failed if f.engine.casefold() not in declared)
 
 
 def normalise_query(query: str) -> str:
@@ -101,9 +146,19 @@ def check_arguments(query: str, limit: int) -> str:
 class SearxngSearch:
     """SearXNG's JSON API. The client is injected so a test can supply a mock transport."""
 
-    def __init__(self, base_url: str, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        client: httpx.AsyncClient,
+        *,
+        declared_engines: Sequence[str] | None,
+    ) -> None:
+        """`declared_engines` has no default: whoever builds the provider says, from
+        `research.declared_engines`, which engines the configuration is declared to be (None:
+        not declared yet)."""
         self._endpoint = base_url.rstrip("/") + "/search"
         self._client = client
+        self._declared = declare(declared_engines)
 
     async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         text = check_arguments(query, limit)
@@ -125,10 +180,12 @@ class SearxngSearch:
         if not isinstance(rows, list):
             raise SearchUnavailable("SearXNG did not answer with a result list")
         found = [r for r in (_parse_row(r) for r in rows) if r is not None][:limit]
-        failed = _failed_engines(body.get("unresponsive_engines"))
-        if not found:
+        failed, undeclared = split_failures(
+            _failed_engines(body.get("unresponsive_engines")), self._declared
+        )
+        if not found:  # an engine outside the declared set failing says nothing about an absence
             _refuse_if_engines_failed(failed)
-        return SearchResponse(found, failed)
+        return SearchResponse(found, failed, undeclared, self._declared)
 
 
 def _failed_engines(unresponsive: Any) -> tuple[EngineFailure, ...]:
@@ -191,10 +248,12 @@ class OfflineSearch:
         *,
         fail_with: SearchUnavailable | SearchRateLimited | None = None,
         failed_engines: Sequence[EngineFailure] = (),
+        declared_engines: Sequence[str] | None = None,
     ) -> None:
         self._results = {normalise_query(q): list(rs) for q, rs in (results or {}).items()}
         self._fail_with = fail_with
-        self._failed_engines = tuple(failed_engines)
+        self._declared = declare(declared_engines)
+        self._failed, self._undeclared = split_failures(failed_engines, self._declared)
         self.calls: list[tuple[str, int]] = []
 
     async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
@@ -204,13 +263,16 @@ class OfflineSearch:
             raise self._fail_with
         found = list(self._results.get(normalise_query(text), []))[:limit]
         if not found:
-            _refuse_if_engines_failed(self._failed_engines)
-        return SearchResponse(found, self._failed_engines)
+            _refuse_if_engines_failed(self._failed)
+        return SearchResponse(found, self._failed, self._undeclared, self._declared)
 
 
-def searxng_from_settings(settings: Settings, client: httpx.AsyncClient) -> SearxngSearch:
+def searxng_from_settings(
+    settings: Settings, client: httpx.AsyncClient, *, declared_engines: Sequence[str] | None
+) -> SearxngSearch:
     """The real provider, from `SEARXNG_URL`. Unset is `SearchUnavailable`: research degrades to a
-    partial result rather than failing the run (Architecture.md §11)."""
+    partial result rather than failing the run (Architecture.md §11). `declared_engines` is
+    `research.declared_engines` (None until the probe has decided it)."""
     if settings.searxng_url is None:
         raise SearchUnavailable("SEARXNG_URL is not set")
-    return SearxngSearch(str(settings.searxng_url), client)
+    return SearxngSearch(str(settings.searxng_url), client, declared_engines=declared_engines)
