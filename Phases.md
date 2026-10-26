@@ -384,8 +384,18 @@ runs use it is ruled (2026-10-25): one frozen record-and-replay snapshot, arms o
 group (CI off it), behind `Extractor`, which refuses a page with too little main text and cuts an
 overlong one at a paragraph, both limits in `config/scoring.yaml`. Tested in CI against recorded
 library output for five saved pages (boilerplate and comments stripped, spec table kept, a login
-wall refused); the same assertions run against the live library where it is installed. The page
-fetcher, which supplies the HTML, is not written.
+wall refused); the same assertions run against the live library where it is installed.
+*Page fetcher and page cache* built (`app/research/fetch.py`, `page_cache.py`; `docs/fetcher.md`):
+httpx, three typed errors (`FetchRefused` for the fetcher's own policy, `FetchFailed`,
+`FetchUnsupported`), an address policy applied to the URL and to every redirect hop before anything
+is requested (public addresses only, ports 80/443, no credentials; DNS rebinding is a stated
+residual), size, timeout and redirect caps in `config/scoring.yaml`, and a Redis page-body cache
+whose TTL is a parameter with a per-run ledger. Run against the real network as well as a mock
+(`scripts/fetch_probe.py`). A client-rendered page (the FSSAI homepage) fetches with 200 and
+extracts to nothing; PDFs are unsupported; `robots.txt` is not honoured, pending the owner. Every
+search result and fetched page carries an unpopulated `first_party` marker (V6).
+*Search with SearXNG* verified against the real engine (`docs/searxng.md`): a throttled search is
+refused rather than reported as no results, and failed engines reach the run report.
 A publisher name equal to the page's host is read as NOT STATED (trafilatura fills it in when the page
 names none). Language detection is UNVERIFIED (empty on all five fixtures): nothing may depend on it
 until it works on real fetched pages.
