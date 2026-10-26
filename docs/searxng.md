@@ -29,8 +29,9 @@ outside them that nothing is listening on (`Get-NetTCPConnection -LocalPort <n>`
 the mapping in `compose.yaml` and `SEARXNG_URL` together.
 
 **Engines enabled** (read from `GET /config`, not from the settings file): **brave, duckduckgo,
-wikipedia.** `bing` is present in the config but disabled by the image's defaults; the first draft of
-the settings listed it as if it ran, which `/config` showed to be wrong. The set is fixed by
+wikipedia.** The first draft of the settings also listed `bing`; `/config` showed it present but
+disabled (the image disables it by default), so the list suggested an engine that was not running. It
+was removed, and `/config` now lists exactly these three, all enabled. The set is fixed by
 `use_default_settings.engines.keep_only`; changing it changes the results and is recorded here.
 
 **`json` must be in `search.formats`.** Without it the JSON API answers 403; `SearxngSearch` turns that
