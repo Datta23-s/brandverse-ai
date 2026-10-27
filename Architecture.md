@@ -1048,36 +1048,55 @@ was running at that moment (the test suites had been run in the preceding hours)
 
 ### Worker-host power — a setting changed 2026-10-27, and why
 
-**What happened.** The System log shows the laptop entering Modern Standby (S0 low-power idle)
-five times on 2026-10-27 UTC, the long ones at 07:10:00 to 08:29:33 (80 minutes), 08:29:33 to
-14:41:12 (about 6 hours) and 14:45:53 (fully suspended 14:51:14) to 15:09:39. Timed jobs stopped
-with it: the ramp's last ask was 07:09:20, 40 seconds before the first; the 07:30 stop job's timer
+**What happened.** *The laptop was on battery from 06:16 UTC to 15:28 UTC on 2026-10-27, and that,
+not the keep-awake request, explains every suspension that stopped a job that day.* The System log
+(Kernel-Power event 105) records it: AC online at 05:33:13 (charge 4%), **unplugged at 06:16:16**
+(59%), plugged in again at **15:28:48** (19%). On battery the sleep timer was **180 seconds**. The
+log shows seven entries into Modern Standby (S0 low-power idle) between 00:00 and 15:30 UTC, two
+on AC and five on battery; the ones that froze work were all on battery: 07:10:00 to 08:29:33 (80 minutes), 08:29:33 to
+14:41:12 (about 6 hours), and 14:45:53 (fully suspended 14:51:14) to 15:09:39. Timed jobs stopped
+with them: the ramp's last ask was 07:09:20, 40 seconds before the first; the 07:30 stop job's timer
 froze and it fired at 08:29:37 on resume; the sustained hold's second search came 28.4 minutes
-after the first instead of 10. **The machine was on battery** (discharging at 19 to 20% charge; a
-"power source change" is logged at 06:16 UTC), where the sleep timer was **180 seconds**. The
-keep-awake request the probes make (`SetThreadExecutionState`, accepted) did **not** prevent
-standby: a process asking not to be slept is not honoured on this machine, and it must not be
-relied on.
+after the first instead of 10. **Two standby periods on AC did not stop anything**: 05:19:42 to
+05:32:07 and 05:40:57 to 06:03:35. The second fell inside the ramp's run, and the ramp's gaps
+through it are 300 s to the decimal (240 s at the 4-minute level): on AC the machine stays connected
+and background work continues. A 16-second one on battery at 06:55 left no mark either. So "standby"
+alone did not stop work; a long standby on battery did.
+
+*The keep-awake request is not to be relied on.* The probes ask Windows not to idle-sleep
+(`SetThreadExecutionState`, accepted). The one time it could be tested, the hold's request was
+active from 14:49 and the machine was suspended anyway from 14:51 to 15:09. It did not exist for
+the earlier suspensions, so this is one observation, and it is enough: it is a hint the operating
+system did not honour here, and the plug and the power setting are what keep a job alive.
 
 **What was changed (owner approved, run without elevation).** The active scheme is *Balanced*
-(`381b4222-f694-41f0-9685-ff5bb260df2e`). Only the **plugged-in (AC)** values changed:
+(`381b4222-f694-41f0-9685-ff5bb260df2e`). Two sleep timers changed (the second by a follow-up
+instruction the same afternoon: "three minutes is short enough that any unplugged moment kills a
+job silently"); everything else was left as it was:
 
 | Setting | Before | After |
 |---|---|---|
 | Sleep after, on AC | 300 s (5 minutes) | **0 (never)** |
+| Sleep after, on battery | **180 s (3 minutes)** | **3600 s (60 minutes)** |
 | Hibernate after, on AC | 0 (never) | 0 (unchanged; the command was run and succeeded) |
-| Sleep after, on battery | 180 s | 180 s (**not changed**) |
 | Hibernate after, on battery | never | never (not changed) |
 | Display off after, AC / battery | 300 s / 180 s | not changed |
 
+`powercfg /change` takes **minutes**: the battery command was `standby-timeout-dc 60`, and the query
+reads back `0x00000e10` = 3600 s. 60 minutes survives an unplugged moment but not an unattended
+night on battery: a job on battery still dies when the charge does, so the plug remains required.
+
 **It persists until changed back.** It is a property of the power scheme, not of any process, and
-survives reboots. **It does nothing while the laptop is on battery.** To restore:
+survives reboots. The AC value matters only while plugged in and the battery value only while not.
+To restore both:
 
 ```
 powercfg /change standby-timeout-ac 5
+powercfg /change standby-timeout-dc 3
 ```
 
-(5 is minutes; the other values above were not altered, so there is nothing else to restore.)
+(Minutes: 5 and 3 are the 300 s and 180 s above; the other values were not altered, so there is
+nothing else to restore.)
 Verify with `powercfg /query SCHEME_CURRENT SUB_SLEEP`. Any long timed job on this machine needs it
 plugged in; whether it then still sleeps is a **logged check, not an assumption** (below).
 
