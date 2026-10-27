@@ -1136,6 +1136,17 @@ runs (0 of about 44,000)**, and the second run alone now admits only 10 buckets,
 of at most 1.14 an hour and a capacity of 6.2 to 6.8; the first run's nine clean answers at 10-minute
 gaps need more than that allows. The bucket description is dead for brave as a single constant.
 
+*Registered 2026-10-27 at 16:57 UTC, before the silent-wait's 10-minute probe (17:00:02); its 5-minute
+probe at 16:55:03 is known (refused) and is not part of this.* The silent-wait is measuring recovery
+from the sustained hold's break (16:50:02) with **nobody asking** in between, which is the one
+comparison the ramp could not make. Two readings, with different predictions, neither fitted:
+(A) *asking was the cost*: the ramp's refusals lengthened its own throttle, so in silence the first
+clean probe comes **well inside the ramp's 50 minutes of failed asking (by the 45-minute probe)**
+and the confirming probe ten minutes later is **also clean**; (B) *the limit refills slowly whether
+or not anyone asks*: the first clean probe is **no earlier than the ramp's 15 minutes** and the
+confirming probe is **refused again** (a relapse, as at 06:24). Anything else, including no clean
+probe by 180 minutes, is "neither". The result is an interval between two probes, never a point.
+
 *A third reading, untested and not fitted: asking while throttled lengthens the throttle.* Ten
 straight refusals while asking every five minutes, against an earlier throttling this project saw
 last for over twenty-five minutes while being asked, is what that reading expects; so would a
