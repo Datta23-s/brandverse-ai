@@ -150,15 +150,22 @@ class PageFetcher:
             ) from e
 
     async def content_type_of(self, url: str) -> str:
-        """The media type a URL answers with, read from the response headers alone (the body is
-        never read), under the same address policy, robots.txt and redirect handling as `fetch`.
-        For measuring what share of search results the pipeline cannot take
-        (scripts/classify_result_types.py); a `.pdf` path is NOT special-cased here, so the answer
-        is what the server says. Raises the same typed errors as `fetch` for a URL it may not or
-        cannot reach."""
+        """The media type a URL answers with, asked with HEAD so that no body is ever sent (owner,
+        2026-10-26: the IP cannot afford more), under the same address policy, robots.txt and
+        redirect handling as `fetch`. For measuring what share of search results the pipeline
+        cannot take (scripts/classify_result_types.py); a `.pdf` path is NOT special-cased here, so
+        the answer is what the server says. A server that refuses HEAD (405, 501) is `FetchFailed`
+        kind `head_not_supported`: there is deliberately NO fallback to GET, so such a URL is
+        counted as unknown, not fetched. Raises the same typed errors as `fetch` otherwise."""
         url = urldefrag(url.strip())[0]
 
         async def media(current: str, hops: int, response: httpx.Response) -> str:
+            if response.status_code in (405, 501):
+                raise FetchFailed(
+                    f"HEAD not supported by {current}",
+                    status=response.status_code,
+                    kind="head_not_supported",
+                )
             if not 200 <= response.status_code < 300:
                 raise FetchFailed(
                     f"HTTP {response.status_code} from {current}",
@@ -169,7 +176,7 @@ class PageFetcher:
 
         try:
             async with asyncio.timeout(self._cfg.fetch_total_timeout_s):
-                return await self._walk(url, media, check_robots=True)
+                return await self._walk(url, media, check_robots=True, method="HEAD")
         except TimeoutError as e:
             raise FetchFailed("timed out", kind="timeout") from e
 
@@ -190,10 +197,11 @@ class PageFetcher:
         *,
         check_robots: bool,
         accept: str = "text/html",
+        method: str = "GET",
         redirect_limit_error: type[FetchRefused] = FetchRefused,
     ) -> T:
-        """GET `start`, following redirects by hand, each hop judged by the address policy (and, for
-        pages, by robots.txt) before anything is requested from it."""
+        """Request `start` (GET unless told otherwise), following redirects by hand, each hop judged
+        by the address policy (and, for pages, by robots.txt) before anything is requested."""
         current = start
         for hop in range(self._cfg.fetch_max_redirects + 1):
             await self._check(current)
@@ -201,7 +209,7 @@ class PageFetcher:
                 await self._require_robots_permit(current)
             try:
                 async with self._client.stream(
-                    "GET",
+                    method,
                     current,
                     headers={"User-Agent": self._cfg.fetch_user_agent, "Accept": accept},
                     timeout=self._cfg.fetch_timeout_s,

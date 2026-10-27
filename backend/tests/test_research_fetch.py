@@ -677,3 +677,44 @@ async def test_content_type_of_reports_an_error_status_as_a_failure() -> None:
     with pytest.raises(FetchFailed) as raised:
         await f.content_type_of(PAGE_URL)
     assert raised.value.status == 404 and raised.value.kind == "http_status"
+
+
+async def test_content_type_of_asks_with_head_and_never_get() -> None:
+    methods: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        return httpx.Response(200, headers={"content-type": "application/pdf"})
+
+    f, web = fetcher(handler)
+    assert await f.content_type_of("https://shop.example.test/download?id=7") == "application/pdf"
+    assert methods == ["HEAD"] and len(web.seen) == 1
+    # robots.txt is the one thing it GETs: a different resource, and honouring it needs the file.
+    assert [r.method for r in web.robots_seen] == ["GET"]
+
+
+@pytest.mark.parametrize("status", [405, 501])
+async def test_a_server_that_refuses_head_is_unknown_not_retried_with_get(status: int) -> None:
+    methods: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        return httpx.Response(status)
+
+    f, _ = fetcher(handler)
+    with pytest.raises(FetchFailed) as raised:
+        await f.content_type_of(PAGE_URL)
+    assert raised.value.kind == "head_not_supported" and raised.value.status == status
+    assert methods == ["HEAD"]  # exactly one request: there is no fallback to GET
+
+
+async def test_head_redirects_are_followed_by_hand_under_the_address_policy() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/old":
+            return httpx.Response(301, headers={"location": "https://internal.example.test/x"})
+        return httpx.Response(200, headers={"content-type": "text/html"})
+
+    f, web = fetcher(handler)
+    with pytest.raises(FetchRefused) as raised:
+        await f.content_type_of("https://shop.example.test/old")
+    assert raised.value.kind == "address" and web.hosts == ["shop.example.test"]

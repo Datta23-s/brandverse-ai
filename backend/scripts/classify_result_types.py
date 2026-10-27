@@ -1,24 +1,36 @@
-"""What share of the search results the pipeline cannot take, by content type.
+"""What share of the search results the pipeline cannot take: PDFs, estimated cheaply.
 
     PYTHONPATH=. uv run python scripts/classify_result_types.py LOG.jsonl [LOG.jsonl ...]
+        [--sample 50] [--seed N] [--dry]
 
-(run from backend/; the logs are evaluation/search_rate/probe-*.jsonl)
+(run from backend/; the logs are evaluation/search_rate/*.jsonl)
 
 Owner, 2026-10-26: PDFs are not supported (docs/fetcher.md), and whether that matters is measured,
-not assumed. Every result URL the rate probe logged is classified by what its server answers with,
-and the share that are PDFs is reported overall and for the regulated group. A couple of percent
-stays a footnote; a fifth of the regulated sector's results is a real gap, and the owner rules
-again.
+not assumed. A couple of percent stays a footnote; a fifth of the regulated sector's results is a
+real gap and the owner rules again. The IP is already throttled by the search engines, so this
+spends as little of it as it can, in this order:
 
-Each distinct URL is asked once, for its response headers only (the body is never read), through the
-same `PageFetcher` the pipeline uses: its address policy, and robots.txt honoured, so a URL the
-fetcher would not request is counted as unreached and not requested. A path ending in `.pdf` is
-counted as a PDF by name, without a request. Writes `<first log>.types.json` beside the first log,
-one object per URL.
+1. **By extension, free.** A URL whose path ends in `.pdf` is a PDF with no request at all.
+2. **A random sample of the rest, with HEAD.** Each group (general, regulated) draws a seeded random
+   sample of up to `--sample` of its remaining distinct URLs and asks each for its response headers
+   only, through the same `PageFetcher` the pipeline uses (its address policy, robots.txt honoured).
+   HEAD, never GET: a server that refuses HEAD is counted as unknown, not retried with GET.
+   Concurrency is 1, and no URL is asked twice.
+3. **An estimate with its uncertainty, not a count.** The group's PDF share is the by-extension
+   count plus the sampled rate times the unsampled remainder, over all the group's URLs; the sampled
+   rate carries a 95% Wilson interval, which is carried into the share. Unknown samples (refused,
+   unreachable, HEAD refused) are reported and left out of the rate, so a high unknown share says
+   the estimate is weak rather than being hidden.
+
+`--dry` prints what WOULD be requested (how many URLs, per group) and makes no request, so the cost
+can be seen before it is spent. A run writes `<first log>.types.json` with one object per URL asked.
 """
 
+import argparse
 import asyncio
 import json
+import math
+import random
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -29,79 +41,116 @@ from app.errors import FetchError
 from app.memory.scoring import load_scoring
 from app.research.fetch import PageFetcher, is_pdf_url
 
-CONCURRENCY = 4
 
-
-def urls_by_group(paths: list[Path]) -> dict[str, dict[str, str | None]]:
-    """group -> {url: engine}, each distinct URL once per group (a URL returned by several
-    searches counts once)."""
-    groups: dict[str, dict[str, str | None]] = defaultdict(dict)
+def urls_by_group(paths: list[Path]) -> dict[str, list[str]]:
+    """group -> its distinct URLs in first-seen order (a URL returned by several searches counts
+    once). Reads only the `urls` the probes logged: no titles or snippets exist in the logs."""
+    groups: dict[str, dict[str, None]] = defaultdict(dict)
     for path in paths:
         for line in path.read_text(encoding="utf-8").splitlines():
             record = json.loads(line)
             if record.get("kind") != "search":
                 continue
-            for url, engine in record.get("urls", []):
-                groups[record.get("group", "ungrouped")].setdefault(url, engine)
-    return groups
+            for url, _engine in record.get("urls", []):
+                groups[record.get("group", "ungrouped")].setdefault(url, None)
+    return {group: list(urls) for group, urls in groups.items()}
+
+
+def wilson(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """The 95% Wilson score interval for a proportion; (0, 1) when nothing was sampled."""
+    if n == 0:
+        return 0.0, 1.0
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def plan(urls: list[str], sample: int, seed: int) -> tuple[list[str], list[str], list[str]]:
+    """(PDFs by extension, URLs to ask, URLs left unasked). The sample is seeded and random."""
+    by_extension = [u for u in urls if is_pdf_url(u)]
+    rest = [u for u in urls if not is_pdf_url(u)]
+    chosen = random.Random(seed).sample(rest, min(sample, len(rest)))  # noqa: S311 - not a secret
+    asked = set(chosen)
+    return by_extension, chosen, [u for u in rest if u not in asked]
 
 
 async def classify(fetcher: PageFetcher, url: str) -> str:
-    if is_pdf_url(url):
-        return "pdf (by name)"
     try:
         media = await fetcher.content_type_of(url)
     except FetchError as e:
-        detail = f"{type(e).__name__}:{e.kind}" if e.kind else type(e).__name__
-        return f"unreached: {detail}"
+        return f"unknown: {type(e).__name__}:{e.kind}" if e.kind else f"unknown: {type(e).__name__}"
     if media == "application/pdf":
-        return "pdf (by content type)"
+        return "pdf"
     if media in ("text/html", "application/xhtml+xml"):
         return "html"
     return f"other: {media or 'none declared'}"
 
 
-def share(counts: Counter[str], label: str) -> str:
-    total = sum(counts.values())
-    if not total:
-        return f"{label}: no URLs"
-    pdf = sum(n for k, n in counts.items() if k.startswith("pdf"))
-    reached = sum(n for k, n in counts.items() if not k.startswith("unreached"))
-    out = f"{label}: {total} distinct URLs; PDF {pdf} = {pdf / total:.1%} of all"
-    if reached:
-        out += f", {pdf / reached:.1%} of the {reached} reached"
-    return out
+def estimate(total: int, ext_pdf: int, answers: Counter[str]) -> tuple[float, float, float]:
+    """(point, low, high) for the group's PDF share of all `total` URLs."""
+    known = sum(n for k, n in answers.items() if not k.startswith("unknown"))
+    low_rate, high_rate = wilson(answers.get("pdf", 0), known)
+    rate = answers.get("pdf", 0) / known if known else 0.0
+    remainder = total - ext_pdf  # every non-extension URL is covered by the rate, asked or not
+    point = (ext_pdf + rate * remainder) / total
+    return (
+        point,
+        (ext_pdf + low_rate * remainder) / total,
+        (ext_pdf + high_rate * remainder) / total,
+    )
 
 
-async def main(paths: list[Path]) -> None:
-    groups = urls_by_group(paths)
+async def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("logs", nargs="+", type=Path)
+    ap.add_argument("--sample", type=int, default=50, help="per group, of the non-.pdf URLs")
+    ap.add_argument("--seed", type=int, default=20261027)
+    ap.add_argument("--dry", action="store_true", help="show the cost; make no request")
+    args = ap.parse_args()
+    groups = urls_by_group(args.logs)
+    plans = {g: plan(urls, args.sample, args.seed) for g, urls in groups.items()}
+
+    print("plan (no request is made for the by-extension PDFs):")
+    for g, (ext, asked, unasked) in plans.items():
+        print(
+            f"  {g}: {len(groups[g])} distinct URLs: {len(ext)} PDF by extension, "
+            f"{len(asked)} to ask with HEAD, {len(unasked)} left unasked"
+        )
+    print(f"  requests to third-party sites: {sum(len(a) for _, a, _ in plans.values())}")
+    if args.dry:
+        return
+
     cfg = load_scoring().research
-    results: dict[str, dict[str, dict[str, str | None]]] = {}
+    results: dict[str, dict[str, str]] = {}
     async with httpx.AsyncClient() as client:
         fetcher = PageFetcher(client, cfg)
-        gate = asyncio.Semaphore(CONCURRENCY)
+        for g, (_ext, asked, _unasked) in plans.items():
+            results[g] = {}
+            for url in asked:  # one at a time: the IP cannot afford a burst
+                results[g][url] = await classify(fetcher, url)
+            print(f"asked {len(asked)} URLs in group {g!r}", file=sys.stderr)
 
-        async def one(url: str) -> tuple[str, str]:
-            async with gate:
-                return url, await classify(fetcher, url)
-
-        for group, urls in groups.items():
-            done = await asyncio.gather(*(one(u) for u in urls))
-            results[group] = {u: {"engine": urls[u], "type": t} for u, t in done}
-            print(f"classified {len(done)} URLs in group {group!r}", file=sys.stderr)
-
-    everything: Counter[str] = Counter()
-    for group, rows in results.items():
-        counts = Counter(str(r["type"]) for r in rows.values())
-        everything.update(counts)
-        print(share(counts, group))
-        for kind, n in counts.most_common():
-            print(f"    {n:5d}  {kind}")
-    print(share(everything, "all groups"))
-    out = paths[0].with_suffix(".types.json")
+    print()
+    for g, (ext, asked, _unasked) in plans.items():
+        total = len(groups[g])
+        answers = Counter(results[g].values())
+        point, low, high = estimate(total, len(ext), answers)
+        print(
+            f"{g}: PDF share ~ {point:.1%} (95% interval {low:.1%} to {high:.1%}) of {total} URLs"
+        )
+        print(
+            f"    by extension {len(ext)}; sampled {len(asked)}: "
+            + ", ".join(f"{n} {k}" for k, n in answers.most_common())
+        )
+        unknown = sum(n for k, n in answers.items() if k.startswith("unknown"))
+        if asked and unknown / len(asked) > 0.25:
+            print(f"    WARNING: {unknown} of {len(asked)} samples unknown: the estimate is weak")
+    out = args.logs[0].with_suffix(".types.json")
     out.write_text(json.dumps(results, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"written: {out}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main([Path(p) for p in sys.argv[1:]]))
+    asyncio.run(main())
