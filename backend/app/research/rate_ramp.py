@@ -345,3 +345,27 @@ class SilentRecoveryController:
             self.phase, self.outcome = "done", "recovered"
             return [Event("confirmed" if clean else "flapped", at, {"clean": clean})]
         raise ValueError("the run is finished")
+
+
+# ── Which description does a run of asks fit? (registered 2026-10-27 06:43 UTC) ──────────────
+#
+# docs/evaluation-plan.md section 8 registered, before the ten asks 06:44..07:29 were made, what a
+# trickle (a bucket-like limit) and a window each predict. This applies exactly those rules to the
+# observed sequence, so the verdict is not a reading. `T` is an answer, `X` a refusal.
+
+
+def classify_pattern(
+    sequence: str, *, ask_gap_min: float = 5.0, min_apart_min: float = 20.0
+) -> str:
+    """ "window" (two or more answers in a row), "trickle" (isolated answers, at most three, any two
+    at least `min_apart_min` apart), "undecided" (no answer at all: both descriptions allow it), or
+    "neither"."""
+    if set(sequence) - {"T", "X"}:
+        raise ValueError("a sequence is made of T and X only")
+    if "T" not in sequence:
+        return "undecided"
+    if "TT" in sequence:
+        return "window"
+    at = [i for i, c in enumerate(sequence) if c == "T"]
+    apart = all((b - a) * ask_gap_min >= min_apart_min for a, b in zip(at, at[1:], strict=False))
+    return "trickle" if len(at) <= 3 and apart else "neither"

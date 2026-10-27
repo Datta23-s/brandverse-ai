@@ -13,6 +13,7 @@ from app.research.rate_ramp import (
     HoldController,
     RampController,
     SilentRecoveryController,
+    classify_pattern,
     trailing_count,
 )
 
@@ -322,3 +323,70 @@ def test_a_silent_schedule_that_is_not_increasing_or_positive_is_refused(
 ) -> None:
     with pytest.raises(ValueError):
         SilentRecoveryController(**bad)  # type: ignore[arg-type]
+
+
+# ── Which description a run of asks fits ─────────────────────────────────────────────────────
+
+# Every pattern the 52 run-2-only bucket fits predicted for the ten asks 06:44..07:29
+# (docs/evaluation-plan.md section 8): each must be classified as a trickle, or as undecided when
+# it holds no answer at all. If one were not, the registered table would not match the code.
+PREDICTED_BY_THE_FITS = [
+    "TXXXTXXXTX",
+    "TXXXTXXXXT",
+    "TXXXXTXXXT",
+    "TXXXXTXXXX",
+    "TXXXXXTXXX",
+    "XTXXXXTXXX",
+    "XTXXXXXTXX",
+    "XTXXXXXXTX",
+    "XXTXXXXXTX",
+    "XXTXXXXXXT",
+    "XXTXXXXXXX",
+    "XXXTXXXXXX",
+    "XXXXTXXXXX",
+    "XXXXXTXXXX",
+    "XXXXXXTXXX",
+    "XXXXXXXTXX",
+    "XXXXXXXXTX",
+]
+
+
+@pytest.mark.parametrize("sequence", PREDICTED_BY_THE_FITS)
+def test_every_pattern_the_bucket_fits_predicted_is_classified_a_trickle(sequence: str) -> None:
+    assert classify_pattern(sequence) == "trickle"
+
+
+def test_no_answer_at_all_is_undecided_because_both_descriptions_allow_it() -> None:
+    assert classify_pattern("XXXXXXXXXX") == "undecided"
+
+
+@pytest.mark.parametrize("sequence", ["XXXXXTTXXX", "TTXXXXXXXX", "XXXXXXXXTT", "XXXTTTTXXX"])
+def test_two_answers_in_a_row_after_a_dead_stretch_is_the_windows_prediction(sequence: str) -> None:
+    assert classify_pattern(sequence) == "window"
+
+
+@pytest.mark.parametrize(
+    "sequence",
+    [
+        "TXTXXXXXXX",  # isolated, but only ten minutes apart: a trickle is at least twenty
+        "TXXTXXXXXX",  # fifteen minutes apart
+        "XTXTXTXTXT",  # five isolated answers, ten apart
+    ],
+)
+def test_isolated_answers_closer_than_twenty_minutes_are_neither(sequence: str) -> None:
+    assert classify_pattern(sequence) == "neither"
+
+
+def test_twenty_minutes_apart_is_the_boundary_and_is_allowed() -> None:
+    assert classify_pattern("TXXXTXXXXX") == "trickle"  # exactly four asks = 20 minutes
+    assert classify_pattern("TXXTXXXXXX") == "neither"  # three asks = 15 minutes
+
+
+def test_more_than_three_answers_is_neither_even_if_twenty_minutes_apart() -> None:
+    # Four answers four asks apart need sixteen asks, so use a longer run: spacing alone is not it.
+    assert classify_pattern("TXXXTXXXTXXXTXXX") == "neither"
+
+
+def test_the_classifier_refuses_anything_but_t_and_x() -> None:
+    with pytest.raises(ValueError, match="T and X"):
+        classify_pattern("TXO")
