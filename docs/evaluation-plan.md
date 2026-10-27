@@ -1086,6 +1086,39 @@ The decisive test is unchanged and does not depend on either hypothesis: hold at
 gaps for at least 4 hours and 24 searches, distinct queries, from a rested start, and stop at the
 first refusal. It either holds or it does not.
 
+**Revision at 06:43 UTC, before the 06:44 ask: the H2 fit above did not survive 20 minutes of
+data, and its predictions 1 and 2 are WITHDRAWN.** The four asks after the 06:19 answer (06:24,
+06:29, 06:34, 06:39) were all refused. Every one of the 31 buckets that fitted both runs at 06:27
+needed a refill of at least about 2.9 an hour, and at 2.9 or more the next token was due by about
+06:40, so those fits predicted an answer at 06:34 or 06:39; there was none. Refitted to everything
+through 06:39: **no constant token bucket fits both runs** (the first run, with a full start, needs
+a refill of about 2.9 an hour or more; the second, through 06:39, allows at most 2.94 an hour, and
+only with a capacity of 4.9 to 6.8). The second run alone still admits 52 buckets, all with a
+refill under 2.94 an hour. So: either brave's limit is not one constant (it may differ between days,
+by time, or by how many requests were refused rather than answered; refused ones were assumed free
+and are not known to be), or the mechanism is not a bucket. No number is registered for the hold:
+**it is a measurement, and the fitted 10th-to-13th-search prediction no longer exists.** What the
+fits do still say is that the second run alone is hard to square with a sustained 6 an hour, and
+the first run alone is hard to square with less, and the hold is what settles it.
+
+*The extra hour is a test, registered here (owner, 2026-10-27: run the ramp until 07:30 UTC, then
+stop it).* The ramp keeps asking every five minutes: ten more asks, **06:44, 06:49, 06:54, 06:59,
+07:04, 07:09, 07:14, 07:19, 07:24 and 07:29** (answered = T, refused = X). Two descriptions make
+opposite predictions about their pattern, and the log is the check:
+
+| | Predicts for the ten asks |
+|---|---|
+| **A trickle** (a bucket-like limit; the 52 run-2-only fits) | No two answers in a row, ever. At most three answers (the fits give 0 in 6 of 52, 1 or 2 in most, 3 in 8), the earliest at 06:44, any two at least **20 minutes apart** (four asks), each followed by refusals until the next |
+| **A window** (a dead period, then the limit clears) | A dead stretch of refusals followed by **two or more consecutive answers** (T T) |
+| **Neither** | Anything else: for example answers that are not isolated and not consecutive-after-a-dead-period, or spacing under 20 minutes between isolated answers |
+
+Zero answers through 07:29 is **not** a result for either: six of the 52 bucket fits predict it and
+so would a window with a longer dead period; it is reported as undecided. The report gives the
+sequence with the times and which row it fits, "neither" included. If two answers come in a row the
+ramp's own rule (two clean in a row = recovered) ends it before 07:30 and that is itself the
+window's prediction coming true. The 06:19 answer followed by four refusals is already in the data
+and is not counted as part of this test.
+
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
 sustained rate of `R` searches per hour the recording phase takes `S / R` hours of wall clock, and
