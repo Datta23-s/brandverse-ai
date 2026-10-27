@@ -67,6 +67,24 @@ could not be valid. It certifies nothing and would have finished at best as `hel
 reason, the power setting that was changed, and how to restore it are in `Architecture.md` section 11,
 "Worker-host power". The next hold attempt is a separate file.
 
+## `hold-20261027T152950Z.jsonl` — the sustained hold: 9 searches, broke at the 9th
+
+Started 15:29:52 UTC on AC power, ten-minute gaps, new queries (seed 20261028, regulated list from
+entry 5). **Brave answered eight and refused the ninth at 16:50:02** (`hold_broke`, 1.336 hours in);
+every gap was 600.9 to 601.7 s and there was no late ask. The `summary` line is present because the
+hold finished by its own rule. **6 an hour is not a measured sustained rate**; the sustainable rate
+is below it by an unmeasured amount. Read the log's trailing-hour counts with the two searches from
+the stopped attempt (14:49:07 and 15:17:33, `hold-20261027T144905Z.jsonl`) in mind: they are inside
+the first hours of this one and are not counted in its `requests_in_trailing_hour` field. Five
+Modern Standby entries occurred during it on AC power and stopped nothing (see `docs/evaluation-plan.md`
+section 8, "The sustained hold").
+
+## `silent-*.jsonl` — the silent-wait recovery (when finished)
+
+Begun from the hold's break (16:50:02) with nothing asked since: one probe at 5, 10, 15, 20, 30, 45,
+60, 90, 120 and 180 minutes after it, then one confirming probe after the first clean answer. The
+result is an interval. The file is committed when the run has finished; until then it is untracked.
+
 ## The ramp, as designed
 
 `scripts/searxng_ramp_probe.py`: the gap between searches steps down 5, 4, 3, 2, 1.5, 1, 0.75, 0.5

@@ -25,7 +25,7 @@ highest level *tested* instead of inventing a ceiling.
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 LEVELS_MIN = (5.0, 4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5)  # minutes between searches, stepping down
 Phase = Literal["ramp", "backoff", "done"]
@@ -300,6 +300,7 @@ class SilentRecoveryController:
         self.phase: Literal["provoke", "silent", "confirm", "done"] = "provoke"
         self.provoked = 0
         self.broke_at: float | None = None
+        self.skipped_delays_min: list[float] = []
         self.probe_index = 0
         self.first_clean_delay_min: float | None = None
         self.last_refused_delay_min: float | None = None
@@ -308,6 +309,23 @@ class SilentRecoveryController:
         self.outcome: (
             Literal["recovered", "not_recovered_within_schedule", "no_break_provoked"] | None
         ) = None
+
+    @classmethod
+    def after_a_break(
+        cls, *, broke_at: float, now: float, margin_s: float = 5.0, **kw: Any
+    ) -> "SilentRecoveryController":
+        """Begin in silence from a throttle that ALREADY happened (a hold that broke, say) instead
+        of provoking a new one: nothing has been asked since `broke_at`, so the recovery measured is
+        from that break. Probe delays already past (within `margin_s` of now) are skipped, not made
+        late: a probe at the wrong delay would be a different measurement. The skipped delays are
+        recorded and the interval's lower bound stays 0 (the break itself was a refusal)."""
+        ctl = cls(**kw)
+        ctl.broke_at, ctl.phase = broke_at, "silent"
+        ctl.skipped_delays_min = [d for d in ctl.delays_min if broke_at + d * 60 <= now + margin_s]
+        ctl.probe_index = len(ctl.skipped_delays_min)
+        if ctl.probe_index == len(ctl.delays_min):
+            ctl.phase, ctl.outcome = "done", "not_recovered_within_schedule"
+        return ctl
 
     @property
     def done(self) -> bool:

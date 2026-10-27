@@ -67,6 +67,12 @@ async def main() -> None:
         "already served since then is subtracted from --rest-min (the rest is judged by actual "
         "silence, not by when this process started)",
     )
+    ap.add_argument(
+        "--broke-at",
+        default=None,
+        help="silent only: ISO time of a refusal that ALREADY happened (and nothing has been asked "
+        "since); recovery is probed from it instead of from a newly provoked throttle",
+    )
     ap.add_argument("--interval-min", type=float, default=10.0, help="hold only")
     ap.add_argument("--min-searches", type=int, default=24, help="hold only")
     ap.add_argument("--min-hours", type=float, default=4.0, help="hold only")
@@ -87,8 +93,15 @@ async def main() -> None:
     hold = HoldController(
         interval_min=args.interval_min, min_searches=args.min_searches, min_hours=args.min_hours
     )
-    silent = SilentRecoveryController()
     started = datetime.now(UTC)
+    if args.mode == "silent" and args.broke_at:
+        # Begin in silence from a throttle that already happened (a hold that broke): nothing has
+        # been asked since, so the recovery is measured from that break, not from a new burst.
+        silent = SilentRecoveryController.after_a_break(
+            broke_at=datetime.fromisoformat(args.broke_at).timestamp(), now=started.timestamp()
+        )
+    else:
+        silent = SilentRecoveryController()
     log = Log(args.out_dir / f"{args.mode}-{started:%Y%m%dT%H%M%SZ}.jsonl")
     last: dict[str, Any] = {}
 
@@ -159,10 +172,27 @@ async def main() -> None:
                     "why": "a drained bucket would make the hold measure the drained state",
                 }
             )
-        if rest_min > 0:
+        if args.mode == "hold" and rest_min > 0:  # the rest belongs to the hold alone
             await asyncio.sleep(rest_min * 60 / args.speed)
 
         next_at = time.time()
+        if args.mode == "silent" and args.broke_at:
+            log.write(
+                {
+                    "kind": "event",
+                    "event": "silence_from_an_existing_break",
+                    "utc": started.isoformat(),
+                    "broke_at": args.broke_at,
+                    "skipped_delays_min": silent.skipped_delays_min,
+                    "first_probe_after_min": None
+                    if silent.done
+                    else silent.delays_min[silent.probe_index],
+                    "note": "nothing has been asked since the break; skipped delays were not "
+                    "probed late, so the recovery interval's lower bound is the break itself",
+                }
+            )
+            if not silent.done:
+                next_at = silent.next_search_at(time.time())
         for n, (group, query) in enumerate(queue):
             controller_done = hold.done if args.mode == "hold" else silent.done
             if controller_done or time.monotonic() >= deadline:

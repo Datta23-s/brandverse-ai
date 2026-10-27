@@ -436,3 +436,45 @@ def test_a_break_after_a_late_gap_is_still_a_break_and_says_how_many_gaps_preced
     assert ctl.outcome == "broke"
     assert [e.kind for e in events] == ["late_ask", "hold_broke"]
     assert events[-1].detail["late_gaps"] == 1  # more time to refill, and it still broke
+
+
+# ── Silence from a break that already happened ───────────────────────────────────────────────
+
+
+def test_a_silence_begun_after_a_break_probes_at_the_delays_measured_from_that_break() -> None:
+    ctl = SilentRecoveryController.after_a_break(
+        broke_at=1000.0, now=1000.0 + 150.0, delays_min=(5.0, 10.0, 15.0)
+    )
+    assert ctl.phase == "silent" and ctl.skipped_delays_min == [] and ctl.probe_index == 0
+    assert ctl.next_search_at(1150.0) == 1300.0  # 5 minutes after the BREAK, not after "now"
+
+
+def test_delays_already_past_are_skipped_not_probed_late() -> None:
+    ctl = SilentRecoveryController.after_a_break(
+        broke_at=1000.0, now=1000.0 + 11 * 60, delays_min=(5.0, 10.0, 15.0, 20.0)
+    )
+    assert ctl.skipped_delays_min == [5.0, 10.0] and ctl.probe_index == 2
+    assert ctl.next_search_at(0.0) == 1000.0 + 15 * 60  # the next delay on the schedule
+    events = ctl.observe(at=1000.0 + 15 * 60, clean=True)
+    # The lower bound is the break (0), because the skipped probes were never made.
+    assert events[0].detail["recovered_between_min"] == [0.0, 15.0]
+
+
+def test_a_delay_within_the_margin_of_now_is_treated_as_past() -> None:
+    ctl = SilentRecoveryController.after_a_break(
+        broke_at=0.0, now=300.0 - 3.0, delays_min=(5.0, 10.0), margin_s=5.0
+    )
+    assert ctl.skipped_delays_min == [5.0]  # 3 s away is inside the margin: not probed on time
+
+
+def test_a_silence_begun_after_every_delay_has_passed_is_done_not_probing() -> None:
+    ctl = SilentRecoveryController.after_a_break(broke_at=0.0, now=10_000.0, delays_min=(5.0, 10.0))
+    assert ctl.done and ctl.outcome == "not_recovered_within_schedule"
+
+
+def test_skipped_delays_are_per_controller_not_shared() -> None:
+    a = SilentRecoveryController.after_a_break(
+        broke_at=0.0, now=700.0, delays_min=(5.0, 10.0, 30.0)
+    )
+    b = SilentRecoveryController()
+    assert a.skipped_delays_min == [5.0, 10.0] and b.skipped_delays_min == []

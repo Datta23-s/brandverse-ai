@@ -1136,8 +1136,8 @@ runs (0 of about 44,000)**, and the second run alone now admits only 10 buckets,
 of at most 1.14 an hour and a capacity of 6.2 to 6.8; the first run's nine clean answers at 10-minute
 gaps need more than that allows. The bucket description is dead for brave as a single constant.
 
-*Registered 2026-10-27 at 16:57 UTC, before the silent-wait's 10-minute probe (17:00:02); its 5-minute
-probe at 16:55:03 is known (refused) and is not part of this.* The silent-wait is measuring recovery
+*Registered 2026-10-27, committed at 16:56:31 UTC, before the silent-wait's 10-minute probe
+(17:00:02); its 5-minute probe at 16:55:03 is known (refused) and is not part of this.* The silent-wait is measuring recovery
 from the sustained hold's break (16:50:02) with **nobody asking** in between, which is the one
 comparison the ramp could not make. Two readings, with different predictions, neither fitted:
 (A) *asking was the cost*: the ramp's refusals lengthened its own throttle, so in silence the first
@@ -1158,6 +1158,45 @@ minutes, asking was the cost; if it takes as long, it was not. It has not been r
 the time of writing, about 14:40), so the rest the hold requires is satisfied many times over and
 whatever caused the refusals has had that long to lapse. The hold's first search is therefore also
 an unplanned datum: whether brave answers after about 7.5 hours of silence.
+
+### The sustained hold: 6 an hour did not hold (2026-10-27)
+
+*Result (log `evaluation/search_rate/hold-20261027T152950Z.jsonl`).* Ten-minute gaps from 15:29:52 UTC,
+on AC power. **Brave answered eight searches (15:29:52 to 16:40:01) and refused the ninth at
+16:50:02 ("too many requests"), 1.336 hours in.** Every gap was 600.9 to 601.7 s; there was no late
+ask. The hold ended at the first refusal, as designed, so **6 an hour is not a measured sustained
+rate**: it lasted about 1.3 hours, not the 4 hours and 24 searches that would have certified it. This
+settles the planning question in one direction only: the sustainable rate is **below 6 an hour**, by
+an amount not yet measured. It does not say what the rate is.
+
+*What it was run against, stated.* The machine had been silent for 7.7 hours; two earlier searches
+(14:49:07 and 15:17:33, from the stopped attempt) preceded it by 12 minutes, so brave had seen 10
+answered requests in the 2 hours 1 minute before the refusal. The refused request was the sixth in
+its trailing hour, and the 16:19:58, 16:29:59 and 16:40:01 requests had each been the sixth in
+theirs and were answered: **a limit of six per trailing hour (H1) is refuted** a second time, now
+by a refusal at exactly six. The three runs do not agree on a constant: fitted to a token bucket
+(capacity 1 to 12 units, refill 0.12 to 24 an hour, full at each run's start) runs 1 and 3
+(the 9 answered at 10-minute gaps, and this hold) fit **388** buckets together, refilling at most
+4.5 an hour; **the ramp fits none of them (0 for runs 1+2, 2+3 and 1+2+3)**. A variant in which
+refused requests cost units fits no better. The one thing the ramp did that the other two did not is
+ask repeatedly while being refused, which is what the silent-wait compares (above).
+
+*The sleep check you asked to be logged, answered.* The Windows log shows **five Modern Standby entries
+during the hold, while on AC power** (15:52:06 to 15:52:31, 16:00:57 to 16:09:38, 16:22:19 to
+16:25:31, 16:30:34 to 16:31:31, 16:38:50 to 16:38:55). **None stopped the hold**: no late ask, gaps
+within 1.7 s of 600. The same was true of the two standbys on AC before the setting changed (05:19
+to 05:32 and 05:40 to 06:03, through which the ramp kept asking every 300 s). So on this machine a
+Modern Standby on AC power does not freeze a job, before or after the change: **what froze work
+was running on battery**. The AC sleep timer set to "never" is not shown to have mattered; being
+plugged in is. The keep-awake request is likewise unshown. (`Architecture.md` section 11.)
+
+*For the recorder.* A recorder paced at 6 an hour for hours would have been refused, as the hold
+was; one paced at the average the hold actually achieved before refusal (10 answered in 2.0 hours,
+about 5 an hour) lasted that long and no longer. Both are why the recorder is adaptive
+(above): its pacing starts below the best rate seen and moves with the refusals. The session budget
+is a range: at 4 to 5 an hour, 30 × q searches take 6 to 7.5 hours for q = 1, 12 to 15 for q = 2 and
+18 to 22.5 for q = 3, plus the waiting after each refusal, which is why it is a range and not a
+schedule.
 
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
