@@ -161,3 +161,187 @@ class RampController:
             self.phase, self.outcome = "done", "not_recovered_within_cap"
             events.append(Event("not_recovered", at, {"cap_s": self.recovery_cap_s}))
         return events
+
+
+# ── The sustained hold and the silent-wait recovery (owner, 2026-10-27) ──────────────────────
+#
+# The ramp finds where to look; it does not certify a rate (five clean searches over twenty minutes
+# is a burst, and rate and count are confounded in it). These two are the decisive tests, run after
+# the ramp and in this order:
+#
+# 1. HOLD at one fixed gap for hours. If the steering engine stays clean for 24+ searches over 4+
+#    hours at 10-minute gaps (6 an hour), 6 an hour is a MEASURED sustained rate, the only kind a
+#    planning figure may rest on. Stops at the first degradation: a hold that breaks says so.
+# 2. SILENT-WAIT recovery. Provoke a throttle with a burst, then STOP ASKING and probe once at
+#    growing delays. If recovery is minutes when nobody asks and hours when somebody keeps asking,
+#    the recording must PAUSE on a throttle rather than retry, which is a rule of the procedure,
+#    not a tuning detail. The result is an interval (between the last refused probe and the first
+#    clean one), never a point: that is the resolution the schedule gives.
+
+WINDOW_S = 3600.0
+SILENT_DELAYS_MIN = (5.0, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0)
+
+
+def trailing_count(times: list[float], at: float, window_s: float = WINDOW_S) -> int:
+    """How many requests (answered or refused) fall in the `window_s` seconds up to and including
+    `at`: the EARLIER requests in `times`, plus `at` itself, which `times` must not yet contain.
+    The quantity a rolling-window hypothesis is about."""
+    return sum(1 for t in [*times, at] if at - window_s < t <= at)
+
+
+class HoldController:
+    """Fixed gap, stop at the first degradation, done after `min_searches` AND `min_hours`."""
+
+    def __init__(
+        self, *, interval_min: float = 10.0, min_searches: int = 24, min_hours: float = 4.0
+    ) -> None:
+        if interval_min <= 0 or min_searches < 1 or min_hours <= 0:
+            raise ValueError("interval_min, min_searches and min_hours must be positive")
+        self.interval_min, self.min_searches, self.min_hours = interval_min, min_searches, min_hours
+        self.times: list[float] = []  # every request, answered or refused
+        self.clean_count = 0
+        self.max_trailing = 0
+        self.broke_at: float | None = None
+        self.outcome: Literal["held", "broke"] | None = None
+
+    @property
+    def done(self) -> bool:
+        return self.outcome is not None
+
+    @property
+    def wait_s(self) -> float:
+        return self.interval_min * 60
+
+    def observe(self, *, at: float, clean: bool) -> list[Event]:
+        if self.done:
+            raise ValueError("the hold is finished")
+        in_window = trailing_count(self.times, at)
+        first = self.times[0] if self.times else at
+        self.times.append(at)
+        self.max_trailing = max(self.max_trailing, in_window)
+        if not clean:
+            self.broke_at, self.outcome = at, "broke"
+            return [
+                Event(
+                    "hold_broke",
+                    at,
+                    {
+                        "search_number": len(self.times),
+                        "clean_before": self.clean_count,
+                        "requests_in_trailing_hour_including_this": in_window,
+                        "after_s": at - first,
+                    },
+                )
+            ]
+        self.clean_count += 1
+        elapsed = at - first
+        if len(self.times) >= self.min_searches and elapsed >= self.min_hours * 3600:
+            self.outcome = "held"
+            return [
+                Event(
+                    "hold_held",
+                    at,
+                    {
+                        "searches": len(self.times),
+                        "hours": round(elapsed / 3600, 3),
+                        "max_requests_in_any_trailing_hour": self.max_trailing,
+                    },
+                )
+            ]
+        return []
+
+
+class SilentRecoveryController:
+    """Provoke a throttle with a burst, go silent, probe once at each delay after the break.
+
+    Phases: `provoke` (a search every `provoke_gap_min` until the engine degrades, at most
+    `provoke_cap` of them; if it never does, that is a finding about the burst ceiling and the run
+    ends), `silent` (no searches; one probe at each delay measured from the break), `confirm` (one
+    more probe `confirm_after_min` after the first clean one, to see that it held), `done`."""
+
+    def __init__(
+        self,
+        *,
+        provoke_gap_min: float = 2.0,
+        provoke_cap: int = 15,
+        delays_min: tuple[float, ...] = SILENT_DELAYS_MIN,
+        confirm_after_min: float = 10.0,
+    ) -> None:
+        if provoke_gap_min <= 0 or provoke_cap < 1 or confirm_after_min <= 0:
+            raise ValueError("gaps and caps must be positive")
+        if not delays_min or list(delays_min) != sorted(set(delays_min)) or delays_min[0] <= 0:
+            raise ValueError("delays must be positive and strictly increasing")
+        self.provoke_gap_min, self.provoke_cap = provoke_gap_min, provoke_cap
+        self.delays_min, self.confirm_after_min = delays_min, confirm_after_min
+        self.phase: Literal["provoke", "silent", "confirm", "done"] = "provoke"
+        self.provoked = 0
+        self.broke_at: float | None = None
+        self.probe_index = 0
+        self.first_clean_delay_min: float | None = None
+        self.last_refused_delay_min: float | None = None
+        self.first_clean_at: float | None = None
+        self.confirmed: bool | None = None
+        self.outcome: (
+            Literal["recovered", "not_recovered_within_schedule", "no_break_provoked"] | None
+        ) = None
+
+    @property
+    def done(self) -> bool:
+        return self.phase == "done"
+
+    def next_search_at(self, now: float) -> float:
+        """Epoch time of the next search (the first one is `now`). In `silent` this is the next
+        probe time: between probes NOTHING is requested."""
+        if self.phase == "provoke":
+            return now + self.provoke_gap_min * 60 if self.provoked else now
+        if self.phase == "silent" and self.broke_at is not None:
+            return self.broke_at + self.delays_min[self.probe_index] * 60
+        if self.phase == "confirm" and self.first_clean_at is not None:
+            return self.first_clean_at + self.confirm_after_min * 60
+        raise ValueError("the run is finished")
+
+    def observe(self, *, at: float, clean: bool) -> list[Event]:
+        if self.phase == "provoke":
+            self.provoked += 1
+            if not clean:
+                self.broke_at, self.phase = at, "silent"
+                return [
+                    Event(
+                        "break",
+                        at,
+                        {"searches_in_the_burst": self.provoked, "gap_min": self.provoke_gap_min},
+                    ),
+                    Event("silence_begins", at, {"first_probe_after_min": self.delays_min[0]}),
+                ]
+            if self.provoked >= self.provoke_cap:
+                self.phase, self.outcome = "done", "no_break_provoked"
+                return [Event("no_break_provoked", at, {"searches": self.provoked})]
+            return []
+        if self.phase == "silent":
+            if self.broke_at is None:
+                raise RuntimeError("silent phase without a break")
+            delay = self.delays_min[self.probe_index]
+            if clean:
+                self.first_clean_delay_min, self.first_clean_at = delay, at
+                self.phase = "confirm"
+                return [
+                    Event(
+                        "first_clean",
+                        at,
+                        {
+                            "recovered_between_min": [self.last_refused_delay_min or 0.0, delay],
+                            "after_s": at - self.broke_at,
+                        },
+                    )
+                ]
+            self.last_refused_delay_min = delay
+            self.probe_index += 1
+            if self.probe_index == len(self.delays_min):
+                self.phase, self.outcome = "done", "not_recovered_within_schedule"
+                return [Event("not_recovered", at, {"last_probe_after_min": delay})]
+            return [Event("still_throttled", at, {"after_min": delay})]
+        if self.phase == "confirm":
+            self.confirmed = clean
+            self.phase, self.outcome = "done", "recovered"
+            return [Event("confirmed" if clean else "flapped", at, {"clean": clean})]
+        raise ValueError("the run is finished")

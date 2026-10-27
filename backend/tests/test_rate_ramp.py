@@ -8,7 +8,13 @@ first clean answer and only believed once confirmed.
 
 import pytest
 
-from app.research.rate_ramp import LEVELS_MIN, RampController
+from app.research.rate_ramp import (
+    LEVELS_MIN,
+    HoldController,
+    RampController,
+    SilentRecoveryController,
+    trailing_count,
+)
 
 
 def drive(ctl: RampController, results: list[bool], *, start: float = 0.0) -> list[float]:
@@ -156,3 +162,163 @@ def test_nothing_can_be_observed_after_the_end() -> None:
 def test_a_ramp_that_does_not_step_down_is_refused(bad: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         RampController(**bad)  # type: ignore[arg-type]
+
+
+# ── The sustained hold ───────────────────────────────────────────────────────────────────────
+
+
+def run_hold(ctl: HoldController, results: list[bool], *, gap_s: float = 600.0) -> list[object]:
+    events: list[object] = []
+    for n, clean in enumerate(results):
+        events += ctl.observe(at=n * gap_s, clean=clean)
+        if ctl.done:
+            break
+    return events
+
+
+def test_a_hold_that_stays_clean_for_four_hours_and_24_searches_is_held() -> None:
+    ctl = HoldController()
+    events = run_hold(ctl, [True] * 25)  # 25 searches 10 minutes apart: 24 gaps = 4 hours exactly
+    assert ctl.done and ctl.outcome == "held" and len(ctl.times) == 25
+    assert events[-1].kind == "hold_held"  # type: ignore[attr-defined]
+    assert events[-1].detail["searches"] == 25 and events[-1].detail["hours"] == 4.0  # type: ignore[attr-defined]
+
+
+def test_a_hold_needs_BOTH_the_searches_and_the_hours() -> None:
+    quick = HoldController()  # 30 searches a minute apart: enough searches, nowhere near 4 hours
+    run_hold(quick, [True] * 30, gap_s=60.0)
+    assert not quick.done and quick.outcome is None
+    slow = HoldController()  # 10 searches an hour apart: more than 4 hours, too few searches
+    run_hold(slow, [True] * 10, gap_s=3600.0)
+    assert not slow.done
+
+
+def test_the_hold_stops_at_the_first_degradation_and_says_how_far_it_got() -> None:
+    ctl = HoldController()
+    events = run_hold(ctl, [True] * 7 + [False] + [True] * 30)
+    assert ctl.done and ctl.outcome == "broke" and len(ctl.times) == 8
+    detail = events[-1].detail  # type: ignore[attr-defined]
+    assert events[-1].kind == "hold_broke"  # type: ignore[attr-defined]
+    assert detail["search_number"] == 8 and detail["clean_before"] == 7
+    assert detail["after_s"] == 7 * 600.0
+
+
+def test_the_hold_records_the_most_requests_it_ever_put_in_one_trailing_hour() -> None:
+    ctl = HoldController(min_searches=7, min_hours=1.0)
+    events = run_hold(ctl, [True] * 7)  # 0, 10, ... 60 minutes: the window is (t-60, t]
+    assert ctl.outcome == "held"
+    assert events[-1].detail["max_requests_in_any_trailing_hour"] == 6  # type: ignore[attr-defined]
+
+
+def test_trailing_count_counts_refused_requests_too_and_the_window_is_half_open() -> None:
+    earlier = [0.0, 600.0, 1200.0, 1800.0, 2400.0]  # `at` is the request being counted, not in it
+    assert trailing_count(earlier, 3000.0) == 6  # five earlier plus this one
+    assert trailing_count([*earlier, 3000.0], 3600.0) == 6  # the request at t=0 has just left
+    assert trailing_count([*earlier, 3000.0], 3599.0) == 7  # at 3599 the one at 0 is still inside
+    assert trailing_count([], 5.0) == 1
+
+
+@pytest.mark.parametrize("bad", [{"interval_min": 0}, {"min_searches": 0}, {"min_hours": 0}])
+def test_a_hold_with_no_gap_no_searches_or_no_time_is_refused(bad: dict[str, float]) -> None:
+    with pytest.raises(ValueError):
+        HoldController(**bad)  # type: ignore[arg-type]
+
+
+def test_nothing_can_be_observed_after_the_hold_ends() -> None:
+    ctl = HoldController()
+    ctl.observe(at=0.0, clean=False)
+    with pytest.raises(ValueError, match="finished"):
+        ctl.observe(at=1.0, clean=True)
+
+
+# ── The silent-wait recovery ─────────────────────────────────────────────────────────────────
+
+
+def test_the_burst_is_provoked_at_its_gap_until_the_engine_degrades() -> None:
+    ctl = SilentRecoveryController(provoke_gap_min=2.0)
+    assert ctl.next_search_at(1000.0) == 1000.0  # the first search is now
+    ctl.observe(at=1000.0, clean=True)
+    assert ctl.next_search_at(1000.0) == 1120.0  # then every 2 minutes
+    ctl.observe(at=1120.0, clean=True)
+    events = ctl.observe(at=1240.0, clean=False)
+    assert [e.kind for e in events] == ["break", "silence_begins"]
+    assert events[0].detail == {"searches_in_the_burst": 3, "gap_min": 2.0}
+    assert ctl.phase == "silent" and ctl.broke_at == 1240.0
+
+
+def test_in_silence_nothing_is_asked_between_the_probes() -> None:
+    ctl = SilentRecoveryController(delays_min=(5.0, 10.0, 30.0))
+    ctl.observe(at=0.0, clean=False)  # the break at t = 0
+    assert ctl.next_search_at(0.0) == 300.0  # the first probe, 5 minutes after the break
+    ctl.observe(at=300.0, clean=False)
+    assert (
+        ctl.next_search_at(300.0) == 600.0
+    )  # then 10 minutes AFTER THE BREAK, not after the probe
+    ctl.observe(at=600.0, clean=False)
+    assert ctl.next_search_at(600.0) == 1800.0  # a 20-minute silence to the 30-minute probe
+
+
+def test_recovery_is_an_interval_between_the_last_refused_probe_and_the_first_clean_one() -> None:
+    ctl = SilentRecoveryController(delays_min=(5.0, 10.0, 15.0, 20.0))
+    ctl.observe(at=0.0, clean=False)
+    ctl.observe(at=300.0, clean=False)
+    ctl.observe(at=600.0, clean=False)
+    events = ctl.observe(at=900.0, clean=True)
+    assert events[0].kind == "first_clean"
+    assert events[0].detail["recovered_between_min"] == [10.0, 15.0]  # not "at 15"
+    assert ctl.phase == "confirm" and ctl.first_clean_delay_min == 15.0
+
+
+def test_one_confirming_probe_follows_the_first_clean_one() -> None:
+    ctl = SilentRecoveryController(delays_min=(5.0,), confirm_after_min=10.0)
+    ctl.observe(at=0.0, clean=False)
+    ctl.observe(at=300.0, clean=True)
+    assert ctl.next_search_at(300.0) == 900.0  # 10 minutes after the first clean one
+    events = ctl.observe(at=900.0, clean=True)
+    assert events[0].kind == "confirmed" and ctl.confirmed is True and ctl.outcome == "recovered"
+
+
+def test_a_recovery_that_flaps_is_recorded_as_flapped_not_confirmed() -> None:
+    ctl = SilentRecoveryController(delays_min=(5.0,))
+    ctl.observe(at=0.0, clean=False)
+    ctl.observe(at=300.0, clean=True)
+    events = ctl.observe(at=900.0, clean=False)
+    assert events[0].kind == "flapped" and ctl.confirmed is False and ctl.done
+
+
+def test_a_schedule_that_runs_out_without_recovery_says_so() -> None:
+    ctl = SilentRecoveryController(delays_min=(5.0, 10.0))
+    ctl.observe(at=0.0, clean=False)
+    ctl.observe(at=300.0, clean=False)
+    events = ctl.observe(at=600.0, clean=False)
+    assert ctl.done and ctl.outcome == "not_recovered_within_schedule"
+    assert events[-1].kind == "not_recovered" and events[-1].detail == {
+        "last_probe_after_min": 10.0
+    }
+
+
+def test_a_burst_that_never_provokes_a_throttle_is_a_finding_not_a_hang() -> None:
+    ctl = SilentRecoveryController(provoke_cap=3)
+    for n in range(3):
+        events = ctl.observe(at=n * 120.0, clean=True)
+    assert ctl.done and ctl.outcome == "no_break_provoked"
+    assert events[-1].kind == "no_break_provoked" and events[-1].detail == {"searches": 3}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"delays_min": ()},
+        {"delays_min": (10.0, 5.0)},
+        {"delays_min": (5.0, 5.0)},
+        {"delays_min": (0.0, 5.0)},
+        {"provoke_gap_min": 0},
+        {"provoke_cap": 0},
+        {"confirm_after_min": 0},
+    ],
+)
+def test_a_silent_schedule_that_is_not_increasing_or_positive_is_refused(
+    bad: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        SilentRecoveryController(**bad)  # type: ignore[arg-type]
