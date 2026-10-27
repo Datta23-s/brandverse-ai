@@ -202,7 +202,12 @@ class HoldController:
         self.clean_count = 0
         self.max_trailing = 0
         self.broke_at: float | None = None
-        self.outcome: Literal["held", "broke"] | None = None
+        # A gap longer than this many intervals is LATE: the machine slept, or something stalled.
+        # More time between asks only gives a limit longer to refill, so a late gap can make a pass
+        # easier and never a break, which is why it cannot certify one.
+        self.late_factor = 1.5
+        self.late_gaps_s: list[float] = []
+        self.outcome: Literal["held", "held_with_gaps", "broke"] | None = None
 
     @property
     def done(self) -> bool:
@@ -217,11 +222,27 @@ class HoldController:
             raise ValueError("the hold is finished")
         in_window = trailing_count(self.times, at)
         first = self.times[0] if self.times else at
+        events: list[Event] = []
+        if self.times and at - self.times[-1] > self.late_factor * self.interval_min * 60:
+            gap = at - self.times[-1]
+            self.late_gaps_s.append(gap)
+            events.append(
+                Event(
+                    "late_ask",
+                    at,
+                    {
+                        "gap_s": round(gap, 1),
+                        "planned_s": self.interval_min * 60,
+                        "search_number": len(self.times) + 1,
+                    },
+                )
+            )
         self.times.append(at)
         self.max_trailing = max(self.max_trailing, in_window)
         if not clean:
             self.broke_at, self.outcome = at, "broke"
             return [
+                *events,
                 Event(
                     "hold_broke",
                     at,
@@ -230,25 +251,28 @@ class HoldController:
                         "clean_before": self.clean_count,
                         "requests_in_trailing_hour_including_this": in_window,
                         "after_s": at - first,
+                        "late_gaps": len(self.late_gaps_s),
                     },
-                )
+                ),
             ]
         self.clean_count += 1
         elapsed = at - first
         if len(self.times) >= self.min_searches and elapsed >= self.min_hours * 3600:
-            self.outcome = "held"
+            self.outcome = "held_with_gaps" if self.late_gaps_s else "held"
             return [
+                *events,
                 Event(
-                    "hold_held",
+                    "hold_held" if not self.late_gaps_s else "hold_held_with_gaps",
                     at,
                     {
                         "searches": len(self.times),
                         "hours": round(elapsed / 3600, 3),
                         "max_requests_in_any_trailing_hour": self.max_trailing,
+                        "late_gaps_s": [round(g, 1) for g in self.late_gaps_s],
                     },
-                )
+                ),
             ]
-        return []
+        return events
 
 
 class SilentRecoveryController:

@@ -46,6 +46,21 @@ def event_record(event: Event) -> dict[str, Any]:
     }
 
 
+def keep_awake() -> bool:
+    """Ask Windows not to put the machine to sleep because it is idle, for as long as this process
+    runs (ES_CONTINUOUS | ES_SYSTEM_REQUIRED; released when the process exits). On 2026-10-27 the
+    machine slept for 80 minutes in the middle of a timed run and the schedule slipped with it.
+    This stops IDLE sleep only: a closed lid or a manual sleep still sleeps, which is why the hold
+    also detects and records late asks. Returns whether the request was accepted."""
+    if sys.platform != "win32":
+        return False
+    es_continuous, es_system_required = 0x80000000, 0x00000001
+    previous = ctypes.windll.kernel32.SetThreadExecutionState(  # type: ignore[attr-defined]
+        es_continuous | es_system_required
+    )
+    return bool(previous)
+
+
 def memory_available_gb() -> float | None:
     """Physical memory available to the machine, in GB (Windows). Logged with every search so a
     run that is killed comes with a timeline (Architecture.md section 11, "Worker-host memory")."""

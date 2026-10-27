@@ -38,7 +38,7 @@ from app.research.rate_ramp import (
     trailing_count,
 )
 from app.research.search import SearxngSearch
-from scripts.rate_probe_lib import Log, event_record, observe, queries
+from scripts.rate_probe_lib import Log, event_record, keep_awake, observe, queries
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UNREACHABLE_LIMIT = 3
@@ -59,6 +59,13 @@ async def main() -> None:
     )
     ap.add_argument(
         "--rest-min", type=float, default=90.0, help="hold only: silence before the first search"
+    )
+    ap.add_argument(
+        "--silent-since",
+        default=None,
+        help="hold only: ISO time of the last request made to the engine by anything; the rest "
+        "already served since then is subtracted from --rest-min (the rest is judged by actual "
+        "silence, not by when this process started)",
     )
     ap.add_argument("--interval-min", type=float, default=10.0, help="hold only")
     ap.add_argument("--min-searches", type=int, default=24, help="hold only")
@@ -123,17 +130,37 @@ async def main() -> None:
         times: list[float] = []
         unreachable = 0
 
-        if args.mode == "hold" and args.rest_min > 0:
+        awake = keep_awake()
+        log.write(
+            {
+                "kind": "event",
+                "event": "keep_awake_requested",
+                "accepted": awake,
+                "utc": started.isoformat(),
+                "note": "stops idle sleep only; a closed lid or manual sleep still sleeps",
+            }
+        )
+        rest_min = args.rest_min
+        silent_for_min = 0.0
+        if args.mode == "hold" and args.silent_since:
+            since = datetime.fromisoformat(args.silent_since)
+            silent_for_min = max(0.0, (started - since).total_seconds() / 60)
+            rest_min = max(0.0, args.rest_min - silent_for_min)
+        if args.mode == "hold":
             log.write(
                 {
                     "kind": "event",
-                    "event": "resting",
+                    "event": "resting" if rest_min > 0 else "rest_already_served",
                     "utc": started.isoformat(),
-                    "rest_min": args.rest_min,
+                    "rest_required_min": args.rest_min,
+                    "silent_for_min": round(silent_for_min, 1),
+                    "rest_remaining_min": round(rest_min, 1),
+                    "silent_since": args.silent_since,
                     "why": "a drained bucket would make the hold measure the drained state",
                 }
             )
-            await asyncio.sleep(args.rest_min * 60 / args.speed)
+        if rest_min > 0:
+            await asyncio.sleep(rest_min * 60 / args.speed)
 
         next_at = time.time()
         for n, (group, query) in enumerate(queue):
@@ -178,6 +205,8 @@ async def main() -> None:
                 "clean": hold.clean_count,
                 "max_requests_in_any_trailing_hour": hold.max_trailing,
                 "hours": round((hold.times[-1] - hold.times[0]) / 3600, 3) if hold.times else 0,
+                "late_gaps_s": [round(g, 1) for g in hold.late_gaps_s],
+                "keep_awake_accepted": awake,
             }
         else:
             summary = {

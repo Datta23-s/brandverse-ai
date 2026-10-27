@@ -390,3 +390,49 @@ def test_more_than_three_answers_is_neither_even_if_twenty_minutes_apart() -> No
 def test_the_classifier_refuses_anything_but_t_and_x() -> None:
     with pytest.raises(ValueError, match="T and X"):
         classify_pattern("TXO")
+
+
+# ── Late asks: a hold that slept cannot be certified (2026-10-27) ────────────────────────────
+
+
+def test_a_gap_over_one_and_a_half_intervals_is_a_late_ask_and_is_recorded() -> None:
+    ctl = HoldController()
+    ctl.observe(at=0.0, clean=True)
+    on_time = ctl.observe(at=600.0, clean=True)
+    late = ctl.observe(at=600.0 + 1801.0, clean=True)  # 30 minutes after a 10-minute plan
+    assert on_time == [] and [e.kind for e in late] == ["late_ask"]
+    assert late[0].detail == {"gap_s": 1801.0, "planned_s": 600.0, "search_number": 3}
+    assert ctl.late_gaps_s == [1801.0]
+
+
+def test_a_gap_at_exactly_one_and_a_half_intervals_is_not_late() -> None:
+    ctl = HoldController()
+    ctl.observe(at=0.0, clean=True)
+    assert ctl.observe(at=900.0, clean=True) == [] and ctl.late_gaps_s == []
+
+
+def test_a_hold_that_finishes_with_a_late_gap_is_held_with_gaps_not_held() -> None:
+    ctl = HoldController(min_searches=3, min_hours=0.1)
+    ctl.observe(at=0.0, clean=True)
+    ctl.observe(at=600.0, clean=True)  # on time
+    events = ctl.observe(at=600.0 + 3600.0, clean=True)  # the machine slept for an hour
+    assert ctl.outcome == "held_with_gaps"
+    assert [e.kind for e in events] == ["late_ask", "hold_held_with_gaps"]
+    assert events[-1].detail["late_gaps_s"] == [3600.0]
+
+
+def test_a_clean_hold_with_no_late_gap_is_still_plain_held() -> None:
+    ctl = HoldController(min_searches=3, min_hours=0.1)
+    for n in range(3):
+        events = ctl.observe(at=n * 600.0, clean=True)
+    assert ctl.outcome == "held" and events[-1].kind == "hold_held"
+    assert events[-1].detail["late_gaps_s"] == []
+
+
+def test_a_break_after_a_late_gap_is_still_a_break_and_says_how_many_gaps_preceded_it() -> None:
+    ctl = HoldController()
+    ctl.observe(at=0.0, clean=True)
+    events = ctl.observe(at=4000.0, clean=False)
+    assert ctl.outcome == "broke"
+    assert [e.kind for e in events] == ["late_ask", "hold_broke"]
+    assert events[-1].detail["late_gaps"] == 1  # more time to refill, and it still broke
