@@ -1034,6 +1034,58 @@ project saw, and a note in `docs/searxng.md`, are consistent with that and prove
 recovery time is over-measured. A cleaner variant would wait silently and probe once at increasing
 delays. Neither is run yet; the result, when it lands, is reported with both caveats.
 
+*Stop quoting 12 an hour (owner, 2026-10-27).* The planning candidate is **6 an hour**, not 12. Five
+clean searches over twenty minutes is a burst. The fixed-interval run's nine clean searches at
+10-minute gaps over 1.5 hours is the stronger evidence, and it sits at 6 an hour. Nothing in this
+section is a planning figure until the sustained hold below has run.
+
+*What brave did, 2026-10-27, as the ramp ran (UTC; answered = ✓, refused "too many requests" = ✗).*
+05:36 ✓, 05:41 ✓, 05:46 ✓, 05:51 ✓, 05:56 ✓, 06:00 ✓ (the sixth in 24 minutes), **06:04 ✗** (the
+seventh), 06:09 ✗, 06:14 ✗, **06:19 ✓** (26 rows, 15 minutes after the break), **06:24 ✗** (the
+confirming search, refused again). So brave came back for exactly one search and then relapsed. The
+ramp's controller did what it was built to do: it reset its confirmation instead of declaring
+recovery, and it records the first clean answer at 900 s as a first clean answer, not as the
+recovery time. No recovery time has been measured.
+
+*Two readings, both hypotheses, both fitted to two runs.* Neither is a finding.
+
+- **H1, a sliding window (the owner's reading): at most six requests in any trailing hour.** For
+  it: the fixed-interval run never put more than six in any hour and all nine were clean; the ramp
+  was refused on its seventh request within the hour. **Against it, within minutes of its being
+  stated:** the answer at 06:19 came with ten requests in the trailing hour (seven answered, three
+  refused), which H1 forbids, and the relapse at 06:24 is not what a window that had just let one
+  through predicts. H1 as stated does not fit the 06:19 answer.
+- **H2, a token bucket: a small capacity that each answered request spends one unit of, refilled
+  slowly.** A search over a brute-force grid of capacities (1 to 12) and refill rates (0.3 to 24 an
+  hour), with one unit per answered request and refused requests free, finds that a bucket of
+  about **4.3 to 5.1** units refilling about **2.9 to 4.3 an hour** reproduces both runs exactly,
+  the answer at 06:19 and the relapse at 06:24 included, and nothing else on the grid does (31 of
+  about 44,000 pairs). Assumptions the fit makes and does not test: the bucket was full at the start
+  of both runs; refused requests cost nothing; the cost of an answered request is the same however
+  many results it returns. Three parameters (capacity, refill, starting level) fitted to two runs: it
+  is a description of the data, not an explanation of brave.
+
+*What H2 predicts, registered before the tests it concerns are run (2026-10-27, written by 06:27
+UTC, before the ramp's 06:29 search; its log is the check).*
+1. **A sustained 6 an hour will NOT hold.** At a refill of 2.9 to 4.3 an hour a 6-an-hour hold
+   drains the bucket by about 2 to 3 units an hour, so a hold started from a full bucket is first
+   refused at the **10th to 13th search** (2 to 2.2 hours in). If it instead stays clean for 24+
+   searches, H2 is wrong and 6 an hour stands as measured.
+2. **The sustainable rate would then be the refill, about 3 to 4 an hour,** not 6. The recording
+   phase at 3 an hour is `S / 3` hours: q = 1, 10 hours; q = 2, 20 hours; q = 3, 30 hours. At 4 an
+   hour: 7.5, 15 and 22.5 hours. That is two to three overnight sessions at q = 1 or 2, and four or
+   more at q = 3. These are predictions of a hypothesis, to be replaced by the measurement.
+3. **While the ramp keeps asking every five minutes, brave should answer about three to four times
+   an hour with refusals between** (the saturated regime, in which successes arrive at the refill
+   rate). This is observable now, in the ramp's own log, and costs nothing extra.
+4. **The hold must start from a rested bucket,** or it measures the drained state and says nothing
+   about the sustained rate: at least 90 minutes of silence before its first search (a full refill is
+   about 1.2 to 1.6 hours at the fitted rates).
+
+The decisive test is unchanged and does not depend on either hypothesis: hold at exactly 10-minute
+gaps for at least 4 hours and 24 searches, distinct queries, from a rested start, and stop at the
+first refusal. It either holds or it does not.
+
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
 sustained rate of `R` searches per hour the recording phase takes `S / R` hours of wall clock, and
