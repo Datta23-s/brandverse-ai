@@ -1119,6 +1119,35 @@ ramp's own rule (two clean in a row = recovered) ends it before 07:30 and that i
 window's prediction coming true. The 06:19 answer followed by four refusals is already in the data
 and is not counted as part of this test.
 
+*Result of the registered hour (written 2026-10-27, after the fact; the log is
+`evaluation/search_rate/ramp-20261027T053618Z.jsonl`).* **The test did not complete, and its
+verdict is "undecided".** The ramp's last ask was **07:09:20**. The machine was suspended from about
+07:10 and woke at 08:29:37 UTC, which is when the 07:30 stop job, whose timer froze with it, finally
+ran; so the ramp did not run past 07:30, but only **six of the ten registered asks were made**
+(06:44, 06:49, 06:54, 06:59, 07:04, 07:09) and the other four (07:14 to 07:29) were never asked.
+**All six were refused.** `classify_pattern("XXXXXX")` is `undecided`: no answer is the one outcome
+a trickle and a window both allow. The log has no `summary` line (the process was stopped, not
+finished). Neither description was confirmed or refuted by the test.
+
+What the data does say, with no test attached: brave answered once (06:19) and then refused **ten
+asks in a row** (06:24 to 07:09, one every five minutes), 50 minutes after that answer and 65
+minutes after the break. Refitted to everything through 07:09: **no constant token bucket fits both
+runs (0 of about 44,000)**, and the second run alone now admits only 10 buckets, all with a refill
+of at most 1.14 an hour and a capacity of 6.2 to 6.8; the first run's nine clean answers at 10-minute
+gaps need more than that allows. The bucket description is dead for brave as a single constant.
+
+*A third reading, untested and not fitted: asking while throttled lengthens the throttle.* Ten
+straight refusals while asking every five minutes, against an earlier throttling this project saw
+last for over twenty-five minutes while being asked, is what that reading expects; so would a
+ban of unknown fixed length. The data cannot tell them apart. The silent-wait recovery test is built
+to: provoke a throttle, stop asking, and probe once at growing delays. If recovery then comes in
+minutes, asking was the cost; if it takes as long, it was not. It has not been run.
+
+*Consequence for the hold.* Seven and a half hours of silence followed the last ask (07:09:20 to
+the time of writing, about 14:40), so the rest the hold requires is satisfied many times over and
+whatever caused the refusals has had that long to lapse. The hold's first search is therefore also
+an unplanned datum: whether brave answers after about 7.5 hours of silence.
+
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
 sustained rate of `R` searches per hour the recording phase takes `S / R` hours of wall clock, and

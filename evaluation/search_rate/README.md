@@ -40,7 +40,23 @@ Limits on reading it:
 - The gaps between searches were not exactly 10 minutes (16m19s, then 10m02s, ...). Rates are
   computed from the logged timestamps, never the nominal interval.
 
-## `ramp-*.jsonl` — the ramp (when present)
+## `ramp-20261027T053618Z.jsonl` — the ramp: 20 searches, stopped, no summary line
+
+Started 2026-10-27 05:36 UTC. **Twenty searches, 05:36:20 to 07:09:20; the file has no `summary` line**
+because the process was stopped, not finished. The machine was suspended from about 07:10 and woke
+at 08:29:37 UTC, which is when the scheduled 07:30 stop ran; the ramp made no asks after 07:09:20.
+What the log shows, in order (T answered, X refused "too many requests"):
+
+| Asks | 05:36–06:00 (5 min, then 4 min from 06:00) | 06:04 | 06:09, :14 | 06:19 | 06:24 – 07:09 (every 5 min) |
+|---|---|---|---|---|---|
+| Brave | 6 × T | X (the break) | X, X | T (26 rows) | 10 × X |
+
+The registered test of the ten asks 06:44 to 07:29 (`docs/evaluation-plan.md` section 8) was
+**incomplete**: six were made (all X) and four were not. Its verdict is "undecided". The ramp's
+rule of two clean answers in a row was never met, so it never reported a recovery time. **Nothing in
+this file is a rate that may be quoted.** Read the rest of this section for the format.
+
+## The ramp, as designed
 
 `scripts/searxng_ramp_probe.py`: the gap between searches steps down 5, 4, 3, 2, 1.5, 1, 0.75, 0.5
 minutes, five distinct searches at each, stopping at the first degradation of the steering engine
