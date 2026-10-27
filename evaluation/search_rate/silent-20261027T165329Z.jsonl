@@ -1,0 +1,2 @@
+{"kind": "header", "mode": "silent", "started_utc": "2026-10-27T16:53:29.232337+00:00", "engine": "brave", "engines_enabled": ["brave", "duckduckgo", "wikipedia"], "searxng_version": "2026.10.19+81371861f", "seed": 20261029, "regulated_start": 10, "rest_min": null, "interval_min": null, "min_searches": null, "min_hours": null, "url": "http://127.0.0.1:8888"}
+{"kind": "event", "event": "keep_awake_requested", "accepted": true, "utc": "2026-10-27T16:53:29.232337+00:00", "note": "stops idle sleep only; a closed lid or manual sleep still sleeps"}

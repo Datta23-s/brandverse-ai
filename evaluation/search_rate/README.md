@@ -79,11 +79,18 @@ the first hours of this one and are not counted in its `requests_in_trailing_hou
 Modern Standby entries occurred during it on AC power and stopped nothing (see `docs/evaluation-plan.md`
 section 8, "The sustained hold").
 
-## `silent-*.jsonl` — the silent-wait recovery (when finished)
+## `silent-20261027T165329Z.jsonl` — a failed launch: 0 searches
 
-Begun from the hold's break (16:50:02) with nothing asked since: one probe at 5, 10, 15, 20, 30, 45,
-60, 90, 120 and 180 minutes after it, then one confirming probe after the first clean answer. The
-result is an interval. The file is committed when the run has finished; until then it is untracked.
+The first silent launch rested for 90 minutes before asking anything (the hold's rest applied to every
+mode). It asked brave nothing, so the break was intact; I stopped it and fixed the bug. Kept as a record.
+
+## `silent-20261027T165440Z.jsonl` — the silent-wait recovery: 9 probes, one clean
+
+Begun from the hold's break (16:50:02) with nothing asked since: probes at 5, 10, 15, 20, 30, 45 and
+60 minutes were refused; **the 90-minute probe (18:20:03) was answered and the confirming probe ten
+minutes later (18:30:04) was refused** (`flapped`). Recovery lies between 60 and 90 minutes; the
+120- and 180-minute probes were not made. One run, an interval, not a rate (`docs/evaluation-plan.md`
+section 8).
 
 ## The ramp, as designed
 

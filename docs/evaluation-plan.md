@@ -1147,6 +1147,19 @@ or not anyone asks*: the first clean probe is **no earlier than the ramp's 15 mi
 confirming probe is **refused again** (a relapse, as at 06:24). Anything else, including no clean
 probe by 180 minutes, is "neither". The result is an interval between two probes, never a point.
 
+*Result (log `evaluation/search_rate/silent-20261027T165440Z.jsonl`; one run).* Brave refused every
+probe at 5, 10, 15, 20, 30, 45 and 60 minutes after the break, **answered the 90-minute probe
+(18:20:03, 90.0 minutes after 16:50:02), and refused the confirming probe ten minutes later
+(18:30:04).** Recovery lies between 60 and 90 minutes after the break; the probes at 120 and 180
+minutes were not needed and not made. Against the registered readings: (A) is **not** met (no clean
+probe by 45 minutes, and the confirming probe was refused); (B) is met as written (first clean no
+earlier than 15 minutes, confirming probe refused). What this supports and what it does not: in
+silence this throttle lasted 60 to 90 minutes, longer than the ramp's 15 minutes *while being asked*,
+so asking was not shown to lengthen it; and a single clean answer was followed by a refusal, as at
+06:19 in the ramp. It does not give a refill rate, does not distinguish a slow bucket from a ban of
+fixed length, and rests on one break. The earlier silent launch (`silent-20261027T165329Z`) made no
+searches and is kept as a record of the rest bug.
+
 *A third reading, untested and not fitted: asking while throttled lengthens the throttle.* Ten
 straight refusals while asking every five minutes, against an earlier throttling this project saw
 last for over twenty-five minutes while being asked, is what that reading expects; so would a
@@ -1336,10 +1349,12 @@ does not exist yet, and nothing here is tuned):
    the session ends cleanly (item 6 above): the in-flight request is discarded, the manifest says
    where to resume. A dead night ends instead of burning its attempts into a ban.
 6. **Whether a retry is harmless is still open, and the delays are configuration so either answer
-   fits.** If asking while throttled prolongs the throttle (the silent-wait test, not yet run), the
-   backoff must be a *pause* with a few probes, not a retry loop. The first ramp recovered after 15
-   minutes while still asking, which argues the loop is not ruinous; one run is not evidence. Until
-   the silent-wait test has run, the default is retries with increasing delay, **provisional**.
+   fits.** The silent-wait test has run once (above): recovery took 60 to 90 minutes with nobody
+   asking, and the first ramp recovered after 15 minutes while still asking, so asking was not shown
+   to be the cost. What that does show is that retry delays of minutes are futile against a throttle
+   of this length: they spend requests and recover nothing. The default stays retries with increasing
+   delay, **provisional**, and the delays are configuration; whether to pause for about an hour
+   instead is the owner's decision, on one run.
 
 *What it changes about the hold.* The hold's job shrinks to what a planning figure needs: **roughly
 how many overnight sessions to budget.** The budget is a range, `S / (achieved rate × session
