@@ -1042,13 +1042,30 @@ sampled rate over the remainder, with unknown samples reported and left out of t
 made). A couple of percent stays a footnote; a fifth of the regulated sector's results is a real
 gap and the owner rules again. The by-extension count alone, from the 9-search log and with no
 request made, is a **floor**: 10 of 120 distinct regulated-group URLs (8.3%) and 1 of 96 general ones
-(1.0%). It is a lower bound from nine searches and not the answer. *Not yet run, by instruction*
-("wait"). The sample size is open: 50 *per group* is 100 requests, double the 50 first named, and is
-what makes the regulated figure usable on its own; the owner chooses.
+(1.0%). It is a lower bound from nine searches and not the answer.
 
-### The recording must be resumable (owner, 2026-10-27)
+**Ruled 2026-10-27 (owner): 50 HEAD requests, all on the regulated group, none on the general one.**
+The general group's free floor (1 of 96 by extension alone) already answers it and needs no request;
+the open question is only whether regulated PDFs are a real share, and 8.3% from nine searches
+already suggests they are, so the requests are spent where the answer is in doubt
+(`--sample 50 --sample-group regulated`; the general group is reported as a floor, never as an
+estimate, since nothing in it is sampled). **Not run yet:** it waits for the ramp to finish and a
+fuller URL log, as instructed.
 
-*Why.* The machine that runs the recording can be killed at any time, and on 2026-10-26 it was: the
+### The recording is captured request by request, atomically, and is resumable (owner, 2026-10-27)
+
+**The rule: a request is captured atomically or not at all.** If a session dies partway through a
+request's ranked query list, that request's partial capture is **discarded** and the request is
+redone from its first query in the next session. Resumability works at **request** granularity, not
+search granularity, and the manifest tracks completed *requests*, not completed searches. *Why:*
+each request's snapshot is internally coherent, captured within one session, and the 3-day window
+(above) runs cleanly from that one capture time. A straddled request would have query 1 from Monday
+and query 3 from Wednesday, and the analysis would then be reasoning about staleness *within* a
+request as well as between arms. *Cost:* a handful of redone searches, at most the clean ones
+already done for the request in flight. This closes the question left open earlier of how a request
+that straddles sessions is treated against the window: **there is no such request.**
+
+*Why resumability at all.* The machine that runs the recording can be killed at any time, and on 2026-10-26 it was: the
 memory-pressure reaper stopped an overnight job while the session was idle (`Architecture.md` §11,
 "Worker-host memory"). The recording is the largest overnight job in the project; a kill at search
 180 of 270 with nothing durable loses the night, and with the search rate this low a night is not
@@ -1056,36 +1073,51 @@ cheap. Sleep, a reboot and Docker restarting are the same event. So **the record
 survive its own death**, and this is a requirement of the procedure, stated before the snapshot mode
 is built so that it is built in rather than added after:
 
-1. **Durable as it happens.** Each completed search is written durably before the next begins:
-   the snapshot entry (Redis, AOF) and a line in an append-only manifest on disk, flushed and
-   fsynced. Nothing is held in memory to be written at the end.
-2. **A manifest of what is captured.** One line per attempted search: the request, the query and
-   its normalised key, the declared engine set, the time, the outcome (captured, or degraded and
-   not recorded), the result count and the entry's content hash. It is the answer to "what is
-   already done" and the record that the recording was complete.
-3. **A restart picks up where it stopped, and does not repeat.** On start the recorder reads the
-   manifest and the snapshot, skips every captured search, and reports "N of S captured, M to go"
-   before it does anything. A search that was in flight when the process died has no completed
-   manifest line and is **redone, never assumed**.
-4. **The entry and its line must agree.** The manifest line is written after the entry is durable,
-   so a line means the entry exists. An entry with no line (killed between the two) is adopted: the
-   snapshot is write-once, so the recorder verifies the entry's hash, writes the missing line and
-   moves on instead of fetching again.
-5. **A degraded search is an attempt, not a capture.** It is logged as an attempt with its failed
-   engines and retried later (above); it never appears in the snapshot, and a restart counts it as
-   outstanding.
+1. **Staged, then committed in one step.** A request's searches are written to a staging area as
+   they complete, for diagnosis only: a restart never resumes from staging. When the last search of
+   the request has come back clean, the whole request is committed to the write-once snapshot in a
+   single atomic operation (one Redis transaction), and only then is its manifest line written. A
+   staged request that was never committed is **deleted, not repaired**, and never touched the
+   write-once snapshot; this is how "discard" is compatible with "never overwritten".
+2. **A manifest of completed requests.** One append-only line per *committed request*, flushed and
+   fsynced: the request, its ranked query list and normalised keys, the declared engine set, the
+   time of its first fetch and of its commit, each query's result count, a content hash of the
+   committed set, and the number of attempts it took (discarded partials are logged as attempts in
+   the same file, never as captures). A request has no line until it is committed. The manifest is
+   the answer to "what is already done" and the record that the recording was complete.
+3. **A restart verifies, discards, and continues at the next request.** On start the recorder reads
+   the manifest, checks that each committed request's entries exist and match their hash, deletes
+   any staging left over, and reports "N of 30 requests captured, M to go, K partials discarded"
+   before it does anything. A request in flight when the process died has no manifest line and is
+   **redone from its first query, never continued and never assumed**.
+4. **The line and the commit must agree.** The manifest line is written after the commit has been
+   read back and its hash checked, so a line means the request's entries exist. A committed request
+   with no line (killed between the two) is verified against its hash and given its line, not
+   fetched again; a line whose entries are missing or differ (the Redis AOF can lose up to a second
+   after a crash) marks the request outstanding, and it is redone.
+5. **A degraded search is an attempt, not a capture.** Inside a request it is retried within the
+   session (above). If the session ends first, the request is discarded like any other partial. A
+   committed request therefore never contains a degraded search.
+5a. **The window runs from one capture time.** The N = 3 days window of the earlier ruling is
+   measured from the request's first fetch in the session that committed it; every query of the
+   request was fetched in that session.
 6. **The recording stops cleanly when the engine does.** A throttle that persists past the recovery
-   time measured by the ramp ends the session with the manifest intact and a stated resumption
-   point, not a crash.
-6a. **Record request by request, in order,** so a request's whole ranked list is captured
-   contiguously, and a request left half-captured by a stop is finished first on resumption. The
-   per-request window (above) runs from a request's first fetch; a request whose list sits half
-   captured for days is the case this ordering exists to avoid. How a request that genuinely
-   straddles sessions is to be treated against the N = 3 days window is **not decided here**; it is
-   for the owner, and the manifest records the times so the straddle is visible.
+   time measured by the ramp ends the session with the manifest intact, the in-flight request
+   discarded, and a stated resumption point, not a crash. Requests are recorded in the test set's
+   order, one at a time.
 7. **The manifest is committed with the snapshot's hash and date range** (the snapshot itself is
-   not, being third-party content), so "the recording covered these S searches under this declared
+   not, being third-party content), so "the recording covered these requests under this declared
    set" is checkable from the repository.
+8. **The recording does not load the encoder** (owner, 2026-10-27). Recording is search, fetch and
+   store; the encoder is the largest consumer on the worker host (1.03 GB resident after embedding,
+   `Architecture.md` §11) and the recording is the long overnight job that a memory shortage already
+   killed once. Nothing on the recording path imports `sentence_transformers`, `torch` or
+   `transformers` at import time, and a test in CI's Backend job makes that impossible rather than
+   remembered (`tests/test_recording_does_not_load_the_encoder.py`: a static import-closure check
+   that runs in CI, which cannot install the encoder, and a runtime check where it is installed;
+   both shown to fail on a direct import, a transitive one, and a recorder written outside the
+   listed modules). The browsers are closed during recording and evaluation runs: 2.4 GB for
+   something nobody is watching at 3 a.m.
 
 ## 9. Required items
 

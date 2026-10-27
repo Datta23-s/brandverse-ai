@@ -43,10 +43,12 @@ spacing.
 A URL whose path ends in `.pdf` is `FetchUnsupported`/`pdf` **without being requested** (not even
 its robots.txt), and a response of type `application/pdf` is the same, so a regulator's circular is
 a counted skip, not an opaque failure or extracted garbage. There is no PDF extraction. Whether
-that matters is measured: `scripts/classify_result_types.py` classifies every result URL the rate
-probe logged by what its server answers (headers only, through the same fetcher, so robots.txt is
-honoured), and reports the PDF share overall and for the regulated query group. Report when the
-probe finishes; the owner rules again if it is a real gap (`docs/evaluation-plan.md` section 8).
+that matters is measured, cheaply, because the search engines already throttle this IP:
+`scripts/classify_result_types.py` counts `.pdf` paths in the logged result URLs (free: no request),
+and asks **HEAD, never GET** (robots.txt honoured, no fallback to GET) for a seeded random sample of
+50 of the *regulated* group's remaining URLs only; the general group is reported as its free floor.
+The result is an estimate with its 95% interval. Run when the rate ramp has finished and the URL log
+is fuller; the owner rules again if it is a real gap (`docs/evaluation-plan.md` section 8).
 
 `CachedPages` puts a Redis cache above it: the page body under `research.page_cache_ttl_s`, **a
 parameter with no default in the code**, an entry older than the TTL in force a miss, a ledger and

@@ -1,7 +1,7 @@
 """What share of the search results the pipeline cannot take: PDFs, estimated cheaply.
 
     PYTHONPATH=. uv run python scripts/classify_result_types.py LOG.jsonl [LOG.jsonl ...]
-        [--sample 50] [--seed N] [--dry]
+        [--sample 50] [--sample-group regulated] [--seed N] [--dry]
 
 (run from backend/; the logs are evaluation/search_rate/*.jsonl)
 
@@ -11,9 +11,13 @@ real gap and the owner rules again. The IP is already throttled by the search en
 spends as little of it as it can, in this order:
 
 1. **By extension, free.** A URL whose path ends in `.pdf` is a PDF with no request at all.
-2. **A random sample of the rest, with HEAD.** Each group (general, regulated) draws a seeded random
-   sample of up to `--sample` of its remaining distinct URLs and asks each for its response headers
-   only, through the same `PageFetcher` the pipeline uses (its address policy, robots.txt honoured).
+2. **A random sample of the rest, with HEAD, on ONE group.** Owner, 2026-10-27: 50 HEAD requests,
+   all on the regulated group and none on the general one. The general group's free floor (1 of 96
+   by extension) already answers it and needs no request; the open question is only whether
+   regulated PDFs are a real share, so the requests go where the answer is in doubt. The sampled
+   group draws a seeded random sample of up to `--sample` of its remaining distinct URLs and asks
+   each for its response headers only, through the same `PageFetcher` the pipeline uses (its address
+   policy, robots.txt honoured).
    HEAD, never GET: a server that refuses HEAD is counted as unknown, not retried with GET.
    Concurrency is 1, and no URL is asked twice.
 3. **An estimate with its uncertainty, not a count.** The group's PDF share is the by-extension
@@ -105,12 +109,23 @@ def estimate(total: int, ext_pdf: int, answers: Counter[str]) -> tuple[float, fl
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("logs", nargs="+", type=Path)
-    ap.add_argument("--sample", type=int, default=50, help="per group, of the non-.pdf URLs")
+    ap.add_argument("--sample", type=int, default=50, help="HEAD requests, all on --sample-group")
+    ap.add_argument(
+        "--sample-group",
+        default="regulated",
+        help="the ONE group that is sampled (owner, 2026-10-27); every other group gets its free "
+        "by-extension floor and no request at all",
+    )
     ap.add_argument("--seed", type=int, default=20261027)
     ap.add_argument("--dry", action="store_true", help="show the cost; make no request")
     args = ap.parse_args()
     groups = urls_by_group(args.logs)
-    plans = {g: plan(urls, args.sample, args.seed) for g, urls in groups.items()}
+    if args.sample_group not in groups:
+        raise SystemExit(f"no group {args.sample_group!r} in the logs (found {sorted(groups)})")
+    plans = {
+        g: plan(urls, args.sample if g == args.sample_group else 0, args.seed)
+        for g, urls in groups.items()
+    }
 
     print("plan (no request is made for the by-extension PDFs):")
     for g, (ext, asked, unasked) in plans.items():
@@ -135,6 +150,12 @@ async def main() -> None:
     print()
     for g, (ext, asked, _unasked) in plans.items():
         total = len(groups[g])
+        if not asked:  # not sampled: only what the extension alone proves, said to be only that
+            print(
+                f"{g}: at least {len(ext) / total:.1%} are PDFs ({len(ext)} of {total} URLs end in "
+                ".pdf); a FLOOR from the extension alone, no request made, nothing sampled"
+            )
+            continue
         answers = Counter(results[g].values())
         point, low, high = estimate(total, len(ext), answers)
         print(
