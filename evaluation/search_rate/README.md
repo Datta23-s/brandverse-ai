@@ -56,6 +56,17 @@ The registered test of the ten asks 06:44 to 07:29 (`docs/evaluation-plan.md` se
 rule of two clean answers in a row was never met, so it never reported a recovery time. **Nothing in
 this file is a rate that may be quoted.** Read the rest of this section for the format.
 
+## `hold-20261027T144905Z.jsonl` — the first hold attempt: 2 searches, stopped by hand
+
+The sustained hold (fixed 10-minute gaps, stop at the first refusal) started 14:49:05 UTC after
+7.7 hours of silence. **Two searches, both answered by brave** (14:49:07, 22 rows; 15:17:33, 20 rows),
+**28.4 minutes apart instead of 10**: the laptop was in Modern Standby for part of that interval and
+the `late_ask` event records it (1706.5 s against a planned 600 s). I stopped it at about 15:25,
+leaving no `summary` line, because the machine was on battery (19%, sleep after 180 s) and the run
+could not be valid. It certifies nothing and would have finished at best as `held_with_gaps`. The
+reason, the power setting that was changed, and how to restore it are in `Architecture.md` section 11,
+"Worker-host power". The next hold attempt is a separate file.
+
 ## The ramp, as designed
 
 `scripts/searxng_ramp_probe.py`: the gap between searches steps down 5, 4, 3, 2, 1.5, 1, 0.75, 0.5

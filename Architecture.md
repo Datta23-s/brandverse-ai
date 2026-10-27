@@ -1046,6 +1046,59 @@ was running at that moment (the test suites had been run in the preceding hours)
 - A `.wslconfig` memory cap would bound the Docker VM; with the VM at 0.95 GB it would not free
   anything now. Not done.
 
+### Worker-host power — a setting changed 2026-10-27, and why
+
+**What happened.** The System log shows the laptop entering Modern Standby (S0 low-power idle)
+five times on 2026-10-27 UTC, the long ones at 07:10:00 to 08:29:33 (80 minutes), 08:29:33 to
+14:41:12 (about 6 hours) and 14:45:53 (fully suspended 14:51:14) to 15:09:39. Timed jobs stopped
+with it: the ramp's last ask was 07:09:20, 40 seconds before the first; the 07:30 stop job's timer
+froze and it fired at 08:29:37 on resume; the sustained hold's second search came 28.4 minutes
+after the first instead of 10. **The machine was on battery** (discharging at 19 to 20% charge; a
+"power source change" is logged at 06:16 UTC), where the sleep timer was **180 seconds**. The
+keep-awake request the probes make (`SetThreadExecutionState`, accepted) did **not** prevent
+standby: a process asking not to be slept is not honoured on this machine, and it must not be
+relied on.
+
+**What was changed (owner approved, run without elevation).** The active scheme is *Balanced*
+(`381b4222-f694-41f0-9685-ff5bb260df2e`). Only the **plugged-in (AC)** values changed:
+
+| Setting | Before | After |
+|---|---|---|
+| Sleep after, on AC | 300 s (5 minutes) | **0 (never)** |
+| Hibernate after, on AC | 0 (never) | 0 (unchanged; the command was run and succeeded) |
+| Sleep after, on battery | 180 s | 180 s (**not changed**) |
+| Hibernate after, on battery | never | never (not changed) |
+| Display off after, AC / battery | 300 s / 180 s | not changed |
+
+**It persists until changed back.** It is a property of the power scheme, not of any process, and
+survives reboots. **It does nothing while the laptop is on battery.** To restore:
+
+```
+powercfg /change standby-timeout-ac 5
+```
+
+(5 is minutes; the other values above were not altered, so there is nothing else to restore.)
+Verify with `powercfg /query SCHEME_CURRENT SUB_SLEEP`. Any long timed job on this machine needs it
+plugged in; whether it then still sleeps is a **logged check, not an assumption** (below).
+
+**Checking it works.** After the change, the hold logs every ask and flags any gap over 1.5
+intervals as a `late_ask`, and the System log's Modern Standby entries (Kernel-Power events 506 and
+507) over the run's span are read at the end. If the machine sleeps again with the machine plugged
+in and the AC timer at "never", the setting is not doing what it claims and the overnight recording
+design must be rethought before Phase 10, not during it.
+
+**Two harness behaviours observed the same day, so a failure notice is read correctly.**
+- *Exit code 127 from a background job is what a force-killed one reports; it does not mean "command
+  not found".* Reproduced 2026-10-27 at 15:26 UTC: a background job that ran to completion exited 0,
+  and an identical one whose python child was stopped with `Stop-Process -Force` exited **127**. The
+  ramp's "failure" at 08:29:38 was the stop job's own kill, one second earlier.
+- *A background job does not reliably inherit the working directory.* The first launch of the hold
+  (`cd backend && uv run python scripts/...`) ran from the repository root with the base Python and
+  failed with exit 2 (script not found); the cause was not established. Long jobs are launched with
+  absolute paths (`uv --directory C:/Brandverse/backend run python scripts/...`), which worked.
+- Notifications for a job that finished while the machine was suspended arrive only when it wakes
+  (here, hours late); the job's output file has the real time.
+
 ### Redis free tier — checked, and why Redis runs locally
 
 Upstash's free plan (upstash.com/pricing/redis, checked 2026-10-14): **250 MB data, 500K commands
