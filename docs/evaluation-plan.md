@@ -1019,6 +1019,21 @@ in the 9-search run, over twelve hours before. `summarise_search_rate.py` reads 
 logs; the ramp writes its own `summary` line. The result is the §8 input: the highest sustainable
 rate for brave and the recovery time.
 
+*Two confounds in the ramp, named before its result is quoted (2026-10-27).* (1) **Rate and count
+are not separated.** A ramp that steps the gap down also accumulates searches: brave broke on the
+7th search after 28 minutes, at the second search of the 4-minute level. That is consistent with a
+rate limit (15 an hour is too fast) and equally with a budget (about six or seven searches in half
+an hour, whatever the gaps). "The last fully clean level" therefore means "five searches at that gap
+were clean", which is **not** a sustained rate: five searches over 20 minutes cannot show that 12 an
+hour holds for hours. The fixed-interval run did show nine clean searches at 10-minute gaps over 1.5
+hours. A **sustained hold** at the candidate rate for hours, after recovery, is what a figure to plan
+the recording on needs; the ramp finds where to look, it does not certify a rate. (2) **Recovery is
+measured while still searching.** After the break the ramp keeps searching at the back-off gap
+until brave answers. If searching while throttled lengthens the throttle (the first throttling this
+project saw, and a note in `docs/searxng.md`, are consistent with that and prove nothing), the
+recovery time is over-measured. A cleaner variant would wait silently and probe once at increasing
+delays. Neither is run yet; the result, when it lands, is reported with both caveats.
+
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
 sustained rate of `R` searches per hour the recording phase takes `S / R` hours of wall clock, and
