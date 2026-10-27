@@ -993,16 +993,31 @@ few minutes, then no recovery in twenty-five. How many searches per hour the thr
 unmeasured, so **the length of the recording phase is not yet known**, and no figure below is a
 result.
 
-*The measurement.* `backend/scripts/searxng_rate_probe.py`: one search every 10 minutes for 14 hours,
-each a distinct query, unattended. The first run (from 15:16 UTC, four searches,
-`evaluation/search_rate/probe-20261026T151600Z.jsonl`) logged counts only and was stopped at 15:55
-UTC; the **second run from 15:55 UTC** (`probe-20261026T155534Z.jsonl`) also logs every URL returned,
-and alternates two groups of queries (general kitchen and food products; the regulated sector: FSSAI,
-ASCI, BIS, CDSCO), so the content-type share of results (PDFs, below) can be reported per group.
-It starts from the throttled state, so it measures recovery time as well as the clean rate.
-`backend/scripts/summarise_search_rate.py` reports the clean and the answered rate, time to first
-clean search, and each engine's record. If the clean rate at 10-minute spacing is high, a second run
-at a shorter spacing is needed to find the ceiling; 10 minutes is a starting point, not a finding.
+*The first measurements were interrupted and are not rates.* A fixed one-search-per-10-minutes probe
+ran twice: four searches (15:16 UTC, counts only, stopped by hand to add URL logging) and nine
+searches (15:55 to 17:23 UTC, killed by the machine's memory-pressure reaper, below). Brave answered
+9 of 9, duckduckgo CAPTCHA'd 9 of 9 and contributed nothing, wikipedia was throttled in 6 of 9 and
+contributed nothing in any. A fixed 10-minute spacing could only ever measure itself (6 an hour is
+its arithmetic maximum, and brave never approached a limit at it) and gave no recovery datapoint.
+Both logs are kept as evidence of the attempt, with a README saying so
+(`evaluation/search_rate/`).
+
+*The measurement is therefore a ramp (owner, 2026-10-26).* `backend/scripts/searxng_ramp_probe.py`,
+logic in `app/research/rate_ramp.py` (pure, 16 tests). The gap between searches steps down 5, 4, 3, 2,
+1.5, 1, 0.75, 0.5 minutes with five distinct searches at each level; **stepping stops at the first
+degradation of brave**, and the level it broke at is recorded. The highest *sustainable* rate is the
+last level at which all five searches were clean, never the level that broke. It then backs off to
+that level and keeps searching until brave answers cleanly again: the time from the break to the
+first clean answer is the **recovery time**, believed only after a second clean answer in a row, and
+capped at three hours. **Only brave steers it**: duckduckgo (9 of 9 CAPTCHAs) and wikipedia (zero
+rows) are logged and never decide, and are excluded from the stepping logic on that evidence. If
+brave never breaks, the report says the highest level *tested*, not a ceiling. Each search is one
+fsynced line (so a killed run keeps what it did), with timestamps, the gap since the previous
+search, per-engine status and reasons, result counts and every result URL. Its queries are distinct
+within the run; the regulated-group list is a fixed list, so about five of its queries also appeared
+in the 9-search run, over twelve hours before. `summarise_search_rate.py` reads the fixed-interval
+logs; the ramp writes its own `summary` line. The result is the §8 input: the highest sustainable
+rate for brave and the recovery time.
 
 *The arithmetic that turns a rate into a duration.* Searches to record: `S = 30 × q` (the planner
 runs once per request; above), `q` configured and not yet chosen, three used for illustration. At a
@@ -1017,10 +1032,60 @@ sessions, **the design changes** (a different search source, fewer queries per r
 recording) rather than being discovered in November. The figure goes here when the probe has run.
 
 *PDFs (owner, 2026-10-26).* PDFs are not supported (`docs/fetcher.md`); a PDF is skipped visibly as
-an unsupported content type. Whether that matters is measured, not assumed: the share of result URLs
-that are PDFs, overall and for the regulated group, is reported when the probe finishes. If it is a
-couple of percent it stays a footnote; if it is a fifth of the regulated sector's results it is a
-real gap and the owner rules again.
+an unsupported content type. Whether that matters is measured, not assumed, **and measured cheaply**
+because the search engines already throttle this IP: (1) by extension first, which needs no request
+(a path ending `.pdf`); (2) for the rest, **HEAD, never GET**, on a seeded random sample, not on every
+URL, with robots.txt honoured and no fallback to GET when a server refuses HEAD (counted unknown);
+(3) the share is reported as an estimate with its 95% interval, the by-extension count plus the
+sampled rate over the remainder, with unknown samples reported and left out of the rate
+(`scripts/classify_result_types.py`, 11 tests; `--dry` shows the number of requests before any is
+made). A couple of percent stays a footnote; a fifth of the regulated sector's results is a real
+gap and the owner rules again. The by-extension count alone, from the 9-search log and with no
+request made, is a **floor**: 10 of 120 distinct regulated-group URLs (8.3%) and 1 of 96 general ones
+(1.0%). It is a lower bound from nine searches and not the answer. *Not yet run, by instruction*
+("wait"). The sample size is open: 50 *per group* is 100 requests, double the 50 first named, and is
+what makes the regulated figure usable on its own; the owner chooses.
+
+### The recording must be resumable (owner, 2026-10-27)
+
+*Why.* The machine that runs the recording can be killed at any time, and on 2026-10-26 it was: the
+memory-pressure reaper stopped an overnight job while the session was idle (`Architecture.md` §11,
+"Worker-host memory"). The recording is the largest overnight job in the project; a kill at search
+180 of 270 with nothing durable loses the night, and with the search rate this low a night is not
+cheap. Sleep, a reboot and Docker restarting are the same event. So **the recording procedure must
+survive its own death**, and this is a requirement of the procedure, stated before the snapshot mode
+is built so that it is built in rather than added after:
+
+1. **Durable as it happens.** Each completed search is written durably before the next begins:
+   the snapshot entry (Redis, AOF) and a line in an append-only manifest on disk, flushed and
+   fsynced. Nothing is held in memory to be written at the end.
+2. **A manifest of what is captured.** One line per attempted search: the request, the query and
+   its normalised key, the declared engine set, the time, the outcome (captured, or degraded and
+   not recorded), the result count and the entry's content hash. It is the answer to "what is
+   already done" and the record that the recording was complete.
+3. **A restart picks up where it stopped, and does not repeat.** On start the recorder reads the
+   manifest and the snapshot, skips every captured search, and reports "N of S captured, M to go"
+   before it does anything. A search that was in flight when the process died has no completed
+   manifest line and is **redone, never assumed**.
+4. **The entry and its line must agree.** The manifest line is written after the entry is durable,
+   so a line means the entry exists. An entry with no line (killed between the two) is adopted: the
+   snapshot is write-once, so the recorder verifies the entry's hash, writes the missing line and
+   moves on instead of fetching again.
+5. **A degraded search is an attempt, not a capture.** It is logged as an attempt with its failed
+   engines and retried later (above); it never appears in the snapshot, and a restart counts it as
+   outstanding.
+6. **The recording stops cleanly when the engine does.** A throttle that persists past the recovery
+   time measured by the ramp ends the session with the manifest intact and a stated resumption
+   point, not a crash.
+6a. **Record request by request, in order,** so a request's whole ranked list is captured
+   contiguously, and a request left half-captured by a stop is finished first on resumption. The
+   per-request window (above) runs from a request's first fetch; a request whose list sits half
+   captured for days is the case this ordering exists to avoid. How a request that genuinely
+   straddles sessions is to be treated against the N = 3 days window is **not decided here**; it is
+   for the owner, and the manifest records the times so the straddle is visible.
+7. **The manifest is committed with the snapshot's hash and date range** (the snapshot itself is
+   not, being third-party content), so "the recording covered these S searches under this declared
+   set" is checkable from the repository.
 
 ## 9. Required items
 

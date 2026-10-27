@@ -982,6 +982,70 @@ answers HTTP 200 with no results when its upstream engines are throttled (the pr
 that rather than reporting "no hits"), and about ten searches in a few minutes got this laptop's IP
 throttled for over twenty minutes, so the live search budget is an open question, not a given.
 
+### Worker-host memory — measured 2026-10-27
+
+The laptop is the worker host (above): Redis, SearXNG, the Postgres test container, the API, the
+worker with its encoder, and later the evaluation runs. On 2026-10-26 it ran short of memory while
+the session was idle and Claude Code's memory-pressure reaper stopped an overnight background job
+(the rate probe, 9 searches in; `evaluation/search_rate/README.md`). This records what was measured,
+what was not, and what follows. Nothing below changes the machine.
+
+**The machine.** Windows 11, 15.69 GB RAM, up since 2026-10-22; commit charge 14.8 of 21.2 GB; page
+file 5.5 GB allocated, 1.4 GB peak use. At rest (idle, Docker up, no run): **3.3 to 3.6 GB available**
+(21 to 23%), of which about 2.1 GB is standby cache and 1.0 GB free.
+
+**Who holds it, resident, at rest.**
+
+| Holder | GB | Note |
+|---|---|---|
+| Claude (12 processes) | 2.4 | the harness itself |
+| svchost (95 processes) | 1.9 | Windows services |
+| Browsers: chrome 1.0, Edge 0.4, Edge WebView 0.95 | 2.4 | closable |
+| Docker's WSL2 VM (`vmmemWSL`) | 0.95 | no `.wslconfig`, so it may grow to about 7.6 GB |
+| Defender, Docker Desktop, the rest | ~1 | |
+| **The three containers** (`docker stats`) | **0.19** | SearXNG 131 MB, Postgres 52 MB, Redis 9 MB |
+
+The containers are not the problem. The kernel pools are 1.3 GB, and of the 14.8 GB committed about
+2.2 GB is in neither a process nor a pool.
+
+**What a run in flight adds (measured in clean processes, `-I`, Windows peak counters).**
+
+| Part | Resident | Peak commit |
+|---|---|---|
+| Encoder `bge-base-en-v1.5` after load | 0.81 GB | 1.50 GB |
+| Encoder after embedding 64 documents | 1.03 GB (peak 1.10) | 1.93 GB |
+| API imported (`app.api.main`) | 0.07 GB | 0.05 GB |
+| Worker imported (`app.workers.main`) | 0.05 GB | 0.04 GB |
+| `litellm` imported | 0.19 GB | 0.17 GB |
+
+Loading the encoder took 37 s and 64 documents 23 s on this CPU. **Not measured:** the agent graph
+(LangGraph is not installed yet), a run's own working set, and the API and worker under load; the
+import figures are floors. Adding the encoder, the API, a worker with LiteLLM (the two separate
+measurements summed, about 0.25 GB) and the Docker VM gives **roughly 2.4 to 2.5 GB resident for a
+run in flight, against 3.3 to 3.6 GB available**: about 0.8 to 1.1 GB spare, with the browsers and
+Claude still open and before the agent graph. That is thin, and it is an estimate.
+
+**What is not known: what spiked.** Windows logged no resource-exhaustion event between 22:40 and
+00:30 local on 2026-10-26, the window in which the probe died, so the OS did not itself record the
+machine as out of memory; the reaper is Claude Code's, its threshold is not known here, and nothing
+measured identifies the process or the moment. No claim is made about the cause. What can be said:
+the probe is about 60 MB and the containers 0.19 GB, so neither is plausibly the spike; what else
+was running at that moment (the test suites had been run in the preceding hours) is not recorded.
+
+**Consequences, and what is and is not done.**
+- **Any long job on this machine can be killed**, by the reaper, sleep, a reboot or Docker. The
+  recording is therefore **resumable by requirement**, written into `docs/evaluation-plan.md`
+  section 8 ("The recording must be resumable") before the snapshot mode is built.
+- Closing the browsers before a long job returns about 2.4 GB, roughly doubling the spare. That is a
+  choice for the person at the keyboard, not something a job should do.
+- The reaper can be disabled (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`, set when Claude Code
+  starts). Not done: it removes a protection, and a real shortage would then be the operating
+  system's to resolve, with less warning.
+- A future long job should log available memory with each step, so that a kill comes with a
+  timeline. The current ramp probe does not (it was started before this was written down).
+- A `.wslconfig` memory cap would bound the Docker VM; with the VM at 0.95 GB it would not free
+  anything now. Not done.
+
 ### Redis free tier — checked, and why Redis runs locally
 
 Upstash's free plan (upstash.com/pricing/redis, checked 2026-10-14): **250 MB data, 500K commands
