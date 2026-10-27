@@ -1201,10 +1201,12 @@ is built so that it is built in rather than added after:
 5a. **The window runs from one capture time.** The N = 3 days window of the earlier ruling is
    measured from the request's first fetch in the session that committed it; every query of the
    request was fetched in that session.
-6. **The recording stops cleanly when the engine does.** A throttle that persists past the recovery
-   time measured by the ramp ends the session with the manifest intact, the in-flight request
-   discarded, and a stated resumption point, not a crash. Requests are recorded in the test set's
-   order, one at a time.
+6. **The recording stops cleanly when the engine does.** ~~A throttle that persists past the
+   recovery time measured by the ramp ends the session~~ **(superseded 2026-10-27 by the adaptive
+   recorder below: no measured recovery time exists, and a fixed one would be a schedule again.
+   The stop rule is the dark-period ceiling.)** When a session ends it ends with the manifest
+   intact, the in-flight request discarded, and a stated resumption point, not a crash. Requests
+   are recorded in the test set's order, one at a time.
 7. **The manifest is committed with the snapshot's hash and date range** (the snapshot itself is
    not, being third-party content), so "the recording covered these requests under this declared
    set" is checkable from the repository.
