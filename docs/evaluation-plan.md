@@ -1221,6 +1221,58 @@ is built so that it is built in rather than added after:
    listed modules). The browsers are closed during recording and evaluation runs: 2.4 GB for
    something nobody is watching at 3 a.m.
 
+### The recorder is adaptive, not scheduled (owner, 2026-10-27)
+
+*Why.* Brave's limit may not be one constant. The two runs so far cannot be reconciled by any
+constant bucket, and the limit may vary by day, by time, or by whether refused requests count
+(the ramp's confounds, above). If it varies, no measurement yields a stable planning figure, and a
+recording scheduled at a fixed rate either wastes hours (the limit was higher) or walks into a
+throttle (it was lower). So the number the hold produces is **a starting estimate, not a
+parameter**, and the recorder must not depend on it being right. Design (not built; the recorder
+does not exist yet, and nothing here is tuned):
+
+1. **Ask, back off on refusal, retry with increasing delay, resume when clean.** After each answered
+   search the recorder waits the pacing gap and asks the next. A refusal does not end the request:
+   the same query is retried after a delay that grows on every consecutive refusal (from a base to a
+   ceiling, with jitter, so retries never form a tight loop) and the pacing resumes the moment an
+   answer comes. A degraded answer is a refusal here (above: it is never recorded).
+2. **It targets the measured rate and does not trust it.** The pacing gap starts at the hold's
+   estimate. Each refusal lowers the target rate (multiplicative decrease); a run of clean answers
+   raises it again (additive increase) up to a cap relative to the estimate. This is ordinary
+   congestion control, chosen because it needs no model of why the limit moves, only the signal
+   that it did. Its parameters (the base and ceiling of the retry delay, the decrease factor, the
+   increase step and run length, the cap) are configuration, **untuned defaults**, reported beside
+   every result like every other parameter.
+3. **It records its own achieved rate as it goes.** Every attempt logs its time, outcome, the delay
+   it waited, the requests in the trailing hour, the target rate and the achieved rate (clean answers
+   per hour, over the trailing hour and since the session began), so a session's report states its
+   achieved rate, its refusals and the time it spent waiting, and the next session starts from an
+   observed rate, not from the hold's. The per-request manifest line records the attempts and the
+   waiting that request took.
+4. **A night that goes badly costs searches, not the session.** With per-request atomicity and the
+   manifest, a throttle costs the waiting plus at most the clean searches of the request in flight,
+   and a killed process costs the same. Nothing already committed is at risk.
+5. **A session ends on a dark-period ceiling, not on a measured recovery time.** If no search has
+   been answered for longer than the ceiling (configuration), or the wall-clock limit is reached,
+   the session ends cleanly (item 6 above): the in-flight request is discarded, the manifest says
+   where to resume. A dead night ends instead of burning its attempts into a ban.
+6. **Whether a retry is harmless is still open, and the delays are configuration so either answer
+   fits.** If asking while throttled prolongs the throttle (the silent-wait test, not yet run), the
+   backoff must be a *pause* with a few probes, not a retry loop. The first ramp recovered after 15
+   minutes while still asking, which argues the loop is not ruinous; one run is not evidence. Until
+   the silent-wait test has run, the default is retries with increasing delay, **provisional**.
+
+*What it changes about the hold.* The hold's job shrinks to what a planning figure needs: **roughly
+how many overnight sessions to budget.** The budget is a range, `S / (achieved rate × session
+length)`, with the rate the hold measured as its centre and the spread of the ramp, the hold and the
+first sessions as its width; it is revised after each session from that session's achieved rate. It
+is not a promise that a session finishes a fixed number of requests.
+
+*What adaptivity does not change.* A request is captured atomically or not at all; a degraded search
+is never recorded; requests are recorded in the test set's order; the recording is resumable; it
+does not load the encoder; the declared engine set is fixed in advance and reported. The pacing may
+vary between sessions; the recorded evidence may not.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
