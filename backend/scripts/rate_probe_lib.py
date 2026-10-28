@@ -110,9 +110,20 @@ class Observation:
 
 
 async def observe(
-    search: SearxngSearch, last: dict[str, Any], *, engine: str, n: int, group: str, query: str
+    search: SearxngSearch,
+    last: dict[str, Any],
+    *,
+    engine: str | tuple[str, ...],
+    n: int,
+    group: str,
+    query: str,
 ) -> Observation:
-    """One search, and everything worth logging about it (the same fields as the ramp's)."""
+    """One search, and everything worth logging about it (the same fields as the ramp's).
+
+    `engine` may be a tuple: the steering SET. The search is clean only if none of them is named as
+    failed; an engine outside the set (brave, once the set excludes it) is logged but never steers.
+    """
+    steering = (engine,) if isinstance(engine, str) else engine
     began = time.monotonic()
     last.clear()
     outcome, error, found = "ok", None, []
@@ -134,7 +145,8 @@ async def observe(
                 rows_by_engine[key] = rows_by_engine.get(key, 0) + 1
     answered = last.get("status") == 200
     named = {str(u[0]).casefold(): str(u[1]) for u in failed if len(u) == 2}
-    clean = answered and engine not in named
+    failed_in_set = {e: named[e] for e in steering if e in named}
+    clean = answered and not failed_in_set
     now = time.time()
     record = {
         "kind": "search",
@@ -149,10 +161,13 @@ async def observe(
         "results": len(found),
         "raw_rows": len(body.get("results") or []),
         "per_engine_rows": rows_by_engine,
-        "engine_rows": rows_by_engine.get(engine, 0),
+        "engine_rows": sum(rows_by_engine.get(e, 0) for e in steering),
+        "steering_engines": list(steering),
+        "steering_rows": {e: rows_by_engine.get(e, 0) for e in steering},
+        "steering_failed": failed_in_set,
         "unresponsive": failed,
         "engine_clean": clean,
-        "engine_reason": named.get(engine),
+        "engine_reason": next(iter(failed_in_set.values()), None),
         "mem_available_gb": memory_available_gb(),
         "urls": [[r.url, r.engine] for r in found],
     }

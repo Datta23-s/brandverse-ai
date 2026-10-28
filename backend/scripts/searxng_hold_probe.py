@@ -52,7 +52,12 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["hold", "silent"], required=True)
     ap.add_argument("--url", default="http://127.0.0.1:8888")
-    ap.add_argument("--engine", default="brave")
+    ap.add_argument(
+        "--engine",
+        default="brave",
+        help="the steering engine, or a comma-separated SET: the hold breaks at the first failure"
+        " of ANY engine in it. Engines outside the set stay enabled, are logged, and never steer.",
+    )
     ap.add_argument("--seed", type=int, default=20261028)
     ap.add_argument(
         "--regulated-start", type=int, default=5, help="skip the entries earlier runs used"
@@ -88,7 +93,10 @@ async def main() -> None:
     )
     ap.add_argument("--out-dir", type=Path, default=REPO_ROOT / "evaluation" / "search_rate")
     args = ap.parse_args()
-    engine = args.engine.casefold()
+    steering = tuple(e.strip().casefold() for e in args.engine.split(",") if e.strip())
+    if not steering:
+        raise SystemExit("--engine names no engine")
+    engine: str | tuple[str, ...] = steering[0] if len(steering) == 1 else steering
 
     hold = HoldController(
         interval_min=args.interval_min, min_searches=args.min_searches, min_hours=args.min_hours
@@ -125,7 +133,7 @@ async def main() -> None:
             "kind": "header",
             "mode": args.mode,
             "started_utc": started.isoformat(),
-            "engine": engine,
+            "engine": engine if isinstance(engine, str) else list(engine),
             "engines_enabled": enabled,
             "searxng_version": version,
             "seed": args.seed,
@@ -137,7 +145,11 @@ async def main() -> None:
             "url": args.url,
         }
         log.write(header)
-        search = SearxngSearch(args.url, client, declared_engines=None)
+        # A set is the candidate declared set: only its engines can degrade a search, so brave's
+        # throttling (still enabled) does not turn the search into an error.
+        search = SearxngSearch(
+            args.url, client, declared_engines=None if isinstance(engine, str) else steering
+        )
         deadline = time.monotonic() + args.max_hours * 3600 / args.speed
         queue = queries(args.seed, args.regulated_start)
         times: list[float] = []

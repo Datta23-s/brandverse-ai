@@ -1367,6 +1367,31 @@ is never recorded; requests are recorded in the test set's order; the recording 
 does not load the encoder; the declared engine set is fixed in advance and reported. The pacing may
 vary between sessions; the recorded evidence may not.
 
+### The seven-engine hold (owner order 2026-10-28; registered before it starts)
+
+*Registered 2026-10-28, committed before the first search of the hold; the burst and the single
+search that preceded it are known and are not part of the test.* **Steering set (a candidate, not a
+declaration; `research.declared_engines` stays null):** yep, yandex, yahoo, privacywall,
+duckduckgo web, swisscows, mojeek: the seven that answered 8 of 8 in the 2-minute burst
+(`evaluation/search_rate/engines-burst-20261028T025520Z.jsonl`). **Brave stays enabled and is
+ignored by the stepping logic**; so do the other fourteen. **Protocol:** fixed 2-minute gaps, no
+rest first (the seven were last asked at 03:10 UTC and have been asked at 2-minute gaps for 16 minutes
+at most: this is NOT a rested start, and the log says how long the silence was), 120 searches AND
+4 hours, stop at the first search in which ANY of the seven is named as failed, report which.
+`scripts/searxng_hold_probe.py --engine yep,yandex,...`, logging every result URL.
+
+*Readings, fixed now.* (1) **Held** (120 searches and 4 hours, none of the seven failed): the seven
+sustain 30/hour for 4 hours; recording 30 x q searches takes hours, not nights, for any q the planner
+asks for up to about 120 per session. One run, one IP, one day: it says nothing about tomorrow's
+budget. (2) **Broke before the 30th search**: a count-like limit on the engine named; slowing buys
+little. (3) **Broke between the 30th and the 120th**: a rolling or hourly budget the 16-minute burst
+could not reach; the trailing-hour count at the break is the figure. (4) **Broke on an engine for a
+reason other than 'too many requests'** (CAPTCHA, access denied, timeout): that engine leaves the
+candidate set; this is a statement about that engine's tolerance of an automated client, and the
+hold's other six are still read up to that point. A zero-row answer from a steering engine without an
+error is logged and does NOT stop the hold (a legitimate query can return nothing); it is reported.
+A late gap (machine slept) is recorded and a hold with one is `held_with_gaps`, never `held`.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
