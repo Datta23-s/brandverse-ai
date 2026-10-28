@@ -5,10 +5,22 @@ test set's order, into the evaluation snapshot.
 **Adaptive, not scheduled.** No constant described the engines that throttled this IP, and the ones
 that sustained 2-minute gaps were observed for 91 minutes, so the recorder does not trust a rate.
 It asks at a *gap* between live searches (`Pacer`, which the capture waits on before each live
-search and outside its timer), stretches that gap when a request is
-refused (multiplicative increase of the gap), and shortens it again after a run of clean searches
+search and outside its timer), stretches that gap when a declared engine REFUSES THE RATE
+(multiplicative increase of the gap), and shortens it again after a run of clean searches
 (additive decrease), never below the starting gap: ordinary congestion control, which needs no model
 of why the limit moves, only the signal that it did.
+
+**The gap moves for a rate refusal and nothing else** (owner, 2026-10-28, after the first recording
+session was stopped eleven minutes in with nothing committed; disclosed in
+`docs/evaluation-plan.md`, "The pacer backs off for a rate refusal only"). The provider already
+tells the two apart — `SearchRateLimited` is an engine saying "too many requests",
+`SearchUnavailable` and a degraded answer are one engine timing out, erroring, CAPTCHA'd or silent —
+and the pacer used to treat all of them alike. That is a type confusion, not a tuning choice: a
+service fault from one of sixteen engines says nothing about how fast this IP may ask. So a rate
+refusal doubles the gap as before; any other degradation leaves the gap where it is, and the request
+is still aborted and redone (the atomic rule is untouched). The two are counted apart in the session
+report (`searches_rate_refused`, `searches_degraded_not_throttled`), so the backoff can be judged on
+how often it had a legitimate trigger.
 
 **A refused request is aborted and redone** (`Mode.RECORD` aborts it at once). The redo waits a
 delay that grows on every consecutive refusal, from a base to a ceiling, with jitter, so retries
@@ -106,6 +118,8 @@ class Pacer:
         self._last_live: float | None = None
         self._clean_run = 0
         self.last_clean_at: float | None = None  # when a live search last came back clean
+        self.rate_refusals = 0  # signals that moved the gap
+        self.faults = 0  # degradations that did not
 
     async def wait(self) -> None:
         if self._last_live is not None:
@@ -115,9 +129,20 @@ class Pacer:
                 await self._sleep(due - now)
         self._last_live = self._clock()
 
-    def refused(self) -> None:
+    def rate_refusal(self) -> None:
+        """A declared engine said "too many requests": the gap stretches. The only such signal."""
+        self.rate_refusals += 1
         self._clean_run = 0
         self.gap_s = min(self._cfg.gap_ceiling_s, self.gap_s * self._cfg.gap_increase_factor)
+
+    def fault(self) -> None:
+        """One engine timed out, errored, was CAPTCHA'd or answered nothing, and none refused the
+        rate: THE GAP DOES NOT MOVE. Slowing the whole session for one engine's fault treats noise
+        as a throttle (owner, 2026-10-28). The request is still aborted and redone by the caller;
+        only the pace is left alone. The clean run is not reset either: a fault is not evidence
+        about our rate in either direction, and `last_clean_at` is untouched, so a session of
+        nothing but faults still ends on the dark-period ceiling."""
+        self.faults += 1
 
     def clean(self) -> None:
         self.last_clean_at = self._clock()
@@ -142,6 +167,7 @@ class SessionReport:
     searches_throttled: int = 0
     searches_unavailable: int = 0
     searches_degraded: int = 0
+    searches_degraded_rate_refused: int = 0  # of those, the ones that moved the gap
     searches_reused: int = 0
     searches_carried: int = 0  # clean searches reused by a later attempt at the same request
     searches_wasted: int = 0  # clean searches lost with a request left uncommitted at session end
@@ -175,6 +201,21 @@ class SessionReport:
         return self.searches_degraded / self.searches_live if self.searches_live else None
 
     @property
+    def searches_rate_refused(self) -> int:
+        """The live searches a declared engine refused the rate of: the only ones that stretched the
+        gap (owner, 2026-10-28). A zero here beside a non-zero `searches_degraded_not_throttled`
+        says the session met faults and no throttle."""
+        return self.searches_throttled + self.searches_degraded_rate_refused
+
+    @property
+    def searches_degraded_not_throttled(self) -> int:
+        """Degraded or unanswered for any other reason: one engine's fault, which left the pace
+        where it was."""
+        return (
+            self.searches_degraded - self.searches_degraded_rate_refused
+        ) + self.searches_unavailable
+
+    @property
     def achieved_clean_per_hour(self) -> float | None:
         return self.searches_clean / (self.elapsed_s / 3600) if self.elapsed_s > 0 else None
 
@@ -197,6 +238,8 @@ class SessionReport:
             "searches_throttled": self.searches_throttled,
             "searches_unavailable": self.searches_unavailable,
             "searches_degraded": self.searches_degraded,
+            "searches_rate_refused": self.searches_rate_refused,
+            "searches_degraded_not_throttled": self.searches_degraded_not_throttled,
             "searches_reused": self.searches_reused,
             "searches_carried": self.searches_carried,
             "searches_wasted": self.searches_wasted,
@@ -229,6 +272,7 @@ def _add(report: SessionReport, tally: CaptureTally) -> None:
     report.searches_throttled += tally.searches_throttled
     report.searches_unavailable += tally.searches_unavailable
     report.searches_degraded += tally.searches_degraded
+    report.searches_degraded_rate_refused += tally.searches_degraded_rate_refused
     report.searches_reused += tally.searches_reused
     report.retries_used += tally.retries_used
     for engine, n in tally.degraded_causes.items():

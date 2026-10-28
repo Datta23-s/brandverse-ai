@@ -67,7 +67,13 @@ from app.research.driver import Mode, RequestAborted, canonical_url, research
 from app.research.extraction import Extractor
 from app.research.fetch import FetchedPage, PageSource
 from app.research.planner import QueryPlan
-from app.research.search import SearchProvider, SearchResponse, SearchResult, declare
+from app.research.search import (
+    SearchProvider,
+    SearchResponse,
+    SearchResult,
+    declare,
+    rate_refusing_engines,
+)
 from app.research.search_cache import cache_key
 
 MARKER = ".evaluation-namespace"
@@ -357,6 +363,9 @@ class CaptureTally:
     searches_throttled: int = 0
     searches_unavailable: int = 0
     searches_degraded: int = 0
+    # Of the degraded ones, those a declared engine rate-refused: the only ones that move the pace
+    # (owner, 2026-10-28). The rest are service faults from one engine.
+    searches_degraded_rate_refused: int = 0
     degraded_causes: dict[str, int] = field(default_factory=dict)
     search_seconds: list[float] = field(default_factory=list)
     page_seconds: list[float] = field(default_factory=list)
@@ -364,13 +373,21 @@ class CaptureTally:
 
 class Pace(Protocol):
     """How fast live searches may be asked. `wait` is called BEFORE a live search and is not part of
-    its cost; `clean` and `refused` report how it went, so the gap can adapt."""
+    its cost; the other three report how it went, so the gap can adapt to the RIGHT signal.
+
+    The three outcomes are kept apart because they mean different things (owner, 2026-10-28, after
+    the first recording session was stopped: `docs/evaluation-plan.md`, "The pacer backs off for a
+    rate refusal only"). A `rate_refusal` is a declared engine saying "too many requests": the one
+    signal about how fast we may ask. A `fault` is one engine timing out, erroring, CAPTCHA'd or
+    silent: a service fault that says nothing about our rate, so the pace must not move for it."""
 
     async def wait(self) -> None: ...
 
     def clean(self) -> None: ...
 
-    def refused(self) -> None: ...
+    def rate_refusal(self) -> None: ...
+
+    def fault(self) -> None: ...
 
 
 class RecordingSearch:
@@ -413,18 +430,22 @@ class RecordingSearch:
         except SearchRateLimited:
             self._tally.searches_throttled += 1
             if self._pace is not None:
-                self._pace.refused()
+                self._pace.rate_refusal()
             raise
         except SearchUnavailable:
+            # A fault, not a refusal: the engines did not answer, but none said "slow down".
             self._tally.searches_unavailable += 1
             if self._pace is not None:
-                self._pace.refused()
+                self._pace.fault()
             raise
         elapsed = round(time.monotonic() - began, 3)
         if response.degraded:
+            refusing = rate_refusing_engines(response.failed_engines)
             if self._pace is not None:
-                self._pace.refused()
+                self._pace.rate_refusal() if refusing else self._pace.fault()
             self._tally.searches_degraded += 1
+            if refusing:
+                self._tally.searches_degraded_rate_refused += 1
             for failure in response.failed_engines:
                 causes = self._tally.degraded_causes
                 causes[failure.engine] = causes.get(failure.engine, 0) + 1

@@ -152,6 +152,26 @@ already accepts. *Cost of the change, stated:* the coherence is now reported, no
 each request's committed line carries its capture span and the recording reports the maximum and median.
 `searches_wasted` now measures cross-session loss only. (`docs/evaluation-plan.md` section 8.)
 
+#### 1.4b The pacer backs off for a rate refusal only — **BUILT** (disclosed 2026-10-28)
+The recorder's pacing gap stretched on ANY degraded search (ruled 2026-10-27, item 1 of "the recorder is
+adaptive": "a degraded answer is a refusal here"). From 2026-10-28 it stretches only on a **rate refusal** —
+a declared engine saying "too many requests" — and any other degradation retries the request at the
+**unchanged** gap. The abort-and-redo of the request is untouched; only the session's pace is. Rate-refused
+and degraded-but-not-throttled searches are counted apart in every session report.
+*Changed after seeing its cost, and stated as such.* The first recording session was stopped eleven minutes
+in (started 15:17:42 UTC, stopped 15:28) with **nothing committed**, so no recording data existed; the change
+was made and the recording restarted at 15:36:35 UTC. The cost that prompted the look: at the trials' 8%
+degradation rate the old rule drives the gap to its 900 s ceiling, giving a simulated median of about 35
+hours for the recording against 5.8 hours clean.
+*Why it is a defect, not a relaxation.* The two signals were already distinguished one layer up, in the
+search provider, from the day it was written (`SearchRateLimited` only for "too many requests",
+`SearchUnavailable` for every other failure); the pacer called one method for both and discarded the
+distinction. A service fault from one of sixteen enabled engines is not evidence about how fast this IP may
+ask. The backoff has still never had a legitimate trigger: every degradation observed so far (three trial
+captures and the stopped session) was a single engine failing — yahoo, then yep — and nothing was ever
+rate-refused. *What it does not touch:* the queries, the engine set, the fetching, the freezing — the pacing
+is not part of the captured evidence. (`docs/evaluation-plan.md` section 8.)
+
 ### 1.5 The authority prior is reported twice — **DESIGNED**
 **Ruled 2026-10-25.**
 

@@ -72,6 +72,7 @@ class Timed(LiveSearch):
         self.clock, self.times = clock, []
         self.fail_calls, self.degrade_calls = fail_calls or set(), degrade_calls or {}
         self.always_throttle, self.n = always_throttle, 0
+        self.degrade_reason = "HTTP error"  # the engine errored; not a rate refusal
 
     async def search(self, query, *, limit=10):
         self.n += 1
@@ -81,7 +82,8 @@ class Timed(LiveSearch):
         r = await super().search(query, limit=limit)
         if self.n in self.degrade_calls:
             return SearchResponse(
-                r.results, failed_engines=(EngineFailure(self.degrade_calls[self.n], "HTTP error"),)
+                r.results,
+                failed_engines=(EngineFailure(self.degrade_calls[self.n], self.degrade_reason),),
             )
         return r
 
@@ -124,11 +126,11 @@ async def test_the_pacer_spaces_live_searches_stretches_on_refusal_and_never_bea
     assert clock.slept == []  # the first search waits for nothing
     await pacer.wait()
     assert clock.slept == [120]
-    pacer.refused()
+    pacer.rate_refusal()
     assert pacer.gap_s == 240
-    pacer.refused()
-    pacer.refused()
-    pacer.refused()
+    pacer.rate_refusal()
+    pacer.rate_refusal()
+    pacer.rate_refusal()
     assert pacer.gap_s == 900  # capped at the ceiling
     for _ in range(3):  # a run of 3 clean searches shortens it by one step
         pacer.clean()
@@ -334,3 +336,67 @@ def test_recorder_bounds_must_be_ordered():
         Research.model_validate({**raw, "recorder_gap_ceiling_s": 10})
     with pytest.raises(ValueError, match="backoff_max"):
         Research.model_validate({**raw, "recorder_backoff_max_s": 1})
+
+
+# ── The gap moves for a rate refusal and nothing else (owner, 2026-10-28) ────────────────────
+
+
+async def test_a_fault_leaves_the_gap_where_it_is_and_a_rate_refusal_stretches_it():
+    clock = FakeClock()
+    pacer = Pacer(CONFIG, clock, clock.sleep)
+    for _ in range(10):  # ten service faults in a row
+        pacer.fault()
+    assert (pacer.gap_s, pacer.faults, pacer.rate_refusals) == (120, 10, 0)
+    pacer.rate_refusal()  # and one engine saying "too many requests"
+    assert (pacer.gap_s, pacer.rate_refusals) == (240, 1)
+
+
+async def test_a_fault_neither_resets_the_clean_run_nor_counts_as_a_clean_search():
+    clock = FakeClock()
+    pacer = Pacer(CONFIG, clock, clock.sleep)
+    pacer.rate_refusal()
+    assert pacer.gap_s == 240
+    for _ in range(4):
+        pacer.clean()
+    pacer.fault()  # does not break the run of clean searches ...
+    pacer.clean()
+    assert pacer.gap_s == 225  # ... so the fifth clean search still speeds the gap up
+    assert pacer.last_clean_at is not None
+
+
+async def test_a_degraded_search_does_not_stretch_the_gap_but_a_rate_refused_one_does(tmp_path):
+    """The live path, not the Pacer alone: a degraded answer from an engine that errored leaves the
+    session's pace alone, and the same answer from an engine that refused the rate doubles it."""
+    for reason, expected_gap, refused in (
+        ("HTTP error", 120, 0),
+        ("Suspended: too many requests", 240, 1),
+    ):
+        clock = FakeClock()
+        store = SnapshotStore.create(tmp_path / reason[:4] / "evaluation-snapshot")
+        plan = plan_for()
+        search = Timed(plan, urls_for(plan), clock, degrade_calls={2: "yep"})
+        search.degrade_reason = reason
+        log_path = store.root / "session.jsonl"
+        report = await session(store, {"R01": plan}, search, clock, log_path=log_path)
+        aborted = next(
+            json.loads(line)
+            for line in log_path.read_text(encoding="utf-8").splitlines()
+            if json.loads(line).get("outcome") == "aborted"
+        )
+        assert report.searches_degraded == 1
+        assert report.searches_rate_refused == refused
+        assert report.searches_degraded_not_throttled == 1 - refused
+        assert aborted["gap_s"] == expected_gap  # the gap in force for the redo
+        assert report.requests_committed == ["R01"]  # aborted and redone either way
+
+
+async def test_the_session_report_separates_rate_refusals_from_faults(tmp_path):
+    clock = FakeClock()
+    store = new_store(tmp_path)
+    plan = plan_for()
+    search = Timed(plan, urls_for(plan), clock, fail_calls={2}, degrade_calls={5: "yahoo"})
+    report = await session(store, {"R01": plan}, search, clock)
+    summary = report.summary()
+    assert summary["searches_rate_refused"] == 1  # the SearchRateLimited at search 2
+    assert summary["searches_degraded_not_throttled"] == 1  # the degraded answer at search 5
+    assert summary["searches_degraded"] == 1 and summary["searches_throttled"] == 1

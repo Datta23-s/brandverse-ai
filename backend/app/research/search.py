@@ -32,7 +32,7 @@ that sit above this interface; `normalise_query` is the key they share.
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -198,6 +198,25 @@ def _failed_engines(unresponsive: Any) -> tuple[EngineFailure, ...]:
     )
 
 
+RATE_REFUSAL = "too many requests"
+
+
+def is_rate_refusal(failure: EngineFailure) -> bool:
+    """Whether an engine failure is the engine saying "slow down" rather than a service fault.
+
+    THE ONE TEST, used everywhere that distinguishes the two (the refusal below, and the recorder's
+    pacer: `docs/evaluation-plan.md`, "The pacer backs off for a rate refusal only"). SearXNG
+    reports both a fresh refusal ("too many requests") and the suspension that follows one
+    ("Suspended: too many requests") with this text; a CAPTCHA, a timeout, an access denial or a
+    parsing error is a fault, not a refusal."""
+    return RATE_REFUSAL in failure.reason.casefold()
+
+
+def rate_refusing_engines(failed: Iterable[EngineFailure]) -> tuple[str, ...]:
+    """The engines among `failed` that refused the rate, in order; empty when none did."""
+    return tuple(f.engine for f in failed if is_rate_refusal(f))
+
+
 def _refuse_if_engines_failed(failed: tuple[EngineFailure, ...]) -> None:
     """A real SearXNG whose upstream engines are throttled or CAPTCHA'd answers HTTP 200 with an
     empty result list and names the engines in `unresponsive_engines` (observed 2026-10-26,
@@ -207,7 +226,7 @@ def _refuse_if_engines_failed(failed: tuple[EngineFailure, ...]) -> None:
     if not failed:
         return
     named = ", ".join(f"{f.engine}: {f.reason}" for f in failed)
-    if any("too many requests" in f.reason.casefold() for f in failed):
+    if rate_refusing_engines(failed):
         raise SearchRateLimited(f"SearXNG's engines are rate-limited ({named})")
     raise SearchUnavailable(f"SearXNG's engines did not answer ({named})")
 

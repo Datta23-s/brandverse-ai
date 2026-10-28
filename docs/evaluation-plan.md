@@ -296,6 +296,11 @@ conditions, all enforced rather than promised* (`Architecture.md` §4.4, `llm_st
 - every call is logged to `llm_calls` and counted against the 20 a day like any other;
 - the tuning organisation is flagged `is_practice`, which the gateway also requires on every call and which
   keeps its runs out of every evaluation read;
+- **its approvals are a third kind, `tuning`, never calibration** (owner, 2026-10-28; migration 0032): a practice
+  organisation accepts calibration OR tuning approvals, the two are reported separately, and the >= 8 of 10
+  calibration figure counts `calibration` rows only, so a reader can always tell which approvals were the
+  calibration and which were incidental to measuring s (`tests/test_calibration_agreement.py`, and the db test
+  `test_a_tuning_approval_cannot_be_counted_as_calibration`);
 - **the calls spent measuring s are reported here and counted in the all-in total** (the 3 touching-equivalents
   for tuning and calibration in the table above are an assumption until then): not yet spent, 0 so far.
 
@@ -1484,7 +1489,7 @@ does not exist yet, and nothing here is tuned):
    search the recorder waits the pacing gap and asks the next. A refusal does not end the request:
    the same query is retried after a delay that grows on every consecutive refusal (from a base to a
    ceiling, with jitter, so retries never form a tight loop) and the pacing resumes the moment an
-   answer comes. A degraded answer is a refusal here (above: it is never recorded).
+   answer comes. A degraded answer is a refusal here (above: it is never recorded) -- AMENDED, see below.
 2. **It targets the measured rate and does not trust it.** The pacing gap starts at the hold's
    estimate. Each refusal lowers the target rate (multiplicative decrease); a run of clean answers
    raises it again (additive increase) up to a cap relative to the estimate. This is ordinary
@@ -1492,6 +1497,10 @@ does not exist yet, and nothing here is tuned):
    that it did. Its parameters (the base and ceiling of the retry delay, the decrease factor, the
    increase step and run length, the cap) are configuration, **untuned defaults**, reported beside
    every result like every other parameter.
+
+   *Amended 2026-10-28 (owner), after the first recording session was stopped: only a RATE REFUSAL
+   lowers the target rate. Any other degradation retries the request at the unchanged gap. See "The
+   pacer backs off for a rate refusal only" below for the change, its reason and its disclosure.*
 3. **It records its own achieved rate as it goes.** Every attempt logs its time, outcome, the delay
    it waited, the requests in the trailing hour, the target rate and the achieved rate (clean answers
    per hour, over the trailing hour and since the session began), so a session's report states its
@@ -1523,6 +1532,42 @@ is not a promise that a session finishes a fixed number of requests.
 is never recorded; requests are recorded in the test set's order; the recording is resumable; it
 does not load the encoder; the declared engine set is fixed in advance and reported. The pacing may
 vary between sessions; the recorded evidence may not.
+
+**The pacer backs off for a rate refusal only — CHANGED 2026-10-28, AFTER seeing its cost, and that is
+stated here as plainly as the hold's stop rule was.** The first recording session was started at 15:17:42 UTC
+and stopped at 15:28 UTC, eleven minutes in, with **nothing committed**: no recording data existed beyond the
+committed requests of a thirty-minute session, which is to say none, and the uncommitted staging of the one
+in-flight request was deleted. The change was then made, the tests written, and the recording restarted from
+nothing at 15:36:35 UTC.
+
+*What changed.* Item 1 above said "a degraded answer is a refusal here". It no longer is, for the pacing:
+- a **rate refusal** — a declared engine saying "too many requests", which is `SearchRateLimited` or a
+  degraded answer whose failed declared engine gives that reason — doubles the gap, as before;
+- **any other degradation** — one engine timing out, erroring, CAPTCHA'd, access-denied or silent
+  (`SearchUnavailable`, or a degraded answer with no such reason) — **leaves the gap where it is**. The
+  request is still aborted and redone, atomically, exactly as before: only the session's pace stays put.
+- The two are counted apart in every session report (`searches_rate_refused`,
+  `searches_degraded_not_throttled`), so how often the backoff had a legitimate trigger is visible rather
+  than assumed.
+
+*Why this is a type confusion and not a relaxation to make a number fit.* The two signals were already
+distinguished one layer up, in the search provider, from the day it was written: `SearchRateLimited` is
+raised only when an engine says "too many requests" and `SearchUnavailable` for every other failure
+(`backend/app/research/search.py`, and the test `is_rate_refusal` now shared by both layers so the two
+cannot drift). The pacer called the same method for both and so threw that distinction away. A service
+fault from one of sixteen enabled engines is not evidence about how fast this IP may ask; backing off for it
+slows every later search for a reason that never existed. **The backoff has not yet had a single legitimate
+trigger:** all three trial captures and the stopped session degraded on a single engine failing — yahoo
+(`curl_cffi` HTTP error), then yep (HTTP 403 access denied) — and no search in any of them was rate-refused.
+
+*The cost that prompted the look, reported because it prompted it.* At the trials' degradation rate
+(2 of 26 live searches, about 8%) the old rule drives the gap to its 900 s ceiling: a simulation of the
+pacer's own arithmetic over 153 distinct searches gives a median of about 19 hours at a 3% rate and about
+35 hours at 7.7%, against 5.8 hours with no degradation, and about 61 of 153 searches inside one 10-hour
+session. Seeing that is what sent me back to the signal; the reason for the change is the sentence above
+it, and both are recorded. **The change does not touch what is captured** — not the queries, the engine
+set, the fetching or the freezing — only how long the recorder waits between searches, so it does not
+affect the content of the snapshot, and the stopped session had captured nothing in any case.
 
 ### The seven-engine hold (owner order 2026-10-28; registered before it starts)
 
