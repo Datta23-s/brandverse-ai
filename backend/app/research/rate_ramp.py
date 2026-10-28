@@ -275,6 +275,131 @@ class HoldController:
         return events
 
 
+EngineStatus = Literal["ok", "empty", "error"]
+
+
+class SetHoldController:
+    """A hold over a SET of engines that runs to completion (owner, 2026-10-28), so one log gives a
+    per-engine survival curve instead of the time of the first blip.
+
+    Every search records every engine's status: `ok` (rows), `empty` (no rows and NO error named:
+    the throttled empty 200 of decision log 7.2 at engine level) or `error` (named as failed). A
+    single failure stops nothing. An engine that fails `fall_after` searches IN A ROW (empty counts)
+    has FALLEN: it leaves steering (the runner stops judging by it), the search number and reason
+    are recorded, and the run continues. The run stops early only if fewer than `min_answering`
+    of the whole set answered with rows in one search: a collapse, not noise. Otherwise it is done
+    after `min_searches` AND `min_hours`.
+    """
+
+    def __init__(
+        self,
+        engines: tuple[str, ...],
+        *,
+        interval_min: float = 2.0,
+        min_searches: int = 120,
+        min_hours: float = 4.0,
+        fall_after: int = 3,
+        min_answering: int = 4,
+    ) -> None:
+        if not engines or len(set(engines)) != len(engines):
+            raise ValueError("engines must be a non-empty set of distinct names")
+        if interval_min <= 0 or min_searches < 1 or min_hours <= 0 or fall_after < 1:
+            raise ValueError("interval_min, min_searches, min_hours, fall_after must be positive")
+        if not 1 <= min_answering <= len(engines):
+            raise ValueError("min_answering must be between 1 and the number of engines")
+        self.engines = engines
+        self.interval_min, self.min_searches, self.min_hours = interval_min, min_searches, min_hours
+        self.fall_after, self.min_answering = fall_after, min_answering
+        self.times: list[float] = []
+        self.late_factor = 1.5
+        self.late_gaps_s: list[float] = []
+        self.streak = dict.fromkeys(engines, 0)  # consecutive failed searches
+        self.fallen: dict[str, dict[str, object]] = {}  # engine -> {search_number, reason}
+        self.history: dict[str, list[EngineStatus]] = {e: [] for e in engines}
+        self.outcome: Literal["held", "held_with_falls", "held_with_gaps", "collapsed"] | None = (
+            None
+        )
+
+    @property
+    def done(self) -> bool:
+        return self.outcome is not None
+
+    @property
+    def wait_s(self) -> float:
+        return self.interval_min * 60
+
+    @property
+    def steering(self) -> tuple[str, ...]:
+        return tuple(e for e in self.engines if e not in self.fallen)
+
+    def observe(self, *, at: float, rows: dict[str, int], errors: dict[str, str]) -> list[Event]:
+        """`rows`: rows each engine returned; `errors`: engine -> reason, for engines SearXNG named
+        as failed. An engine in neither is `empty`."""
+        if self.done:
+            raise ValueError("the hold is finished")
+        events: list[Event] = []
+        first = self.times[0] if self.times else at
+        if self.times and at - self.times[-1] > self.late_factor * self.interval_min * 60:
+            gap = at - self.times[-1]
+            self.late_gaps_s.append(gap)
+            events.append(
+                Event(
+                    "late_ask", at, {"gap_s": round(gap, 1), "search_number": len(self.times) + 1}
+                )
+            )
+        self.times.append(at)
+        n = len(self.times)
+        answering = 0
+        for e in self.engines:
+            if e in errors:
+                status: EngineStatus = "error"
+            elif rows.get(e, 0) > 0:
+                status = "ok"
+            else:
+                status = "empty"
+            self.history[e].append(status)
+            answering += status == "ok"
+            self.streak[e] = 0 if status == "ok" else self.streak[e] + 1
+            reason = errors.get(e, "no rows, no error named")
+            if status != "ok":
+                detail = {
+                    "engine": e,
+                    "search_number": n,
+                    "kind": status,
+                    "reason": reason,
+                    "consecutive": self.streak[e],
+                }
+                events.append(Event("engine_failed", at, detail))
+            if self.streak[e] >= self.fall_after and e not in self.fallen:
+                self.fallen[e] = {"search_number": n, "reason": reason}
+                events.append(
+                    Event("engine_fallen", at, {"engine": e, "search_number": n, "reason": reason})
+                )
+        if answering < self.min_answering:
+            self.outcome = "collapsed"
+            detail = {"search_number": n, "answering": answering, "needed": self.min_answering}
+            events.append(Event("hold_collapsed", at, detail))
+        elif n >= self.min_searches and at - first >= self.min_hours * 3600:
+            if self.late_gaps_s:
+                self.outcome = "held_with_gaps"
+            else:
+                self.outcome = "held_with_falls" if self.fallen else "held"
+            events.append(Event("hold_finished", at, {"searches": n, "outcome": self.outcome}))
+        return events
+
+    def survival(self) -> dict[str, dict[str, object]]:
+        """Per engine: searches with rows, empties, errors, and where it fell (if it did)."""
+        return {
+            e: {
+                "ok": h.count("ok"),
+                "empty": h.count("empty"),
+                "error": h.count("error"),
+                "fallen": self.fallen.get(e),
+            }
+            for e, h in self.history.items()
+        }
+
+
 class SilentRecoveryController:
     """Provoke a throttle with a burst, go silent, probe once at each delay after the break.
 

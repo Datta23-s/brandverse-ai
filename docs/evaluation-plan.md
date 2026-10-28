@@ -1414,6 +1414,35 @@ count. A searcher that returns nothing without saying so is the failure of the t
 (decision log 7.2), at the engine level; SearXNG's error stats list no mojeek errors, so the cause is
 unknown. Nothing here declares or undeclares anything. Next measurement: the owner's.
 
+#### The seven-engine hold, second run: run to completion (owner order 2026-10-28; registered before it starts)
+
+*The stop rule was changed AFTER seeing the first attempt's result* (it ended at search 2 on a yep 503 and
+a silent mojeek empty): this is stated, not hidden. The first attempt's two searches are known and are not
+part of this test. **Same seven engines (yep kept), same 2-minute gaps, 120 searches AND 4 hours, laptop on
+AC.** Brave stays enabled and ignored. **New rule** (`SetHoldController`, 9 tests, `scripts/searxng_hold_probe.py
+--engine a,b,...`): the run goes to completion; every engine's status is recorded on every search as
+`ok` (rows), `empty` (no rows AND no error named, logged distinctly) or `error` (named as failed); a single
+failure stops nothing; an engine failing **3 searches in a row** (empty counts) has FALLEN, leaves
+steering, and its search number and reason are recorded; the run stops early only if **fewer than 4 of the 7
+answer with rows in one search** (a fallen engine that answers again still counts for this). Outcome:
+`held` (none fell), `held_with_falls`, `held_with_gaps` (the machine slept; never `held`), or `collapsed`.
+
+*Readings, fixed now.* (A) **All seven sustain**: no engine falls in 120 searches; recording takes hours,
+not nights, for any q the planner needs up to about 120 searches a session. (B) **Some fall**: the
+engines, the search numbers and the reasons are the result; the engines that did not fall are the
+sustainable set at 2-minute gaps for the hours observed, and a fall at search k with k small is a
+different finding (a count) from one at k large (a budget). (C) **Collapse**: fewer than 4 answering in a
+search ends the run; the search number and the engines still answering are reported. (D) **Clustering,
+mechanical:** falls and failures are *clustered in time* if at least half of all engine-failures occur in
+searches in which two or more engines failed; *clustered by engine* if at least half belong to one engine;
+both can hold; neither is *scattered*. Correlated failure (a shared upstream or this IP's reputation) is
+read from the time clustering, and it is reported per engine pair (searches both failed). **Reading
+caveat fixed in advance:** SearXNG suspends a failed engine (180 s for access denied / too many requests,
+3600 s for a CAPTCHA, 5 to 120 s growing for other errors), so at 2-minute gaps a failure may be followed
+by a `Suspended: ...` search in which the engine was not asked: three failures in a row can be one fresh
+refusal and its suspension. The analysis separates fresh failures from `Suspended` ones and says which a
+fall consisted of.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the

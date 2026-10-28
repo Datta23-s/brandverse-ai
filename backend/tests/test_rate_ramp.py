@@ -12,6 +12,7 @@ from app.research.rate_ramp import (
     LEVELS_MIN,
     HoldController,
     RampController,
+    SetHoldController,
     SilentRecoveryController,
     classify_pattern,
     trailing_count,
@@ -478,3 +479,109 @@ def test_skipped_delays_are_per_controller_not_shared() -> None:
     )
     b = SilentRecoveryController()
     assert a.skipped_delays_min == [5.0, 10.0] and b.skipped_delays_min == []
+
+
+# ── SetHoldController: the run-to-completion hold over a set of engines ──────────────────────
+
+SET7 = ("a", "b", "c", "d", "e", "f", "g")
+ALL_OK = {e: 5 for e in SET7}
+
+
+def step(ctl: SetHoldController, t: float, **override: str):
+    rows = {**ALL_OK}
+    errors: dict[str, str] = {}
+    for e, v in override.items():
+        if v == "error":
+            rows[e], errors[e] = 0, "HTTP error"
+        elif v == "empty":
+            rows[e] = 0
+    return ctl.observe(at=t, rows=rows, errors=errors)
+
+
+def test_one_failure_stops_nothing_and_a_clean_search_resets_the_streak():
+    ctl = SetHoldController(SET7, min_searches=1000)
+    step(ctl, 0)
+    ev = step(ctl, 120, a="error")
+    assert not ctl.done and [e.kind for e in ev] == ["engine_failed"]
+    step(ctl, 240, a="error")
+    step(ctl, 360)  # a answers again
+    step(ctl, 480, a="error")
+    step(ctl, 600, a="error")
+    assert ctl.fallen == {}  # never three in a row
+
+
+def test_three_in_a_row_marks_the_engine_fallen_with_number_and_reason_and_the_run_goes_on():
+    ctl = SetHoldController(SET7, min_searches=1000)
+    for t in (0, 120, 240):
+        ev = step(ctl, t, b="error")
+    assert ctl.fallen == {"b": {"search_number": 3, "reason": "HTTP error"}}
+    assert "engine_fallen" in [e.kind for e in ev]
+    assert not ctl.done and "b" not in ctl.steering and len(ctl.steering) == 6
+    ev = step(ctl, 360, b="error")  # already fallen: not announced again
+    assert "engine_fallen" not in [e.kind for e in ev]
+
+
+def test_a_zero_row_answer_with_no_error_counts_toward_a_fall_and_is_logged_as_empty():
+    ctl = SetHoldController(SET7, min_searches=1000)
+    ev = step(ctl, 0, c="empty")
+    failed = [e for e in ev if e.kind == "engine_failed"][0]
+    assert failed.detail["kind"] == "empty" and failed.detail["reason"] == "no rows, no error named"
+    step(ctl, 120, c="empty")
+    step(ctl, 240, c="empty")
+    assert ctl.fallen["c"]["reason"] == "no rows, no error named"
+    assert ctl.survival()["c"]["empty"] == 3
+
+
+def test_fewer_than_four_answering_in_a_search_is_a_collapse_and_ends_the_run():
+    ctl = SetHoldController(SET7, min_searches=1000)
+    step(ctl, 0, a="error", b="error", c="empty")  # 4 still answer: noise
+    assert not ctl.done
+    ev = step(ctl, 120, a="error", b="error", c="empty", d="error")  # 3 answer
+    assert ctl.outcome == "collapsed" and ctl.done
+    assert [e for e in ev if e.kind == "hold_collapsed"][0].detail["answering"] == 3
+
+
+def test_a_fallen_engine_that_answers_again_still_counts_for_the_collapse_test():
+    ctl = SetHoldController(SET7, min_searches=1000)
+    for t in (0, 120, 240):
+        step(ctl, t, a="error")
+    assert "a" in ctl.fallen
+    step(ctl, 360)  # a answers though out of steering: 7 answering, nothing collapses
+    assert not ctl.done
+
+
+def test_done_needs_both_the_search_count_and_the_hours():
+    ctl = SetHoldController(SET7, interval_min=30, min_searches=3, min_hours=1.0)
+    for t in (0, 1800):
+        step(ctl, t)
+    step(ctl, 2000)  # a third search, but under an hour in
+    assert not ctl.done
+    step(ctl, 3600)
+    assert ctl.outcome == "held"
+
+
+def test_a_run_that_lost_an_engine_is_held_with_falls_not_held():
+    ctl = SetHoldController(SET7, min_searches=4, min_hours=0.001)
+    for t in (0, 120, 240, 360):
+        step(ctl, t, g="error")
+    assert ctl.outcome == "held_with_falls" and "g" in ctl.fallen
+
+
+def test_a_late_gap_is_recorded_and_the_run_is_not_certified_clean():
+    ctl = SetHoldController(SET7, min_searches=2, min_hours=0.001)
+    step(ctl, 0)
+    ev = step(ctl, 1000)  # planned 120 s
+    assert "late_ask" in [e.kind for e in ev] and ctl.outcome == "held_with_gaps"
+
+
+def test_the_controller_refuses_nonsense_and_a_finished_run():
+    with pytest.raises(ValueError):
+        SetHoldController(("a", "a"))
+    with pytest.raises(ValueError):
+        SetHoldController(SET7, min_answering=8)
+    ctl = SetHoldController(SET7, min_searches=2, min_hours=0.0001)
+    step(ctl, 10)
+    step(ctl, 130)
+    assert ctl.done
+    with pytest.raises(ValueError):
+        step(ctl, 250)

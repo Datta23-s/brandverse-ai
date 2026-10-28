@@ -34,6 +34,7 @@ import httpx
 
 from app.research.rate_ramp import (
     HoldController,
+    SetHoldController,
     SilentRecoveryController,
     trailing_count,
 )
@@ -98,9 +99,19 @@ async def main() -> None:
         raise SystemExit("--engine names no engine")
     engine: str | tuple[str, ...] = steering[0] if len(steering) == 1 else steering
 
-    hold = HoldController(
-        interval_min=args.interval_min, min_searches=args.min_searches, min_hours=args.min_hours
-    )
+    # A SET of engines runs to completion (SetHoldController): one failing engine does not stop it.
+    hold: HoldController | SetHoldController
+    if isinstance(engine, tuple):
+        hold = SetHoldController(
+            engine,
+            interval_min=args.interval_min,
+            min_searches=args.min_searches,
+            min_hours=args.min_hours,
+        )
+    else:
+        hold = HoldController(
+            interval_min=args.interval_min, min_searches=args.min_searches, min_hours=args.min_hours
+        )
     started = datetime.now(UTC)
     if args.mode == "silent" and args.broke_at:
         # Begin in silence from a throttle that already happened (a hold that broke): nothing has
@@ -231,7 +242,20 @@ async def main() -> None:
                 continue
             unreachable = 0
             if args.mode == "hold":
-                for event in hold.observe(at=obs.at, clean=obs.clean):
+                if isinstance(hold, SetHoldController):
+                    rec = obs.record
+                    events = hold.observe(
+                        at=obs.at,
+                        rows=rec["steering_rows"],
+                        errors={e: str(r) for e, r in rec["steering_failed"].items()},
+                    )
+                    rec_status = {e: h[-1] for e, h in hold.history.items()}
+                    log.write(
+                        {"kind": "engine_status", "n": n, "utc": rec["utc"], "status": rec_status}
+                    )
+                else:
+                    events = hold.observe(at=obs.at, clean=obs.clean)
+                for event in events:
                     log.write(event_record(event))
                 next_at = obs.at + hold.wait_s - (time.time() - obs.at)
             else:
@@ -240,8 +264,18 @@ async def main() -> None:
                 if not silent.done:
                     next_at = silent.next_search_at(obs.at)
 
-        if args.mode == "hold":
+        if args.mode == "hold" and isinstance(hold, SetHoldController):
             summary: dict[str, Any] = {
+                "outcome": hold.outcome,
+                "searches": len(hold.times),
+                "hours": round((hold.times[-1] - hold.times[0]) / 3600, 3) if hold.times else 0,
+                "survival": hold.survival(),
+                "late_gaps_s": [round(g, 1) for g in hold.late_gaps_s],
+                "keep_awake_accepted": awake,
+            }
+        elif args.mode == "hold":
+            assert isinstance(hold, HoldController)  # noqa: S101 - narrows for the type checker
+            summary = {
                 "outcome": hold.outcome,
                 "searches": len(hold.times),
                 "clean": hold.clean_count,
