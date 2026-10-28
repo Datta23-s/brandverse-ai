@@ -15,22 +15,16 @@ use_default_settings:
       - duckduckgo
       - brave
       - wikipedia
-      - google
       - bing
       - yahoo
-      - qwant
       - yep
       - mwmbl
       - mojeek
-      - startpage
       - marginalia
       - wiby
-      - dogpile
       - duckduckgo web
       - gmx
-      - tusksearch
       - privacywall
-      - searchmysite
       - swisscows
       - seznam
       - yandex
@@ -63,17 +57,13 @@ outgoing:
   max_request_timeout: 10.0
 
 # Engines off in the image's defaults, switched on for the engine-set experiment (2026-10-28).
+# google, qwant, startpage, dogpile, searchmysite and tusksearch were removed before the recording
+# (owner, 2026-10-28): they answered 0 of 8 searches in the burst and cost the 5 s timeout each time.
 engines:
-  - name: google
-    disabled: false
-    inactive: false
   - name: bing
     disabled: false
     inactive: false
   - name: yahoo
-    disabled: false
-    inactive: false
-  - name: qwant
     disabled: false
     inactive: false
   - name: yep
@@ -85,16 +75,10 @@ engines:
   - name: mojeek
     disabled: false
     inactive: false
-  - name: startpage
-    disabled: false
-    inactive: false
   - name: marginalia
     disabled: false
     inactive: false
   - name: wiby
-    disabled: false
-    inactive: false
-  - name: dogpile
     disabled: false
     inactive: false
   - name: duckduckgo web
@@ -103,13 +87,7 @@ engines:
   - name: gmx
     disabled: false
     inactive: false
-  - name: tusksearch
-    disabled: false
-    inactive: false
   - name: privacywall
-    disabled: false
-    inactive: false
-  - name: searchmysite
     disabled: false
     inactive: false
   - name: swisscows

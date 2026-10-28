@@ -244,15 +244,81 @@ generally. This is a **confound**, not only a free-tier limitation.
 *Mitigation.*
 1. Strong-tier calls are rare in both arms by design. No agent defaults to Strong
    (`Architecture.md` §4.2, `Rules.md` C5); verification and risk assessment run on Standard and
-   escalate only where T4 or the high-risk rule requires it. In the test set that is the regulated brand's 3 requests (B07,
-   R19–R21) and the 3 requests on products with entered evidence conflicts (B01, R01–R03), so at
-   most 6 of the 30 Proposed runs should touch Strong at all.
+   escalate only where T4 or the high-risk rule requires it (the high-risk rule is defined by what the draft
+   copy does, `Rules.md` T9, not by what the product has on file). In the test set that is the regulated
+   brand's 3 requests (B07, R19–R21) and the requests on products with entered evidence conflicts, so
+   **6 to 8** of the 30 Proposed runs should touch Strong, not a fixed number.
+   *Correction, 2026-10-28:* this item first said "at most 6" (the 3 B07 requests plus B01's R01–R03). The
+   enumeration from `evaluation/test_set.yaml` is: **regulated (T4): R19, R20, R21 (3); entered conflicts:
+   B01 product A and product B, so R01, R02, R03 (3); B03 product A, so R07 and R09 (2; R08 is product B and
+   has none).** That is 8. The B03 pair is not certain: its two conflicts (weight 3.23 vs 3.1 kg; warranty 1 vs
+   3 years) came from a search-result summary and are marked UNCONFIRMED, not fetched, so whether
+   `has_conflicting_evidence` fires depends on what the research finds. The count is therefore **6 (B03's
+   conflicts do not materialise) to 8 (they do)**, and the strong-call table below is given for both.
 2. Every Strong call is logged per arm in `llm_calls` (`tier`, `route_reason`), so the asymmetry
    is **quantified and reported**, not assumed away.
 3. **Strong-tier call counts per arm are reported as a result in their own right**: total, per
    request, and by reason (T4, high-risk, conflicting evidence). Quality comparisons between B and
    Proposed are also reported with the Strong-touching requests separated out, so a difference that
    exists only there is visible as such.
+
+**Strong-tier call budget and the approval schedule (computed 2026-10-28, BEFORE any strong-tier call per run
+has been measured).** `gemini-3.8-flash` is 20 calls a day (`config/models.yaml`). *Per run, by arm:* Baseline A
+0; Baseline B 0 (single Standard tier, V1); Proposed 0 unless it routes to Strong (T4, conflicting evidence, or
+the high-risk rule of `Rules.md` T9, set by what the draft copy cites or attempts, not by what the product has),
+in which case **s** calls. **s is not measured**: no generator or router exists and no development call may
+reach the strong tier. `Phases.md` plans "at most about 3" a run, a planning figure, not a measurement. The
+table is therefore a function of s, with three columns.
+
+| In-window demand (the primary runs and re-runs) | s=3 | s=6 | s=10 |
+|---|---|---|---|
+| 8 touching runs + 2 re-runs (25%: infrastructure failures only; a T4 call at the cap is deferred, not failed) | 30 | 60 | 100 |
+| 6 touching runs + 2 re-runs (B03's conflicts do not materialise) | 24 | 48 | 80 |
+| Days at 20/day (8-run case / 6-run case) | 2 / 2 | 3 / 3 | 5 / 4 |
+
+The window of 18 to 23 November is 6 days, 120 calls, so the in-window demand fits in every column. Tuning
+(1 regulated request, `Phases.md`) and the 10-campaign calibration (assumed 2 touching campaigns) happen
+BEFORE the window and add 3 touching-equivalents: all-in totals are 39 / 78 / 130 calls (8-run case) and
+33 / 66 / 110 (6-run case), 2 to 7 days at 20 a day, 2 of them to be spent before the window opens. The
+break-even for the window is **(touching runs + 2) x s <= 120**, i.e. s <= 12 at 8 touching runs. The
+question that remains open is how many runs the high-risk rule adds: under T9 a run touches Strong only if its
+OWN copy cites a restricted claim, and T2 keeps restricted claims out of the generator's view, so this should
+be rare; it is measured, not assumed. *The definition in T9 was fixed before s was measured. The earlier
+worry (about 21 of 30 runs routing to Strong because 14 of the 20 products carry restricted claims) was an
+upper bound under a product-based reading of the rule, never an observation.* Fewer requests would not
+help: 20 requests cost the same strong calls unless they drop B07, B01 or B03, and dropping B07 removes the
+regulated brand RQ3 needs.
+
+*Measuring s (Phases.md): on the tuning set, before the window.* Registered now: the tuning runs are executed
+on the Proposed arm with the strong tier enabled for the tuning organisation only (the one exception to "no
+development call reaches the strong tier", owner's decision, because the figure cannot be had otherwise);
+for every touching run, the strong calls are counted by `route_reason` (T4, conflict, high-risk) from
+`llm_calls`; s is reported as mean, maximum and per route, and the plan states which column it falls in:
+s <= 4.5 is the 3 column, <= 8 the 6 column, otherwise the 10 column; and the budget rule above is
+evaluated with the MAXIMUM, not the mean. **The tuning set holds one regulated request, so it measures the T4
+route only**; the conflict and copy-triggered routes are observed there only if a tuning request has an
+entered conflict or its copy touches a restricted claim, and where a route is not observed it is reported as
+not measured, not assumed to equal T4's.
+
+**The approval rounds are the real schedule; the approver's hours are the constraint that will slip.** One
+approver reviews every campaign (D3). *Reviews:* 90 evaluation campaigns (30 requests x 3 arms) + the
+calibration pass (10 practice campaigns; rubric §6 repeats it until agreement is at least 8 of 10, so 1 to 3
+passes = 10 to 30 reviews) = **100 to 120 reviews**, and about 10% more if revisions are requested (each
+revised campaign is reviewed again): **about 110 to 130**. The tuning runs need no review unless the Proposed
+runs there must write memory (up to 10 more). *Time per review:* the rubric boxes it at 10 minutes and quotes
+under an hour for 10 calibration campaigns, so about 6 minutes typical, 10 at the cap: **about 11 to 13
+hours at 6 minutes, up to 22 at the cap**. This is the approver's time only; the second scorer's calibration
+pass and the D2 raters' scoring are other people's hours and are not counted here. *Sittings:* at most 15
+reviews a sitting (rubric §2), so the 90 evaluation campaigns need **6 sittings at the least** (about 90
+minutes each at 6 minutes, 150 at the cap), plus 1 to 3 calibration sittings before the window. *Serialisation:*
+a brand's campaign N+1 is generated only after campaign N is decided (T6, memory write-back), so the 90
+campaigns arrive in three waves of 30 (campaign 1 of every brand and arm, then 2, then 3), each wave needing
+at least 2 sittings: **6 sittings, in a fixed order that no amount of compute shortens**. At one sitting a day
+that is 6 days, the whole 18 to 23 November window with NO slack for a revision, an `undecided`, an
+infrastructure re-run or an illness; at two sittings a day (morning and evening; the cap is per sitting, the
+fatigue rationale argues against it) it is 3 days plus the overnight generation of each next wave. So the
+window is safe only if two sittings a day are acceptable or the window is widened; the calibration and the
+tuning measurement must be finished before 18 November. Quota is not the bottleneck; this is.
 
 **V2 — A paraphrase of a restricted claim can pass the claim gate undetected (recorded
 2026-10-17).** The gate's matching is deterministic and literal (`backend/app/core/text_match.py`,
@@ -1768,7 +1834,7 @@ two cannot be recovered from the snapshot. The comparison is exact against the d
   extractor (too little main text), 48 discarded below the acceptance threshold, **160 accepted findings of 319
   URLs (50%)**.
 - **A search takes about 5 s, not milliseconds**: the engine waits out its per-engine timeout (5 s) for the
-  engines that never answer (avalw, seznam, tusksearch and others among the 22 enabled), so every answer takes
+  engines that never answer (avalw, seznam, tusksearch and others among the 22 then enabled; 17 now, see the second capture below), so every answer takes
   the full 5 s whatever the four declared ones do. Harmless at 2-minute gaps, and a number the derived web time
   must use (median 5.0 s, max 5.2 s).
 - **8 of 8 searches clean, none degraded**: the first live observation of the degraded-search rate, 0 of 8. At
@@ -1904,6 +1970,47 @@ only evidence; the image documents a backend for two engines); anything about 4 
 rate for any day but 2026-10-28. *Recording arithmetic under this set:* 153 distinct searches (240 query
 slots), recomputed against the declared set in `tests/test_evaluation_test_set.py`: the engine set is part
 of the cache key, so a different declaration is a different 153 and re-records everything.
+
+**Second live capture of R01 (2026-10-28, after the engine, page-cap and agent changes; a fresh disposable
+store, `evaluation/snapshot_trial/capture-20261028T125439Z.json`).** Changes made BEFORE it, owner's rulings:
+the six engines that answered 0 of 8 searches in the burst (google, qwant, startpage, dogpile, searchmysite,
+tusksearch) were disabled in SearXNG (`GET /config` now lists 17 enabled), and `research.fetch_max_bytes` was
+raised from 2 MB to 5 MB. The user agent was changed AFTER this capture started (below), so its 403s were drawn by
+the OLD agent string. The first trial's stored unit costs were wrong (timer bug) and the store was deleted.
+- **Replay: byte for byte, again.** 8 of 8 search answers, 270 of 270 page bodies, 60 of 60 frozen failures.
+- **The 153 does not move.** `cache_key` hashes the DECLARED set (duckduckgo web, yahoo, yandex, yep), not the
+  set SearXNG runs, so disabling undeclared engines changes no key; recomputed by
+  `tests/test_evaluation_test_set.py`: 240 slots, 153 distinct keys. (Changing the declared set would still
+  re-record everything.)
+- **The 5-second search did not go away.** Median 5.03 s, max 5.42 s, as before: `avalw` still times out
+  (observed in a probe search, which also showed brave and wikipedia suspended for too many requests, plain
+  duckduckgo behind a CAPTCHA and gmx failing to parse, all of which fail fast). `avalw` answered 3 of 8 in
+  the burst, so the zero-of-eight rule did not remove it; whether to disable it is open. It costs about 40 s a
+  request and nothing else.
+- **The 5 MB cap works.** 0 of 330 pages too large (largest 3.6 MB; 11 of 319 were refused at 2 MB). Of the 11
+  formerly refused pages, 9 extract to real text (775 to 19,994 characters; e.g. the boAt blog index at 4.98 MB, three
+  gonoise.com product pages), 2 do not (portronics collection, gonoise.com home): the cap was costing evidence
+  and stays at 5 MB.
+- **Failures: 60 of 330 frozen failed (18.2%, was 21%):** HTTP 403 x25 (7.6%), robots refusal x14, robots.txt
+  unreachable x10 (3.0%), HTTP 503 x5, HTTP 404 x2, PDF x2, 410 x1, DNS x1.
+  - **403s are the price of asking honestly.** The agent string was `BrandverseResearch/0.1 (academic research
+    project)`: a product token and version, but no contact URL. Changed (owner) to
+    `... (academic research project; +https://github.com/Datta23-s/brandverse-ai)`, a repository URL, not an
+    email address. It is not a browser string and will not become one: a host that refuses an identified
+    research client has said no, and that share is the cost of asking honestly. The 403 rate under the new
+    string is not measured yet; the recording will be its first measurement.
+  - **robots.txt unreachable is kept as it is** (owner): treating an unreachable robots.txt, a 5xx, as disallow
+    is what RFC 9309 specifies. Its measured cost: 8 of 319 (2.5%) in the first capture, 10 of 330 (3.0%) in the second.
+- **A request's real evidence base is about half of what search returns, and a reader should see both numbers
+  together.** 330 URLs became 176 accepted findings (53%; first capture 319 to 160, 50%): 60 URLs failed to
+  fetch (18%), 36 were fetched but refused by the extractor for lacking main text (11%) and 58 were discarded
+  below the acceptance threshold (18%). This holds for every arm that researches (Baseline A does not), so it
+  is not a confound between arms; it thins what each of them can use by the same half.
+- **The recorder's degraded-search path ran for real.** Query 2 of the first attempt came back degraded (yahoo
+  failed): the request was aborted, the clean search was held and carried into the redo, the gap doubled to
+  240 s, and attempt 2 committed. Degraded searches: 1 of 9 live (11%), 1 of 17 across both captures (6%), inside
+  the registered expectation (none to about a quarter). Cost: capture span 1,768 s against 839 s, session 2,109 s.
+- Storage: 25 MB for one request (270 pages), consistent with the 0.4 GB estimate for the whole recording.
 
 ## 9. Required items
 

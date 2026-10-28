@@ -72,11 +72,11 @@ assumed away.
 
 ## Limits (all `config/scoring.yaml` `research.fetch_*`, untuned defaults)
 
-10 s per network operation, 20 s for the whole fetch (a slow drip cannot hold it), 2,000,000 bytes
+10 s per network operation, 20 s for the whole fetch (a slow drip cannot hold it), 5,000,000 bytes (raised from 2,000,000 on 2026-10-28, owner: the first live capture refused 11 of 319 pages, 3.4%, and 9 of those 11 extract to real text)
 counted on the decoded body (a compression bomb stops at the cap; tested with a ~300-byte gzip that
 decodes to 1 MB), 5 redirects. Over the cap is refused, not truncated. User agent:
-`BrandverseResearch/0.1 (academic research project)` — no personal address in a header sent to other
-people's servers.
+`BrandverseResearch/0.1 (academic research project; +https://github.com/Datta23-s/brandverse-ai)` (changed 2026-10-28, owner: a repository URL identifies the client honestly, which a bare comment did not, and puts no personal address in a header sent to other
+people's servers; it is not a browser string and the 403s it draws are the hosts' answer).
 
 ## What the real web showed (2026-10-26, `scripts/fetch_probe.py`)
 

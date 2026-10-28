@@ -43,6 +43,15 @@ yahoo, privacywall, gmx, mojeek, bing, avalw; failed duckduckgo (CAPTCHA), start
 qwant, dogpile, searchmysite (access denied), tusksearch (HTTP error), seznam (timeout); answered nothing
 without an error crowdview, mwmbl, wiby, wikipedia. `research.declared_engines` was null at the time of this search and is now declared (2026-10-28, owner): yep, yandex, yahoo, duckduckgo web, with the evidence in `docs/evaluation-plan.md` section 8.
 
+
+**Engines disabled 2026-10-28 (owner), before the recording.** google, qwant, startpage, dogpile, searchmysite
+and tusksearch answered 0 of 8 searches in the burst and cost the 5 s timeout on each search, so they were
+removed from `keep_only` and from the `engines:` block of `infra/searxng/settings.yml` (container restarted;
+`GET /config` lists 17 enabled). brave and the other undeclared engines that answer stay. The engine set is part of
+the evaluation's provenance, so it is fixed before the first recorded search; the cache key uses the DECLARED set, so
+the 153 distinct searches are unchanged. The 5 s did not disappear: avalw still times out (it answered 3 of 8, so the
+rule did not cover it), brave and wikipedia are suspended for too many requests, duckduckgo is behind a CAPTCHA.
+
 **Burst, 2026-10-28 02:55-03:09 UTC** (`evaluation/search_rate/engines-burst-20261028T025520Z.jsonl`; 8 searches at
 2-minute gaps, run one minute after the single search above). Per-engine, searches answered with rows out
 of 8: yep 8, yandex 8, yahoo 8, privacywall 8, duckduckgo web 8, swisscows 8, mojeek 8, bing 7, duckduckgo

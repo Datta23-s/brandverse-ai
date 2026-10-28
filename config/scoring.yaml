@@ -108,9 +108,9 @@ research:
   page_cache_ttl_s: 3600                               # one hour
   fetch_timeout_s: 10.0
   fetch_total_timeout_s: 20.0
-  fetch_max_bytes: 2000000                             # 2 MB
+  fetch_max_bytes: 5000000                             # 5 MB (owner, 2026-10-28; was 2 MB, which refused 3.4% of pages)
   fetch_max_redirects: 5
-  fetch_user_agent: "BrandverseResearch/0.1 (academic research project)"
+  fetch_user_agent: "BrandverseResearch/0.1 (academic research project; +https://github.com/Datta23-s/brandverse-ai)"
   # Per-host politeness (fetch.py): at least this long between two requests started to the same
   # host, whatever they are for. Different hosts do not wait for each other. DEFAULT, NOT TUNED.
   fetch_host_delay_s: 1.0

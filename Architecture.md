@@ -140,7 +140,9 @@ escalate, do not start high). Strong is reached only through the first branch:
 - `task.t4_required` — `Rules.md` T4, by function: the call performs **claim verification or risk
   assessment on regulated-sector output** (health, finance, children's products), whichever agent
   performs it;
-- `task.risk == "high"` — a high-risk claim, in any sector;
+- `task.risk == "high"` — the **draft copy** cites or attempts a restricted claim, in any sector
+  (`Rules.md` T9: set from the claim gate's report on a generated statement, never from the claims a
+  product has on file; defined 2026-10-28, before the strong calls per run were measured);
 - `task.has_conflicting_evidence` — sources disagree on a fact the output relies on.
 
 All other calls in a regulated-sector run keep their default tier, and the sector constraint

@@ -1,0 +1,123 @@
+{
+ "summary": {
+  "ended": "complete",
+  "started_utc": "2026-10-28T12:54:40.489832+00:00",
+  "elapsed_s": 2109.0,
+  "committed": [
+   "R01"
+  ],
+  "pending": [],
+  "attempts": 2,
+  "aborted_attempts": 1,
+  "waited_s": 72.0,
+  "searches_live": 9,
+  "searches_clean": 8,
+  "searches_throttled": 0,
+  "searches_unavailable": 0,
+  "searches_degraded": 1,
+  "searches_reused": 0,
+  "searches_carried": 1,
+  "searches_wasted": 0,
+  "search_span_s": {
+   "max": 1767.9,
+   "median": 1767.9
+  },
+  "search_span_all_s": {
+   "max": 1767.9,
+   "median": 1767.9
+  },
+  "degraded_search_rate": 0.1111111111111111,
+  "degraded_causes": {
+   "yahoo": 1
+  },
+  "achieved_clean_per_hour": 13.655858149773561,
+  "pages_total": 330,
+  "pages_new_ok": 270,
+  "pages_reused": 0,
+  "pages_frozen_failed": 60,
+  "frozen_failed_share": 0.18181818181818182,
+  "retries_used": 45,
+  "final_gap_s": 225.0,
+  "config": {
+   "search_gap_s": 120.0,
+   "gap_ceiling_s": 900.0,
+   "gap_increase_factor": 2.0,
+   "gap_decrease_step_s": 15.0,
+   "clean_run_to_speed_up": 5,
+   "backoff_base_s": 60.0,
+   "backoff_max_s": 1800.0,
+   "backoff_jitter": 0.25,
+   "dark_ceiling_s": 5400.0,
+   "wall_limit_s": 36000.0,
+   "snapshot_page_retries": 2
+  }
+ },
+ "manifest": {
+  "search_span_s": {
+   "max": 1767.9,
+   "median": 1767.9
+  },
+  "search_span_all_s": {
+   "max": 1767.9,
+   "median": 1767.9
+  },
+  "requests": 1,
+  "searches": 8,
+  "pages": 330,
+  "pages_ok": 270,
+  "pages_frozen_failed": 60,
+  "sha256": "7feaebfb8ce331992569c7059445834c9f11820237f177d8a71934aeba58b61c",
+  "first_committed_utc": "2026-10-28T13:29:49.327392+00:00",
+  "last_committed_utc": "2026-10-28T13:29:49.327392+00:00"
+ },
+ "verification": {
+  "byte_for_byte": true,
+  "problems": [],
+  "searches_compared": 8,
+  "pages_compared": 270,
+  "frozen_failures_compared": 60,
+  "live_searches_seconds": {
+   "n": 9,
+   "median": 5.03,
+   "max": 5.42
+  },
+  "live_pages": {
+   "ok": 270,
+   "failed": 60,
+   "failures_by_kind": {
+    "FetchFailed/http_status/403": 25,
+    "FetchRefused/robots/None": 14,
+    "FetchFailed/robots_unavailable/None": 10,
+    "FetchFailed/http_status/503": 5,
+    "FetchFailed/http_status/404": 2,
+    "FetchUnsupported/pdf/None": 2,
+    "FetchFailed/dns/None": 1,
+    "FetchFailed/http_status/410": 1
+   },
+   "bytes_median": 263492,
+   "bytes_max": 3613972,
+   "with_redirects": 23,
+   "final_url_differs_from_requested": 22,
+   "content_types": {
+    "text/html": 270
+   }
+  },
+  "replayed_driver_run": {
+   "searches": 8,
+   "pages_fetched": 330,
+   "pages_served": 270,
+   "pages_extracted": 234,
+   "extraction_refused": 36,
+   "discarded_low_score": 58,
+   "accepted_findings": 176,
+   "failures_by_kind": {
+    "extract:ExtractionFailed": 36,
+    "fetch:FetchFailed/dns": 1,
+    "fetch:FetchFailed/http_status": 33,
+    "fetch:FetchFailed/robots_unavailable": 10,
+    "fetch:FetchRefused/robots": 14,
+    "fetch:FetchUnsupported/pdf": 2
+   }
+  }
+ }
+}
