@@ -701,6 +701,7 @@ is present in the first commit of that code.
 | V5 | The source authority prior is the developer's untuned judgement | Mitigated by reporting results with the prior flattened |
 | V6 | The source model conflates authority with independence | Ruled; fix requires a brand domain field in Phase 6 |
 | V7 | The evaluation's searches can only return evidence about a product's category, never the product (pseudonyms); facet 3 cannot verify a specific product's claims | Stated 2026-10-28; bounds what the evaluation can show about claim grounding |
+| V8 | The frozen snapshot has no off-device copy: its only backup is a folder on the same physical disk, so reproducibility depends on one disk | Stated 2026-10-28; the zero-retention exception's retention condition is partially met; the same-disk override is deliberate and logged |
 
 Additional stated limitations: tests run as a database superuser, so privilege failures appearing
 only for a non-superuser role are invisible to CI; accent handling differs between the lexical and

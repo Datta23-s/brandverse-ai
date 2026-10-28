@@ -12,16 +12,32 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.research.snapshot_backup import UnsuitableBackupDestination, backup_snapshot
+from app.research.snapshot_backup import (
+    UnsuitableBackupDestination,
+    backup_snapshot,
+    obtain_acknowledgement,
+)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--store", type=Path, required=True)
     ap.add_argument("--to", type=Path, required=True)
+    ap.add_argument(
+        "--allow-same-disk",
+        action="store_true",
+        help="permit a destination on the same physical disk; prints the consequence and asks you "
+        "to type it back (the refusal otherwise stands)",
+    )
+    ap.add_argument(
+        "--same-disk-confirmation",
+        default=None,
+        help="the exact sentence, for a job with no keyboard; still requires --allow-same-disk",
+    )
     args = ap.parse_args()
     try:
-        report = backup_snapshot(args.store, args.to)
+        ack = obtain_acknowledgement(args.allow_same_disk, args.same_disk_confirmation)
+        report = backup_snapshot(args.store, args.to, same_disk_acknowledgement=ack)
     except UnsuitableBackupDestination as e:
         print(f"REFUSED: {e}")
         return 2

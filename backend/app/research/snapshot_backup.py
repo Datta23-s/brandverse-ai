@@ -13,11 +13,13 @@ So the destination is checked before anything is copied, and the check has no sw
   pCloud, MEGA): a folder those clients watch would upload what is put in it;
 * not on the same physical disk as the store: a copy that dies with the disk is not a backup.
 
-The copy is additive and verified: bodies are immutable and content-addressed, the index files only
-ever grow (the destination's version must be a prefix of the source's, otherwise the two have
-diverged and nothing is overwritten), and after copying every file is hashed on both sides. The
-destination gets a `BACKUP-VERIFIED.json` naming what was verified and when. Run it after every
-session that commits requests.
+The same-disk refusal alone can be overridden, deliberately (owner, 2026-10-28: the backup is a
+folder on the same physical disk). The refusal is NOT removed: `backup_snapshot` raises unless the
+caller passes `same_disk_acknowledgement` equal, character for character, to `SAME_DISK_SENTENCE`,
+which the command-line tool prints and makes the person type back. Each use is appended to the
+store's waivers log and written into the backup's certificate (`same_disk: true`), so a same-disk
+copy can never be mistaken for an off-device one. The other refusals (repository, cloud-synced
+folder, overlap, a disk it cannot identify) have no override.
 """
 
 import hashlib
@@ -51,6 +53,13 @@ CLOUD_FOLDER_NAMES = (
 )
 INDEX_FILES = ("committed.jsonl", "searches.jsonl", "pages.jsonl")
 VERIFIED = "BACKUP-VERIFIED.json"
+WAIVERS = "backup-waivers.jsonl"
+NEWLINE = chr(10)
+SAME_DISK_SENTENCE = (
+    "A same-disk copy protects against accidental deletion of the store and not against disk "
+    "failure: if this disk fails, the snapshot is unrecoverable and the evaluation's results "
+    "become unreproducible, because the web state cannot be re-captured."
+)
 
 
 class UnsuitableBackupDestination(SnapshotError):
@@ -88,8 +97,11 @@ def check_destination(
     dest: Path,
     *,
     disk_of: Callable[[Path], int | None] = powershell_disk_number,
-) -> None:
-    """Refuse a destination that would defeat the purpose or break a condition."""
+    same_disk_acknowledgement: str | None = None,
+) -> bool:
+    """Refuse a destination that would defeat the purpose or break a condition. Returns True when
+    the destination is on the same physical disk and that was deliberately acknowledged, else
+    False."""
     source, dest = source.resolve(), dest.resolve()
     if dest == REPO_ROOT or REPO_ROOT in dest.parents:
         raise UnsuitableBackupDestination(f"{dest} is inside the repository")
@@ -108,10 +120,13 @@ def check_destination(
             "refusing rather than guessing"
         )
     if here == there:
+        if same_disk_acknowledgement == SAME_DISK_SENTENCE:
+            return True
         raise UnsuitableBackupDestination(
             f"{dest} is on the same physical disk (disk {here}) as the store: a copy that dies "
-            "with the disk is not a backup"
+            "with the disk is not a backup. " + SAME_DISK_SENTENCE
         )
+    return False
 
 
 def _sha(path: Path) -> str:
@@ -148,9 +163,14 @@ def backup_snapshot(
     dest: Path,
     *,
     disk_of: Callable[[Path], int | None] = powershell_disk_number,
+    same_disk_acknowledgement: str | None = None,
 ) -> BackupReport:
     store = SnapshotStore(source)  # refuses anything that is not an evaluation store
-    check_destination(store.root, dest, disk_of=disk_of)
+    same_disk = check_destination(
+        store.root, dest, disk_of=disk_of, same_disk_acknowledgement=same_disk_acknowledgement
+    )
+    if same_disk:
+        _log_waiver(store.root, dest)
     dest = dest.resolve()
     report = BackupReport()
     if dest.exists() and any(dest.iterdir()) and not (dest / MARKER).is_file():
@@ -185,9 +205,50 @@ def backup_snapshot(
             "verified_utc": datetime.now(UTC).isoformat(),
             "files": report.verified,
             "manifest": store.manifest_summary(),
+            "same_disk": same_disk,
         }
+        if same_disk:
+            verified["WARNING"] = SAME_DISK_SENTENCE
         (dest / VERIFIED).write_text(json.dumps(verified, indent=1) + "\n", encoding="utf-8")
     return report
+
+
+def obtain_acknowledgement(
+    allow_same_disk: bool,
+    typed: str | None = None,
+    *,
+    ask: Callable[[str], str] = input,
+    say: Callable[[str], None] = print,
+) -> str | None:
+    """The deliberate act behind `--allow-same-disk`: print the sentence and require it back.
+
+    No flag: nothing is acknowledged (None) and the refusal stands. With the flag the sentence is
+    printed and the person must type it exactly (`typed` supplies it for a job that has no
+    keyboard; the flag is still required, and the text must still match). Anything else, including
+    a closed stdin, raises: the override is never a default and never a side effect."""
+    if not allow_same_disk:
+        return None
+    say("WARNING: " + SAME_DISK_SENTENCE)
+    try:
+        answer = typed if typed is not None else ask("Type that sentence exactly to confirm: ")
+    except EOFError:
+        answer = None
+    if answer != SAME_DISK_SENTENCE:
+        raise UnsuitableBackupDestination(
+            "the same-disk acknowledgement was not given exactly; nothing was done"
+        )
+    return answer
+
+
+def _log_waiver(store_root: Path, dest: Path) -> None:
+    """Every use of the same-disk override is on the record, in the store itself."""
+    line = {
+        "utc": datetime.now(UTC).isoformat(),
+        "destination": str(dest.resolve()),
+        "acknowledged": SAME_DISK_SENTENCE,
+    }
+    with (store_root / WAIVERS).open("a", encoding="utf-8", newline=NEWLINE) as f:
+        f.write(json.dumps(line) + NEWLINE)
 
 
 def verify_backup(source: Path, dest: Path, report: BackupReport | None = None) -> list[str]:

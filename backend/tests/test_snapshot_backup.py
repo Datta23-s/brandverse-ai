@@ -13,10 +13,13 @@ import pytest
 
 from app.research.snapshot import REPO_ROOT, SnapshotStore, record_request
 from app.research.snapshot_backup import (
+    SAME_DISK_SENTENCE,
     VERIFIED,
+    WAIVERS,
     UnsuitableBackupDestination,
     backup_snapshot,
     check_destination,
+    obtain_acknowledgement,
     verify_backup,
 )
 from tests.snapshot_support import (
@@ -117,8 +120,9 @@ async def test_a_diverged_index_is_reported_and_never_overwritten(tmp_path):
 
 async def test_it_refuses_a_destination_on_the_same_physical_disk(tmp_path):
     store = await make_store(tmp_path)
-    with pytest.raises(UnsuitableBackupDestination, match="same physical disk"):
+    with pytest.raises(UnsuitableBackupDestination, match="same physical disk") as refused:
         backup_snapshot(store.root, tmp_path / "laptop" / "copy", disk_of=two_disks)
+    assert SAME_DISK_SENTENCE in str(refused.value)  # the refusal says what it would cost
     assert not (tmp_path / "laptop" / "copy").exists()  # refused before anything was made
 
 
@@ -160,3 +164,92 @@ async def test_it_refuses_a_non_empty_destination_that_is_not_a_backup_and_a_non
     plain.mkdir()
     with pytest.raises(Exception, match="no .evaluation-namespace"):
         backup_snapshot(plain, tmp_path / "external" / "b", disk_of=two_disks)
+
+
+# ── The deliberate override of the same-disk refusal (owner, 2026-10-28) ─────────────────────
+
+
+async def test_the_same_disk_override_needs_the_exact_sentence_and_nothing_less(tmp_path):
+    store = await make_store(tmp_path)
+    dest = tmp_path / "laptop" / "copy"
+    for wrong in ("yes", "", SAME_DISK_SENTENCE.lower(), SAME_DISK_SENTENCE + " ", True):
+        with pytest.raises(UnsuitableBackupDestination, match="same physical disk"):
+            backup_snapshot(
+                store.root,
+                dest,
+                disk_of=two_disks,
+                same_disk_acknowledgement=wrong,  # type: ignore[arg-type]
+            )
+    assert not dest.exists()
+
+
+async def test_an_acknowledged_same_disk_copy_is_made_logged_and_marked_as_not_off_device(tmp_path):
+    store = await make_store(tmp_path)
+    dest = tmp_path / "laptop" / "copy"
+    report = backup_snapshot(
+        store.root, dest, disk_of=two_disks, same_disk_acknowledgement=SAME_DISK_SENTENCE
+    )
+    assert report.ok and verify_backup(store.root, dest) == []
+    certificate = json.loads((dest / VERIFIED).read_text())
+    assert certificate["same_disk"] is True and certificate["WARNING"] == SAME_DISK_SENTENCE
+    waivers = [json.loads(x) for x in (store.root / WAIVERS).read_text().splitlines()]
+    assert len(waivers) == 1 and waivers[0]["acknowledged"] == SAME_DISK_SENTENCE
+    assert waivers[0]["destination"] == str(dest.resolve())
+    backup_snapshot(  # each use is on the record
+        store.root, dest, disk_of=two_disks, same_disk_acknowledgement=SAME_DISK_SENTENCE
+    )
+    assert len((store.root / WAIVERS).read_text().splitlines()) == 2
+
+
+async def test_the_override_opens_the_same_disk_refusal_and_no_other(tmp_path):
+    store = await make_store(tmp_path)
+    ack = SAME_DISK_SENTENCE
+    with pytest.raises(UnsuitableBackupDestination, match="cloud-synced"):
+        backup_snapshot(
+            store.root, tmp_path / "laptop" / "OneDrive" / "b", disk_of=two_disks,
+            same_disk_acknowledgement=ack,
+        )  # fmt: skip
+    with pytest.raises(UnsuitableBackupDestination, match="inside the repository"):
+        check_destination(
+            store.root,
+            REPO_ROOT / "evaluation" / "b",
+            disk_of=two_disks,
+            same_disk_acknowledgement=ack,
+        )
+    with pytest.raises(UnsuitableBackupDestination, match="cannot tell"):
+        check_destination(
+            store.root,
+            tmp_path / "laptop" / "b",
+            disk_of=lambda p: None,
+            same_disk_acknowledgement=ack,
+        )
+
+
+async def test_acknowledging_on_a_different_disk_is_harmless_and_records_no_waiver(tmp_path):
+    store = await make_store(tmp_path)
+    dest = tmp_path / "external" / "backup"
+    backup_snapshot(
+        store.root, dest, disk_of=two_disks, same_disk_acknowledgement=SAME_DISK_SENTENCE
+    )
+    assert json.loads((dest / VERIFIED).read_text())["same_disk"] is False
+    assert not (store.root / WAIVERS).exists()
+
+
+def test_the_command_line_override_prints_the_consequence_and_requires_it_typed_back():
+    said: list[str] = []
+    assert (
+        obtain_acknowledgement(False, say=said.append) is None and said == []
+    )  # no flag: refusal stands
+    got = obtain_acknowledgement(True, ask=lambda _p: SAME_DISK_SENTENCE, say=said.append)
+    assert got == SAME_DISK_SENTENCE and SAME_DISK_SENTENCE in said[0]
+    assert obtain_acknowledgement(True, SAME_DISK_SENTENCE, say=said.append) == SAME_DISK_SENTENCE
+    with pytest.raises(UnsuitableBackupDestination, match="not given exactly"):
+        obtain_acknowledgement(True, ask=lambda _p: "y", say=said.append)
+    with pytest.raises(UnsuitableBackupDestination, match="not given exactly"):
+        obtain_acknowledgement(True, "close enough", say=said.append)
+
+    def closed_stdin(_prompt: str) -> str:
+        raise EOFError
+
+    with pytest.raises(UnsuitableBackupDestination, match="not given exactly"):
+        obtain_acknowledgement(True, ask=closed_stdin, say=said.append)  # no keyboard, no override

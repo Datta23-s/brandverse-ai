@@ -478,6 +478,20 @@ audience facets, which describe a category and its buyers, not the pseudonymous 
 `backend/app/research/planner.py`; related V6, which concerns whose evidence a page is, where V7 concerns
 what the search could ever find.)
 
+**V8 — The frozen snapshot has no off-device copy, so reproducibility depends on one disk (recorded
+2026-10-28; owner's choice).** The evaluation's arms reason over a frozen copy of the web (search results and
+page bodies) because the web cannot be re-captured later: the same queries a month on return different
+pages, and some of today's pages will be gone. The only backup of that snapshot is a folder on the SAME
+physical disk as the snapshot. It protects against accidental deletion or corruption of the store and not
+against disk failure. **If that disk fails, the snapshot is unrecoverable and the evaluation's results become
+unreproducible**: the stored findings, scores and per-arm outputs would remain, but a reader could not replay
+the arms over the evidence they saw, and a re-run would meet a different web. The thesis states this; it does
+not describe the snapshot as backed up off-device. Mitigations that exist: every committed request has a
+hashed manifest line in the repository (so what was captured is checkable, not recoverable); the backup
+certificate records `same_disk: true`; and the condition closes the day an external drive is attached and the
+same tool is run. The retention condition of the zero-retention exception (`Architecture.md` section 6) is
+therefore PARTIALLY MET.
+
 ### A defect found and fixed: a throttled search was indistinguishable from no evidence — 2026-10-26
 
 *Infrastructure failure masquerading as a system result.* The search provider was written against a

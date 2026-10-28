@@ -37,7 +37,12 @@ from app.research.planner import plan_queries
 from app.research.recorder import RecorderConfig, record_session
 from app.research.search import SearchResponse, SearxngSearch
 from app.research.snapshot import SnapshotPages, SnapshotSearch, SnapshotStore
-from app.research.snapshot_backup import backup_snapshot, check_destination
+from app.research.snapshot_backup import (
+    UnsuitableBackupDestination,
+    backup_snapshot,
+    check_destination,
+    obtain_acknowledgement,
+)
 from scripts.rate_probe_lib import keep_awake, memory_available_gb
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +113,15 @@ async def main() -> None:
         help="the backup destination (second physical disk, not cloud): REQUIRED unless --trial",
     )
     ap.add_argument(
+        "--allow-same-disk",
+        action="store_true",
+        help="permit --backup-to on the same physical disk; prints the consequence and asks you to "
+        "type it back",
+    )
+    ap.add_argument(
+        "--same-disk-confirmation", default=None, help="the exact sentence, no keyboard"
+    )
+    ap.add_argument(
         "--trial",
         action="store_true",
         help="a disposable store for a test capture; the only way to run without a backup",
@@ -137,7 +151,13 @@ async def main() -> None:
         )
     if args.backup_to is not None:
         # checked BEFORE the first search, so a recording never starts without a legal backup
-        check_destination(args.store, args.backup_to)
+        try:
+            acknowledgement = obtain_acknowledgement(
+                args.allow_same_disk, args.same_disk_confirmation
+            )
+            check_destination(args.store, args.backup_to, same_disk_acknowledgement=acknowledgement)
+        except UnsuitableBackupDestination as e:
+            raise SystemExit(f"REFUSED: {e}") from e
     store = SnapshotStore.create(args.store)
     started = datetime.now(UTC)
     log_path = store.root / "sessions" / f"session-{started:%Y%m%dT%H%M%SZ}.jsonl"
@@ -173,7 +193,9 @@ async def main() -> None:
     print(json.dumps(report.summary(), indent=1), flush=True)
     summary = {"summary": report.summary(), "manifest": store.manifest_summary()}
     if args.backup_to is not None:
-        backup = backup_snapshot(store.root, args.backup_to)
+        backup = backup_snapshot(
+            store.root, args.backup_to, same_disk_acknowledgement=acknowledgement
+        )
         summary["backup"] = {
             "ok": backup.ok,
             "verified": backup.verified,
