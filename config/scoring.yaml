@@ -70,10 +70,14 @@ research:
   # The query planner (backend/app/research/planner.py, docs/evaluation-plan.md section 8): 4 facets x
   # planner_queries_per_facet = q (8). Chosen from what the planner must cover, not from the search
   # rate; if the rate ever forces it down, that is recorded as infrastructure determining evidence
-  # breadth. max_pages_per_query is NULL ON PURPOSE until the fetch-cost distribution is known.
+  # breadth. max_pages_per_query is a SAFETY BOUND, not a design parameter (owner, 2026-10-28): one
+  # measured search returned 79 URLs on 61 hosts, so 100 never binds in normal operation and bounds a
+  # pathological query returning 500. UNTUNED; reported beside every result; revisited from the
+  # distribution once the recording has logged its 153 searches. Never set low to save fetch time
+  # (24 s per search at concurrency 8 is not a constraint).
   planner_queries_per_facet: 2
   planner_locale: "India"
-  max_pages_per_query: null
+  max_pages_per_query: 100
   extraction_min_chars: 200
   extraction_max_chars: 20000
   # The page fetcher (backend/app/research/fetch.py). Raw page bodies live in Redis under this TTL

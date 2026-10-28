@@ -34,7 +34,7 @@ carried on the plan but not used in query text: using it would need keyword extr
 text.
 
 Each query is a `PlannedQuery`; the plan reports `template_version`, `queries_per_facet` and the
-fetch cap (`max_pages_per_query`, null until the fetch-cost distribution is known), because all
+fetch cap (`max_pages_per_query`, a safety bound of 100, untuned), because all
 three are parameters of the results.
 """
 
@@ -124,7 +124,7 @@ class QueryPlan:
     queries: tuple[PlannedQuery, ...]
     facets: tuple[Facet, ...]  # in priority order
     queries_per_facet: int
-    max_pages_per_query: int | None  # the fetch cap; None = not set yet
+    max_pages_per_query: int | None  # the fetch cap, a safety bound; None = no bound
     template_version: str = TEMPLATE_VERSION
 
     @property

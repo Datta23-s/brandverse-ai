@@ -1624,9 +1624,73 @@ it should not be described as if it were: it is the flavour variant that was pic
 single `different_product` repeat; it is marked in the per-request display above, where a reader can see
 whether it carries the repeat margin by itself.
 
-**Per-query fetch cap.** `research.max_pages_per_query` is null on purpose until the fetch-cost distribution
-is known (one search: `docs/fetcher.md`, 79 URLs, about 3.5 minutes sequential); it is reported beside every
-result with `queries_per_facet` and the template version.
+**Per-query fetch cap: 100, set 2026-10-28 (owner) as a SAFETY BOUND, not a design parameter.**
+`research.max_pages_per_query` sits just above the 79 URLs (on 61 hosts) of the one measured search, so it
+never binds in normal operation and bounds a pathological query that returns 500. **Untuned**, reported beside
+every result with `queries_per_facet` and the template version, and revisited from the distribution once the
+recording has logged its 153 searches. It is not set low to save fetch time: 24 seconds per search at
+concurrency 8 is roughly 3 to 4 minutes of fetching per request, which is not a constraint.
+
+### OPEN (found 2026-10-28; owner not yet ruled): does the snapshot cover page bodies, or only search results?
+
+**What the design does today.** The snapshot ruled above freezes SEARCH RESULTS and replays them for every
+arm. The arms then fetch the URLs, and the evidence an arm reasons over is the page (the extracted text,
+scored), not the search result (a URL and a snippet). Pages come through the page cache
+(`app/research/page_cache.py`): Redis, keyed by canonical URL, **TTL 3600 s** (`research.page_cache_ttl_s`),
+modes `use` and `bypass` only. The snapshot mode does not exist for either cache. Arms of a request run up
+to 3 days apart, so an arm that runs more than an hour after another refetches live: the same URL can return
+different content, a different error (a timeout, a 403, a changed robots.txt) or be gone. **So the
+held-constant guarantee covers search and not fetch**, and the arms of one request are not guaranteed to
+have reasoned over the same pages. A longer TTL would not freeze anything: expiry, Redis eviction and
+overwrite on refetch are all still possible.
+
+**What freezing pages would take (measured where it could be).** Scale: about 616 pages per request at 8
+queries and 77 URLs each (at most 800 under the cap of 100); about 12,100 URL slots over the 153 distinct
+searches, of which about 85% fetched in the measured search (about 10,300 pages, an upper bound before
+dedupe). Size, from the 67 fetched pages of the one measured search and a re-fetched sample of 20: raw body
+mean 295 KB (median about 200 KB, largest 1.7 million characters); **gzip 5.2x, about 57 KB a page**; the
+extracted text, which is all an agent sees, mean 5,400 characters (the extractor refused 4 of the 20 for
+too little main text). So **about 0.6 to 0.7 GB gzipped for the whole recording** (3.0 to 3.7 GB raw), about
+35 MB a request; the extracted text alone would be about 56 MB. Time: a search's pages took 24 seconds at
+concurrency 8, and a search is followed by a 2-minute gap, so the fetching fits inside the waits and adds
+about nothing; done separately it is about an hour.
+
+**Can the page cache be put in record-then-replay mode like the search cache?** Yes in shape, no in place.
+`PageSource` is a protocol, so a snapshot is two more implementations of existing protocols (a recording
+`PageSource` that fetches and writes, a replaying one that only reads), and the driver does not change.
+**It cannot live in Redis:** 0.6 to 0.7 GB gzipped is more than the roughly 1 GB the host has spare with a
+run in flight, and Redis is RAM. It is a **disk store**: gzipped bodies named by content hash plus a manifest
+(canonical URL to hash, status, final URL, content type, fetch time, redirects, or the typed failure), write
+once, never expired, never overwritten, in its own namespace, outside the repository (third-party content;
+the repository holds the manifest's hash and date range, as for the search snapshot), kept on the laptop plus
+one backup. **Keyed by canonical URL across the whole recording, not per request:** requests that share a
+query share its URLs, and campaign 3 must read the same bytes as campaign 1 (the repeat-evidence ruling
+above); per-request copies would let them drift apart. The cost: a page's age is that of the first request
+that fetched it, so the "age of the oldest replayed entry" report covers pages as well as searches.
+
+**This is an exception to the zero-retention rule, and needs the owner's ruling to be one.** `Architecture.md`
+section 6 puts raw page bodies in Redis under a TTL "and nowhere else"; its purpose is the privacy boundary
+for customer data. These are public pages fetched by queries made of category terms, in an evaluation store
+that production never uses; but the rule as written forbids it. Proposed: state the exception in section 6,
+confine it to the evaluation namespace, and add a test that refuses to enable it outside it.
+
+**Does the atomic-per-request rule extend to it? Yes, and it should.** A request is committed when its
+searches AND its pages are all recorded, in one unit; a partial capture is discarded; the manifest is
+resumable at request granularity. *One thing the search rule does not settle:* a degraded search is retried
+and never recorded, because a throttle is an infrastructure artefact. A page can fail for a permanent reason
+(404, 403, robots disallows it, a PDF, not HTML, too large), which IS evidence and should be frozen so every
+arm sees the same refusal, or for a transient one (timeout, network error, 5xx). Retrying a whole request
+until every one of about 600 pages fetches would never terminate. Proposed: retry a transient failure a
+configured number of times inside the capture session, then freeze the final outcome, failed and with its
+kind, and report the share of frozen-failed pages per request.
+
+**What it does to the design.** Fetching moves into the recorder; the arms never touch the network, and
+`SnapshotSearch` and `SnapshotPages` sit behind the same two protocols the live pipeline uses, so the driver
+(search, dedupe, fetch, extract, score) is one piece of code run live or replayed. Extraction stays at
+replay time on the frozen HTML (pinned trafilatura, rerunnable, inspectable), rather than freezing its
+output. **One consequence for the metrics:** replay removes web time from every arm (searches already do),
+so LR cannot show a time saving from fewer searches or fetches; it would count them (searches and fetches
+avoided) and report the recorded capture time separately.
 
 *Second run: STOPPED, not finished (2026-10-28, `evaluation/search_rate/hold-20261028T064809Z.jsonl`).* The
 run-to-completion hold was killed by Claude Code's memory-pressure reaper after **45 searches over 91 minutes**

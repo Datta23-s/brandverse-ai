@@ -118,8 +118,8 @@ class Research(_Strict):
     # the same list); NOT set from the search rate. A required key.
     planner_queries_per_facet: int = Field(ge=1, le=2)
     planner_locale: str = Field(min_length=1)
-    # The most pages fetched for one query. Written null on purpose until the fetch-cost
-    # distribution is known (docs/fetcher.md); reported beside every result either way.
+    # The most pages fetched for one query: a SAFETY BOUND (100, untuned), not a design parameter
+    # (docs/fetcher.md, owner 2026-10-28). None would mean no bound. Reported beside every result.
     max_pages_per_query: int | None
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)

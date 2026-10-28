@@ -47,7 +47,8 @@ def test_four_facets_two_each_is_eight_queries_in_two_passes():
 
 def test_the_shipped_configuration_gives_q_of_eight_and_leaves_the_fetch_cap_unset():
     assert CFG.planner_queries_per_facet == 2
-    assert CFG.max_pages_per_query is None  # open until the fetch-cost distribution is known
+    # a safety bound just above the 79 URLs of the measured search, not a design parameter
+    assert CFG.max_pages_per_query == 100
 
 
 def test_depth_is_a_prefix_of_the_one_list():

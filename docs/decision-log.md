@@ -135,6 +135,12 @@ but does not depend on that rate being correct — see §6.
 *Residual, stated.* A query first issued late in the recording window sees a later web than one
 issued early. Narrowed, not removed.
 
+*Gap found 2026-10-28 — OPEN, not ruled.* The snapshot freezes search results and not page bodies. The
+arms then fetch the URLs through a TTL page cache (one hour), so the arms of a request can reason over
+different content for the same URL; the held-constant guarantee covers search and not fetch. What freezing
+pages would take (about 0.6 to 0.7 GB gzipped on disk, an exception to the zero-retention rule, the same
+atomic-per-request rule) is in `docs/evaluation-plan.md` section 8.
+
 ### 1.5 The authority prior is reported twice — **DESIGNED**
 **Ruled 2026-10-25.**
 

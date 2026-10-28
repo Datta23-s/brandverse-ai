@@ -400,7 +400,7 @@ planner runs once per request (`docs/evaluation-plan.md` section 8). Every
 search result and fetched page carries an unpopulated `first_party` marker (V6).
 *Search with SearXNG* verified against the real engine (`docs/searxng.md`): a throttled search is
 refused rather than reported as no results, and failed engines reach the run report.
-*Query planner* built (`app/research/planner.py`, 16 tests): 4 facets with named consumers x 2 queries, a breadth-first interleave so D1 covers every facet, templates not an LLM (generation is not adaptive), category terms only (V7), the fetch cap `research.max_pages_per_query` null until the fetch-cost distribution is known. Nothing drives it yet: the driver (search, dedupe, fetch, extract, score, with partial results on rate limits) is next. The within-facet overlap was measured on 2026-10-28 (median 0.10 against 0.30, cross-facet 0.01): q = 8 stands.
+*Query planner* built (`app/research/planner.py`, 16 tests): 4 facets with named consumers x 2 queries, a breadth-first interleave so D1 covers every facet, templates not an LLM (generation is not adaptive), category terms only (V7), the fetch cap `research.max_pages_per_query` = 100, a safety bound (untuned, owner 2026-10-28). Nothing drives it yet: the driver (search, dedupe, fetch, extract, score, with partial results on rate limits) is next. The within-facet overlap was measured on 2026-10-28 (median 0.10 against 0.30, cross-facet 0.01): q = 8 stands.
 A publisher name equal to the page's host is read as NOT STATED (trafilatura fills it in when the page
 names none). Language detection is UNVERIFIED (empty on all five fixtures): nothing may depend on it
 until it works on real fetched pages.
