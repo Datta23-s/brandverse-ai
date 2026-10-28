@@ -96,3 +96,4 @@ def test_pending_expiry_must_exceed_the_longest_live_call() -> None:
 
 def test_the_strong_tier_is_off_by_default() -> None:
     assert make_settings().llm_allow_strong_tier is False
+    assert make_settings().llm_strong_tier_org_id is None  # and unscoped

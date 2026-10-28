@@ -2,12 +2,14 @@
 
 import asyncio
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, Field
 
 from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, StructuredOutputInvalid
 from app.llm.gateway import LLMGateway, response_format, retry_delay_s
+from app.llm.ledger import CallContext
 from app.llm.prompts import PromptRef
 from app.llm.registry import Tier
 from tests.llm_fakes import (
@@ -265,3 +267,86 @@ async def test_the_strong_tier_works_when_allowed() -> None:
     )
     await ask(gw, tier=Tier.STRONG)
     assert completion.calls[0]["model"].startswith("gemini/test-strong-")
+
+
+# ── The strong tier scoped to one practice organisation (owner, 2026-10-28) ───────────────────
+
+
+def scoped_gateway(
+    scope: UUID, ledger: FakeLedger, completion: FakeCompletion, *, allow_strong: bool = False
+) -> LLMGateway:
+    return LLMGateway(
+        make_registry(unique=False),
+        ledger,  # type: ignore[arg-type]
+        prompt_library(),
+        api_key="k",
+        timeout_s=5,
+        max_rate_limit_waits=0,
+        max_rate_limit_wait_s=1,
+        allow_strong_tier=allow_strong,
+        strong_tier_org_id=scope,
+        completion=completion,
+        sleep=Sleeps(),
+    )
+
+
+async def ask_from(gw: LLMGateway, org: UUID) -> Verdict:
+    return await gw.structured(
+        Verdict,
+        tier=Tier.STRONG,
+        prompt=judge(),
+        ctx=CallContext(org_id=org, run_id=uuid4(), agent_id="test"),
+        route_reason="test: scoped strong tier",
+        max_output_tokens=256,
+    )
+
+
+async def test_a_scoped_strong_call_is_made_for_the_flagged_organisation() -> None:
+    tuning = uuid4()
+    ledger = FakeLedger(practice_orgs={tuning})
+    completion = FakeCompletion(reply('{"supported": true, "confidence": 1}'))
+    await ask_from(scoped_gateway(tuning, ledger, completion), tuning)
+    assert len(completion.calls) == 1
+    assert ledger.rows[1]["tier"] == "strong"  # logged like any other call, so it counts
+
+
+@pytest.mark.parametrize("allow_strong", [False, True])
+async def test_a_scoped_strong_call_from_any_other_organisation_is_refused(
+    allow_strong: bool,
+) -> None:
+    from app.errors import StrongTierDisabled
+
+    tuning, other = uuid4(), uuid4()
+    ledger = FakeLedger(practice_orgs={tuning, other})  # even a practice organisation
+    completion = FakeCompletion()
+    gw = scoped_gateway(tuning, ledger, completion, allow_strong=allow_strong)
+    with pytest.raises(StrongTierDisabled, match="another"):
+        await ask_from(gw, other)
+    assert completion.calls == [] and ledger.rows == {}  # never reached the provider or the count
+    assert len(ledger.refused) == 1  # but the refusal is on the record
+
+
+async def test_a_scoped_strong_call_is_refused_when_the_organisation_is_not_practice() -> None:
+    from app.errors import StrongTierDisabled
+
+    tuning = uuid4()
+    ledger = FakeLedger()  # the scoped organisation is NOT flagged is_practice
+    completion = FakeCompletion()
+    with pytest.raises(StrongTierDisabled, match="is_practice"):
+        await ask_from(scoped_gateway(tuning, ledger, completion), tuning)
+    assert completion.calls == [] and ledger.rows == {}
+
+
+async def test_the_scope_never_widens_the_other_tiers() -> None:
+    tuning, other = uuid4(), uuid4()
+    completion = FakeCompletion(reply('{"supported": true, "confidence": 1}'))
+    gw = scoped_gateway(tuning, FakeLedger(), completion)
+    await gw.structured(
+        Verdict,
+        tier=Tier.CHEAP,
+        prompt=judge(),
+        ctx=CallContext(org_id=other, run_id=uuid4(), agent_id="test"),
+        route_reason="test: cheap tier from any organisation",
+        max_output_tokens=256,
+    )
+    assert len(completion.calls) == 1

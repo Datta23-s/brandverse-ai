@@ -13,6 +13,12 @@ The strong tier (20 requests/day, shared with the evaluation) is refused unless 
 built with `allow_strong_tier=True` (Settings.llm_allow_strong_tier, false by default): no
 development, test or smoke call can spend it, whichever database the ledger writes to.
 
+It can instead be scoped (owner, 2026-10-28, to measure the strong calls a run takes on the tuning
+set): built with `strong_tier_org_id`, the gateway admits a strong call only from that organisation,
+and only while the ledger reports the organisation flagged `is_practice` (checked on every call, so
+an unflagged organisation, a missing one, or any other organisation is refused before admission and
+before any provider call). A scope, once set, overrides `allow_strong_tier`: it can only narrow.
+
 Rate limits (Rules.md C10): the ledger paces calls to the model's RPM from llm_calls; a 429 that
 still occurs is waited out (Google's retryDelay if given, else exponential backoff with jitter) and
 the SAME request re-sent. Waits are capped in number and total seconds — no loop runs unbounded
@@ -31,6 +37,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
@@ -107,6 +114,7 @@ class LLMGateway:
         max_rate_limit_waits: int,
         max_rate_limit_wait_s: float,
         allow_strong_tier: bool = False,
+        strong_tier_org_id: UUID | None = None,
         completion: Completion = _litellm.acompletion,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
@@ -120,6 +128,7 @@ class LLMGateway:
         self._max_waits = max_rate_limit_waits
         self._max_wait_s = max_rate_limit_wait_s
         self._allow_strong = allow_strong_tier
+        self._strong_org = strong_tier_org_id
         self._completion = completion
         self._sleep = sleep
         self._clock = clock
@@ -184,6 +193,27 @@ class LLMGateway:
             rate_limit_wait_ms=attempt.wait_ms,
         )
 
+    async def _strong_tier_refusal(self, model_id: str, rpd: int, ctx: CallContext) -> str | None:
+        """Why a strong call may not be made, or None when it may."""
+        if self._strong_org is None:
+            if self._allow_strong:
+                return None
+            return (
+                f"refused: strong tier ({model_id}, {rpd}/day) is disabled; "
+                "set llm_allow_strong_tier only for evaluation runs"
+            )
+        if ctx.org_id != self._strong_org:
+            return (
+                f"refused: strong tier ({model_id}, {rpd}/day) is enabled for one organisation "
+                "only, and this call is from another"
+            )
+        if not await self._ledger.organisation_is_practice(ctx.org_id):
+            return (
+                f"refused: strong tier ({model_id}, {rpd}/day) is enabled for organisation "
+                f"{self._strong_org} only while it is flagged is_practice, and it is not"
+            )
+        return None
+
     async def _attempt(
         self,
         schema: type[BaseModel],
@@ -195,14 +225,12 @@ class LLMGateway:
         max_output_tokens: int,
     ) -> _Attempt:
         model = self._registry.model(tier)
-        if tier is Tier.STRONG and not self._allow_strong:
-            # Refused before admission and before any provider call, on every database.
-            reason = (
-                f"refused: strong tier ({model.id}, {model.rate_limits.rpd}/day) is disabled; "
-                "set llm_allow_strong_tier only for evaluation runs"
-            )
-            await self._ledger.refuse(ctx, tier, prompt, reason)
-            raise StrongTierDisabled(reason)
+        if tier is Tier.STRONG:
+            refusal = await self._strong_tier_refusal(model.id, model.rate_limits.rpd, ctx)
+            if refusal is not None:
+                # Refused before admission and before any provider call, on every database.
+                await self._ledger.refuse(ctx, tier, prompt, refusal)
+                raise StrongTierDisabled(refusal)
         estimate = model.cost_usd(estimate_tokens(messages), max_output_tokens, self._today())
         waited_s = 0.0
 

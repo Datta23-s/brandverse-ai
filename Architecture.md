@@ -278,6 +278,18 @@ left to discipline: the gateway refuses the strong tier unless `llm_allow_strong
 records the refusal (`test_the_strong_tier_is_refused_unless_explicitly_allowed`). The smoke script
 constructs its gateway with the strong tier off whatever the settings say.
 
+**The one scoped exception: the tuning organisation (owner, 2026-10-28), to measure `s`.** The strong
+calls a run takes cannot be measured without making them, so `llm_strong_tier_org_id` enables the strong
+tier for ONE organisation, and only while it is flagged `is_practice`: the gateway refuses a strong call from
+any other organisation, and from the named one if it is not (or no longer) flagged, before admission and before
+any provider call, on every call (`organisation_is_practice`, read from the database each time). Setting it
+overrides `llm_allow_strong_tier`: it can only narrow, never widen. Every call is logged to `llm_calls` and
+counted against the 20/day like any other. The `is_practice` flag keeps the runs out of every evaluation read
+(`app/evaluation/*`). Proven by `tests/test_llm_gateway.py` (`scoped` tests: other organisation refused with
+and without the global flag; unflagged refused; cheap tier unaffected), with each guard shown to fail when
+removed, and `tests/db/test_llm_ledger.py`. The tuning organisation does not exist yet and the setting is
+unset: nothing is enabled until the tuning runs are scheduled.
+
 #### Prompts — versioned templates, recorded per call (Phase 2 chunk B, 2026-10-17)
 
 - **Templates are files**, `config/prompts/<prompt_id>/<version>.yaml`, each naming its own id

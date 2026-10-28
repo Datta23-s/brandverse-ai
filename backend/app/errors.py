@@ -57,8 +57,9 @@ class StructuredOutputInvalid(LLMError):
 
 
 class StrongTierDisabled(CallRefused):
-    """The strong tier is switched off (llm_allow_strong_tier is false): development, tests and
-    smoke calls never spend its 20 requests/day."""
+    """The strong tier is switched off (llm_allow_strong_tier is false), or enabled for another
+    organisation only (llm_strong_tier_org_id): development, tests and smoke calls never spend its
+    20 requests/day."""
 
 
 # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────────

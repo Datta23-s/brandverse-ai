@@ -87,6 +87,10 @@ class FakeLedger:
     refused: list[str] = field(default_factory=list)
 
     refused_prompts: list[PromptRef] = field(default_factory=list)
+    practice_orgs: set[Any] = field(default_factory=set)  # organisations flagged is_practice
+
+    async def organisation_is_practice(self, org_id: Any) -> bool:
+        return org_id in self.practice_orgs
 
     async def admit(
         self,

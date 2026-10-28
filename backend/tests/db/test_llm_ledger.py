@@ -7,7 +7,7 @@ Real Postgres with the migrations (0013 included). Each test uses model IDs of i
 import asyncio
 import time
 from collections.abc import AsyncIterator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -534,3 +534,16 @@ def test_the_database_refuses_a_call_without_a_well_formed_prompt(
             "route_reason) values (%s, %s, 'm', 'cheap', %s, %s, 'r')",
             (run_ctx.org_id, run_ctx.run_id, prompt_id, prompt_version),
         )
+
+
+async def test_the_ledger_reports_whether_an_organisation_is_flagged_practice(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    practice = fresh_org(db_url)
+    ordinary = fresh_org(db_url)
+    with psycopg.connect(db_url, autocommit=True) as c:
+        c.execute("update organisations set is_practice = true where id = %s", (practice,))
+    led = ledger(pool, make_registry())
+    assert await led.organisation_is_practice(practice) is True
+    assert await led.organisation_is_practice(ordinary) is False
+    assert await led.organisation_is_practice(uuid4()) is False  # no such organisation

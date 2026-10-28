@@ -49,8 +49,10 @@ and tusksearch answered 0 of 8 searches in the burst and cost the 5 s timeout on
 removed from `keep_only` and from the `engines:` block of `infra/searxng/settings.yml` (container restarted;
 `GET /config` lists 17 enabled). brave and the other undeclared engines that answer stay. The engine set is part of
 the evaluation's provenance, so it is fixed before the first recorded search; the cache key uses the DECLARED set, so
-the 153 distinct searches are unchanged. The 5 s did not disappear: avalw still times out (it answered 3 of 8, so the
+the 153 distinct searches are unchanged. avalw was disabled the same day for a different reason (below); the first change left the 5 s because avalw still timed out (it answered 3 of 8, so the
 rule did not cover it), brave and wikipedia are suspended for too many requests, duckduckgo is behind a CAPTCHA.
+
+**avalw disabled 2026-10-28 (owner), because of what its timeout did to a thesis metric:** it timed out on every search, so every search cost 5.03 s, and that is the unit cost the derived web time is computed from. Removed; `GET /config` lists 16 enabled; searches now take 3.0 to 3.6 s, the slowest answering engine. The unit cost is configuration-dependent (`docs/evaluation-plan.md` §8).
 
 **Burst, 2026-10-28 02:55-03:09 UTC** (`evaluation/search_rate/engines-burst-20261028T025520Z.jsonl`; 8 searches at
 2-minute gaps, run one minute after the single search above). Per-engine, searches answered with rows out

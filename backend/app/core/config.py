@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, HttpUrl, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -113,6 +114,11 @@ class Settings(BaseSettings):
     # The strong tier (20 requests/day, shared with the evaluation) is REFUSED unless this is set.
     # Development, tests and smoke calls never reach it; set it only for evaluation runs.
     llm_allow_strong_tier: bool = False
+    # Narrows the line above (owner, 2026-10-28): when set, the strong tier is allowed for THIS
+    # organisation only, and only while the organisation is flagged `is_practice`, so a tuning
+    # organisation can measure the strong calls a run takes without any other organisation, or any
+    # evaluation read, being able to spend or see them. Set, it overrides `llm_allow_strong_tier`.
+    llm_strong_tier_org_id: UUID | None = None
 
     # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────
     # The self-hosted SearXNG JSON API on the laptop (Architecture.md §11). Unset means search is

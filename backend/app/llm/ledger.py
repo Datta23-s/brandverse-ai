@@ -244,6 +244,16 @@ class CallLedger:
             raise RuntimeError("insert returned no id")
         return Admission(call_id=int(row[0]))
 
+    async def organisation_is_practice(self, org_id: UUID) -> bool:
+        """Whether the organisation exists and is flagged `is_practice`. An organisation that does
+        not exist is not a practice organisation."""
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "select is_practice from public.organisations where id = %s", (org_id,)
+            )
+            row = await cur.fetchone()
+        return bool(row[0]) if row is not None else False
+
     async def refuse(self, ctx: CallContext, tier: Tier, prompt: PromptRef, reason: str) -> None:
         """Record a refusal decided outside admission (e.g. an RPM wait over its cap)."""
         model = self._registry.model(tier)

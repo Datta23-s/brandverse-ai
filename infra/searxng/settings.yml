@@ -29,7 +29,6 @@ use_default_settings:
       - seznam
       - yandex
       - crowdview
-      - avalw
 
 general:
   instance_name: "brandverse-local"
@@ -100,8 +99,5 @@ engines:
     disabled: false
     inactive: false
   - name: crowdview
-    disabled: false
-    inactive: false
-  - name: avalw
     disabled: false
     inactive: false

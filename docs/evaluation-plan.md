@@ -289,16 +289,28 @@ upper bound under a product-based reading of the rule, never an observation.* Fe
 help: 20 requests cost the same strong calls unless they drop B07, B01 or B03, and dropping B07 removes the
 regulated brand RQ3 needs.
 
-*Measuring s (Phases.md): on the tuning set, before the window.* Registered now: the tuning runs are executed
-on the Proposed arm with the strong tier enabled for the tuning organisation only (the one exception to "no
-development call reaches the strong tier", owner's decision, because the figure cannot be had otherwise);
-for every touching run, the strong calls are counted by `route_reason` (T4, conflict, high-risk) from
-`llm_calls`; s is reported as mean, maximum and per route, and the plan states which column it falls in:
-s <= 4.5 is the 3 column, <= 8 the 6 column, otherwise the 10 column; and the budget rule above is
-evaluated with the MAXIMUM, not the mean. **The tuning set holds one regulated request, so it measures the T4
-route only**; the conflict and copy-triggered routes are observed there only if a tuning request has an
-entered conflict or its copy touches a restricted claim, and where a route is not observed it is reported as
-not measured, not assumed to equal T4's.
+*Measuring s (Phases.md): on the tuning set, before the window. APPROVED 2026-10-28 (owner), with these
+conditions, all enforced rather than promised* (`Architecture.md` §4.4, `llm_strong_tier_org_id`):
+- the strong tier is enabled for the tuning organisation ONLY, and the gateway refuses a strong call from
+  any other organisation (checked on every call, shown to fail when removed);
+- every call is logged to `llm_calls` and counted against the 20 a day like any other;
+- the tuning organisation is flagged `is_practice`, which the gateway also requires on every call and which
+  keeps its runs out of every evaluation read;
+- **the calls spent measuring s are reported here and counted in the all-in total** (the 3 touching-equivalents
+  for tuning and calibration in the table above are an assumption until then): not yet spent, 0 so far.
+
+The tuning runs are executed on the Proposed arm; for every touching run, the strong calls are counted by
+`route_reason` (T4, conflict, high-risk) from `llm_calls`, and s is reported as mean, maximum and per route.
+The plan states which column it falls in: s <= 4.5 is the 3 column, <= 8 the 6 column, otherwise the 10 column.
+
+**The coverage gap, stated plainly: the tuning set holds one regulated request, so only the T4 route is
+measured.** Its s is reported as MEASURED. The conflict route and the copy-triggered high-risk route are
+ASSUMED (3, the `Phases.md` planning figure) unless a tuning request happens to exercise them, and are labelled
+assumed wherever they appear. The budget rule is evaluated with the **maximum of the measured value and the
+assumption, not the mean**: (touching runs + 2) x max(s measured, s assumed) <= 120. If the other routes turn
+out costlier than assumed, that surfaces as a finding when they are first exercised, and the intended
+discovery point is before the window, not during it. Until the measurement exists the table above is
+a set of scenarios, not a forecast.
 
 **The approval rounds are the real schedule; the approver's hours are the constraint that will slip.** One
 approver reviews every campaign (D3). *Reviews:* 90 evaluation campaigns (30 requests x 3 arms) + the
@@ -2011,6 +2023,21 @@ the OLD agent string. The first trial's stored unit costs were wrong (timer bug)
   240 s, and attempt 2 committed. Degraded searches: 1 of 9 live (11%), 1 of 17 across both captures (6%), inside
   the registered expectation (none to about a quarter). Cost: capture span 1,768 s against 839 s, session 2,109 s.
 - Storage: 25 MB for one request (270 pages), consistent with the 0.4 GB estimate for the whole recording.
+
+**avalw disabled, and what the per-search unit cost is (owner, 2026-10-28).** Every search took 5.03 s because
+`avalw` timed out on every one, and those per-search seconds are the unit cost the derived web time is
+computed from (LR = count difference x unit cost). A dead engine's timeout inside the unit cost would inflate
+the claimed saving systematically, in the direction that flatters the Proposed arm, so `avalw` was disabled
+(removed from `keep_only` and the `engines:` block, container restarted; the zero-of-eight rule did not cover
+it, but this reason does). Four probe searches through the JSON API afterwards took 3.0 to 3.6 s with no
+engine timing out (brave and wikipedia suspended for too many requests, duckduckgo behind a CAPTCHA, gmx
+failing to parse: all fail fast); the remaining 3 s is the slowest ANSWERING engine, which is the cost
+that belongs in the unit cost. These four are not the unit cost: **the unit cost is taken from the next
+trial's and the recording's stored per-search seconds**, which have the pacing wait outside the timer.
+**The unit cost is configuration-dependent**: it is the cost under the declared set (duckduckgo web, yahoo,
+yandex, yep) and the enabled list as recorded (16 engines after this change: bing, brave, crowdview, duckduckgo, duckduckgo web, gmx, mojeek, mwmbl, privacywall, seznam, swisscows, wiby, wikipedia, yahoo, yandex, yep, in `infra/searxng/settings.yml`),
+and not a property of searching; it is reported with both, and a different enabled list is a different unit
+cost.
 
 ## 9. Required items
 
