@@ -67,7 +67,7 @@ then 4-minute spacing is what a count-like limit predicts; it is one observation
 brave's 23, and yahoo's 7 were all in duckduckgo web's 10. If swisscows were the same throttled upstream as
 brave, it should fail when brave fails; it answered all 8 searches while brave was refused four times and
 suspended four. So the containment seen in one search does not carry over to throttling. yahoo and
-duckduckgo web never failed, so the burst cannot corroborate or refute that pair. Engines answering: 12 of
+duckduckgo web never failed, so the burst cannot corroborate or refute that pair. Engines answering: 14 of
 the 22 in at least one search; distinct backends: not established by this evidence.
 
 **`json` must be in `search.formats`.** Without it the JSON API answers 403; `SearxngSearch` turns that
