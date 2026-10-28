@@ -167,10 +167,13 @@ the first campaign on the same product, so the Proposed arm's advantage on it wo
 "it saw new evidence". Holding the evidence constant is what isolates memory from fresh evidence; changing
 the categories to diversify it does the same more weakly.
 
-*Registered with it.* A novel-versus-repeat sub-analysis (and, because position-1 requests have no memory by
-construction, a cold / warm-novel / repeat split), with the prediction that a working memory mechanism shows
-a larger margin on repeats (`docs/evaluation-plan.md` section 8). *Stated beside it:* the planner's query
-generation is not adaptive; the 153 distinct recorded searches hold only for one declared engine set.
+*Registered with it.* A three-way split of every primary metric by evidence stage (cold start 10, warm novel
+9, repeat 11; position-1 requests have no memory by construction, so a two-group split could mean only "warm
+beats cold"), with per-request margins shown. *Prediction, asymmetric in what it can show:* repeat margin >
+warm-novel > cold-start. Confirmation is reported as **consistent with** a working mechanism, a reversal as
+**evidence against** it, and this is on record before any data (`docs/evaluation-plan.md` section 8). *Stated
+beside it:* the planner's query generation is not adaptive; the 153 distinct recorded searches hold only for
+one declared engine set, and none is declared yet.
 
 ---
 
