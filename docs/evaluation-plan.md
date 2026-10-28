@@ -157,7 +157,21 @@ about whether those rules match any regulation (`Rules.md` A6).
 | ARR | `(Calls_baseline − Calls_proposed) / Calls_baseline × 100` |
 | SRR | `(Searches_baseline − Searches_proposed) / Searches_baseline × 100` |
 | CR  | `(Cost_baseline − Cost_proposed) / Cost_baseline × 100` |
-| LR  | `(T_baseline − T_proposed) / T_baseline × 100` |
+| LR  | `(T_baseline − T_proposed) / T_baseline × 100` — **but see below: T cannot be observed for the web part; LR is reported as counts and DERIVED as time** |
+
+**LR is reported as counts and derived as time — registered 2026-10-28, before any data (owner).** Searches and
+pages are replayed from the frozen snapshot, so web time is removed from every arm by construction and
+wall-clock latency reduction is unmeasurable. It is NOT fixed with a live, non-replayed run: that would
+reintroduce exactly the confound replay exists to remove. Instead: **(a) measured directly, per arm per
+request:** searches issued and pages fetched (SRR is the search part of this). **(b) measured separately,
+once:** the unit costs, seconds per search and per page fetch at the declared concurrency, taken from the
+recording itself, which is real web time under real conditions (the concurrency, the declared engine set and
+the politeness delay are reported with them). **(c) derived:** estimated time saving = (count difference) x
+(unit cost), reported as a **derivation with its inputs and never as an observed latency**. Model time
+(LLM calls, rate-limit waits recorded separately) is not replayed and IS observed; so LR is reported in two
+parts, an observed model-time reduction and a derived web-time reduction, and any combined figure is labelled
+derived. The reason is written here so that a panel asking "did you measure the speedup or compute it?"
+finds the answer already on record: **the web part was computed.**
 
 Reported additionally, broken down by campaign position (1st / 2nd / 3rd per brand), since
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
@@ -1631,7 +1645,22 @@ every result with `queries_per_facet` and the template version, and revisited fr
 recording has logged its 153 searches. It is not set low to save fetch time: 24 seconds per search at
 concurrency 8 is roughly 3 to 4 minutes of fetching per request, which is not a constraint.
 
-### OPEN (found 2026-10-28; owner not yet ruled): does the snapshot cover page bodies, or only search results?
+### RULED 2026-10-28: the snapshot covers page bodies, not only search results (found the same day)
+
+**Rulings (owner).** (1) **The pages are frozen.** 0.6 to 0.7 GB gzipped is cheap against the alternative, which is
+that the one guarantee the arm comparison rests on does not cover the evidence the arms actually read. (2) **The
+zero-retention rule is excepted, scoped** (`Architecture.md` section 6, amended): an evaluation namespace on disk
+only, with a test that refuses raw bodies anywhere else; not in the repository (the repository holds the
+manifest and hashes); retained on the laptop and one backup for as long as the thesis stands; not published or
+shared. (3) **Failure freezing:** permanent outcomes (a 404, a robots refusal, a PDF skip) freeze as outcomes;
+a transient failure is retried within the session, **bounded, with the count recorded** (`research.snapshot_page_retries`,
+2, untuned; an unbounded "retry within the session" is the same non-termination in a smaller hat), then frozen as
+failed and counted. **Frozen-as-failed is reported per request**: a request that freezes with 15% of its pages
+failed gives all three arms thinner evidence, which is correct because it is constant, and must be visible and
+not inferred from a gap. **A permanently failed page is itself evidence:** a cited source returning 404 is a fact
+about that source; the outcome is frozen, not nothing. The text below is the analysis these rulings rest on.
+
+#### The analysis (found 2026-10-28)
 
 **What the design does today.** The snapshot ruled above freezes SEARCH RESULTS and replays them for every
 arm. The arms then fetch the URLs, and the evidence an arm reasons over is the page (the extracted text,

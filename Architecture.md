@@ -482,6 +482,8 @@ Default weights `wₙ=0.30, wᵤ=0.25, w_f=0.20, wₛ=0.15, wₑ=0.10`. **Weight
 
 **Zero-retention.** Raw fetched page bodies live in Redis with a TTL and are never written to Postgres. Only extracted, scored, attributed findings persist. This is the implementable core of the paper's privacy boundary.
 
+**The one scoped exception: the evaluation page snapshot (owner, 2026-10-28).** For the evaluation, page bodies are frozen so that every arm of a request reasons over the same pages (`docs/evaluation-plan.md` section 8). Those frozen bodies may live on disk, outside Redis, under these conditions, and nowhere else does the rule bend: (1) **an evaluation namespace only**: the store is a separate directory the product pipeline never reads or writes, and a test refuses raw bodies written anywhere else; (2) **not in the repository** (third-party content, as for the search snapshot): the repository holds only the manifest and hashes; (3) **retained on the laptop and one backup** for as long as the thesis stands, because reproducibility claims depend on the store existing; (4) **not published or shared**: it is a working corpus of other people's pages, held for research and not redistributed. The exception exists because the bodies are public pages fetched by queries made of category terms, in an evaluation that handles no customer data; it does not touch the production path, where the rule is unchanged and Postgres still never holds a page body (`Rules.md` P11).
+
 ---
 
 ## 7. Specialist agents

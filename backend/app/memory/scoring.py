@@ -121,6 +121,8 @@ class Research(_Strict):
     # The most pages fetched for one query: a SAFETY BOUND (100, untuned), not a design parameter
     # (docs/fetcher.md, owner 2026-10-28). None would mean no bound. Reported beside every result.
     max_pages_per_query: int | None
+    # Retries of a transient page failure while capturing the evaluation snapshot; bounded, untuned.
+    snapshot_page_retries: int = Field(ge=0, le=10)
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
     # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.
