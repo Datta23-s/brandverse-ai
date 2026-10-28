@@ -82,6 +82,23 @@ research:
   # (timeout, network error, 5xx) is retried inside the capture session before its final outcome is frozen as
   # failed and counted. Bounded on purpose (owner, 2026-10-28). UNTUNED; recorded with every capture.
   snapshot_page_retries: 2
+  # The evaluation recorder's session loop (backend/app/research/recorder.py; docs/evaluation-plan.md
+  # section 8, "The recorder is adaptive, not scheduled"). ALL UNTUNED DEFAULTS, recorded with every
+  # session. It targets the 2-minute gap the engines sustained for 91 minutes and does not trust it:
+  # a refusal stretches the gap (multiplicative), a run of clean searches shortens it again by a step
+  # (additive), never below the starting gap. A refused request is discarded and redone after a delay
+  # that grows on each consecutive refusal (base to ceiling, with jitter). A session ends cleanly when
+  # no search has been answered for dark_ceiling_s, or after wall_limit_s.
+  recorder_search_gap_s: 120
+  recorder_gap_ceiling_s: 900
+  recorder_gap_increase_factor: 2.0
+  recorder_gap_decrease_step_s: 15
+  recorder_clean_run_to_speed_up: 5
+  recorder_backoff_base_s: 60
+  recorder_backoff_max_s: 1800
+  recorder_backoff_jitter: 0.25
+  recorder_dark_ceiling_s: 5400
+  recorder_wall_limit_s: 36000
   extraction_min_chars: 200
   extraction_max_chars: 20000
   # The page fetcher (backend/app/research/fetch.py). Raw page bodies live in Redis under this TTL

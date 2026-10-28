@@ -43,6 +43,8 @@ RECORDING_MODULES = (
     "app.research.page_cache",
     "app.research.robots",
     "app.research.rate_ramp",
+    "app.research.recorder",  # the session loop around record_request
+    "app.research.snapshot_backup",  # copies the store to a second disk
     "app.research.snapshot",  # record_request: search + pages into the evaluation store
     "app.research.driver",  # what the snapshot runs in RECORD mode
     "app.research.planner",

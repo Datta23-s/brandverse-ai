@@ -58,6 +58,8 @@ from app.errors import (
     FetchFailed,
     FetchRefused,
     FetchUnsupported,
+    SearchRateLimited,
+    SearchUnavailable,
 )
 from app.memory.scoring import SourceScoring
 from app.research.driver import Mode, RequestAborted, canonical_url, research
@@ -320,6 +322,12 @@ class CaptureTally:
     frozen_failed_permanent: int = 0
     frozen_failed_transient: int = 0
     retries_used: int = 0
+    # The live searches that did NOT yield a recordable answer, by kind, and which declared engine
+    # caused each degraded one (owner, 2026-10-28: the degraded-search rate is the measurement).
+    searches_throttled: int = 0
+    searches_unavailable: int = 0
+    searches_degraded: int = 0
+    degraded_causes: dict[str, int] = field(default_factory=dict)
     search_seconds: list[float] = field(default_factory=list)
     page_seconds: list[float] = field(default_factory=list)
 
@@ -346,9 +354,20 @@ class RecordingSearch:
             self._tally.searches_reused += 1
             return _response(known, limit, self._declared)
         began = time.monotonic()
-        response = await self._inner.search(query, limit=limit)
+        try:
+            response = await self._inner.search(query, limit=limit)
+        except SearchRateLimited:
+            self._tally.searches_throttled += 1
+            raise
+        except SearchUnavailable:
+            self._tally.searches_unavailable += 1
+            raise
         elapsed = round(time.monotonic() - began, 3)
         if response.degraded:
+            self._tally.searches_degraded += 1
+            for failure in response.failed_engines:
+                causes = self._tally.degraded_causes
+                causes[failure.engine] = causes.get(failure.engine, 0) + 1
             return response  # not staged
         self._tally.searches_new += 1
         self._tally.search_seconds.append(elapsed)

@@ -123,6 +123,27 @@ class Research(_Strict):
     max_pages_per_query: int | None
     # Retries of a transient page failure while capturing the evaluation snapshot; bounded, untuned.
     snapshot_page_retries: int = Field(ge=0, le=10)
+    # The recorder's session loop (app/research/recorder.py). Untuned defaults, reported with every
+    # session; seconds unless named otherwise.
+    recorder_search_gap_s: float = Field(gt=0)
+    recorder_gap_ceiling_s: float = Field(gt=0)
+    recorder_gap_increase_factor: float = Field(ge=1)
+    recorder_gap_decrease_step_s: float = Field(ge=0)
+    recorder_clean_run_to_speed_up: int = Field(ge=1)
+    recorder_backoff_base_s: float = Field(gt=0)
+    recorder_backoff_max_s: float = Field(gt=0)
+    recorder_backoff_jitter: float = Field(ge=0, le=1)
+    recorder_dark_ceiling_s: float = Field(gt=0)
+    recorder_wall_limit_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _recorder_bounds_are_ordered(self) -> "Research":
+        if self.recorder_gap_ceiling_s < self.recorder_search_gap_s:
+            raise ValueError("recorder_gap_ceiling_s must not be below recorder_search_gap_s")
+        if self.recorder_backoff_max_s < self.recorder_backoff_base_s:
+            raise ValueError("recorder_backoff_max_s must not be below recorder_backoff_base_s")
+        return self
+
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
     # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.
