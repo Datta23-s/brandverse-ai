@@ -1289,6 +1289,27 @@ fuller URL log, as instructed.
 
 ### The recording is captured request by request, atomically, and is resumable (owner, 2026-10-27)
 
+> **AMENDED 2026-10-28 (owner): the atomic rule is RELAXED to session-scoped reuse.** Disclosed here, in
+> the same terms as the hold's stop rule (changed after seeing its cost): the rule below was relaxed after the
+> session loop showed what it costs, and *no live recording data existed when it changed*; the cost was seen in
+> the loop's design and in its tests with simulated refusals (a refused request threw away every clean search
+> inside it and redid them all, and with a throttle that bites late in a request that repeats). **What the rule
+> was for:** a request's queries are captured close together, so its snapshot is internally coherent. **What
+> now holds:** a clean search captured for a request may be reused by a later attempt at the SAME request in
+> the SAME session. Within one session coherence survives reuse: the worst case is the session's wall limit
+> (10 hours) against a per-request arm window of 3 days, so discarding clean searches bought a guarantee
+> tighter than the one the design already accepts, at the price of searches. **Across sessions nothing is
+> reused:** a request not committed when a session ends starts clean (the carried searches live in memory for
+> the session only and are never read from the store). **The property is now reported, not guaranteed by
+> construction:** every request's committed line records its internal capture span (first to last search,
+> `search_span_s`, and `search_span_all_s` which also counts answers reused from OTHER requests at the time
+> they were first fetched), and the recording reports the maximum and median span across the 30 requests. If
+> spans are minutes nothing was lost; if one is six hours it is visible and the analysis can say so. The
+> 3-day arm window runs from the request's EARLIEST search. `searches_wasted` stays in the report and now
+> measures only the cross-session loss (clean searches held for a request still uncommitted when the
+> session ended), the number that says whether sessions are ending badly; `searches_carried` counts the reuse.
+> Pages are unaffected (a request's pages are fetched after all its searches, in one pass).
+
 **The rule: a request is captured atomically or not at all.** If a session dies partway through a
 request's ranked query list, that request's partial capture is **discarded** and the request is
 redone from its first query in the next session. Resumability works at **request** granularity, not
@@ -1298,7 +1319,8 @@ each request's snapshot is internally coherent, captured within one session, and
 and query 3 from Wednesday, and the analysis would then be reasoning about staleness *within* a
 request as well as between arms. *Cost:* a handful of redone searches, at most the clean ones
 already done for the request in flight. This closes the question left open earlier of how a request
-that straddles sessions is treated against the window: **there is no such request.**
+that straddles sessions is treated against the window: **there is no such request** (amended 2026-10-28 above:
+no request straddles SESSIONS; within a session its span is reported).
 
 *Why resumability at all.* The machine that runs the recording can be killed at any time, and on 2026-10-26 it was: the
 memory-pressure reaper stopped an overnight job while the session was idle (`Architecture.md` §11,

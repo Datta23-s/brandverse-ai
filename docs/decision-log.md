@@ -141,6 +141,17 @@ different content for the same URL; the held-constant guarantee covers search an
 pages would take (about 0.6 to 0.7 GB gzipped on disk, an exception to the zero-retention rule, the same
 atomic-per-request rule) is in `docs/evaluation-plan.md` section 8.
 
+#### 1.4a The atomic capture rule was relaxed to session-scoped reuse — **BUILT** (disclosed 2026-10-28)
+The rule "a request is captured atomically or not at all" (ruled 2026-10-27) was relaxed on 2026-10-28
+*after seeing its cost in the session loop*, and before any live recording data existed (the cost was seen in
+the loop's design and its tests). A clean search captured for a request is now reused by a later attempt at the
+same request within the same session; nothing is reused across sessions. *Reason.* The rule existed so a
+request's queries are captured close together; within a session the worst case (the 10-hour wall limit)
+is far inside the 3-day arm window, so discarding clean searches bought a tighter guarantee than the design
+already accepts. *Cost of the change, stated:* the coherence is now reported, not guaranteed by construction;
+each request's committed line carries its capture span and the recording reports the maximum and median.
+`searches_wasted` now measures cross-session loss only. (`docs/evaluation-plan.md` section 8.)
+
 ### 1.5 The authority prior is reported twice — **DESIGNED**
 **Ruled 2026-10-25.**
 

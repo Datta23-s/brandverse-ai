@@ -9,11 +9,22 @@ refused (multiplicative increase of the gap), and shortens it again after a run 
 (additive decrease), never below the starting gap: ordinary congestion control, which needs no model
 of why the limit moves, only the signal that it did.
 
-**A refused request is discarded and redone** (`Mode.RECORD` aborts it at once; an atomic capture
-never continues). The redo waits a delay that grows on every consecutive refusal, from a base to a
-ceiling, with jitter, so retries never form a tight loop. Searches that were clean inside the
-discarded attempt are lost with it: the cost of the atomic rule, accepted by the owner, and it is
-reported (`searches_wasted`).
+**A refused request is aborted and redone** (`Mode.RECORD` aborts it at once). The redo waits a
+delay that grows on every consecutive refusal, from a base to a ceiling, with jitter, so retries
+never form a tight loop.
+
+**Clean searches survive an aborted attempt, within the session (owner, 2026-10-28).** The atomic
+rule exists so a request's queries are captured close together. Within one session that holds even
+with reuse: the worst case is the session's wall limit (10 hours) against a per-request arm window
+of 3 days, and discarding clean searches bought a guarantee tighter than the design already accepts
+at a real cost in searches. So a clean search captured for a request is carried into the next
+attempt at the SAME request in the SAME session, and nothing is carried across sessions: a request
+not committed when a session ends starts clean. The rule is relaxed, not met by construction, so
+the span between a request's first and last search is recorded on its committed line and reported
+(maximum and median across the requests): if spans are minutes nothing was lost, and if one is six
+hours that is visible. `searches_wasted` therefore measures only the CROSS-SESSION loss, the clean
+searches held for a request that was still uncommitted when the session ended, which is the number
+that says whether sessions are ending badly.
 
 **A session ends cleanly**, not by crashing: when every request is committed (`complete`), when no
 search has been answered cleanly for `recorder_dark_ceiling_s` (`dark_period_ceiling`: a dead night
@@ -32,6 +43,7 @@ Everything the clock and the pauses touch is injected, so the loop is tested wit
 import asyncio
 import json
 import random
+import statistics
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -151,7 +163,14 @@ class SessionReport:
     searches_unavailable: int = 0
     searches_degraded: int = 0
     searches_reused: int = 0
-    searches_wasted: int = 0  # clean searches inside attempts that were then discarded
+    searches_carried: int = 0  # clean searches reused by a later attempt at the same request
+    searches_wasted: int = 0  # clean searches lost with a request left uncommitted at session end
+    spans_s: list[float] = field(
+        default_factory=list
+    )  # first-to-last search, per committed request
+    spans_all_s: list[float] = field(
+        default_factory=list
+    )  # also counting answers from other requests
     degraded_causes: dict[str, int] = field(default_factory=dict)
     pages_new_ok: int = 0
     pages_reused: int = 0
@@ -199,7 +218,10 @@ class SessionReport:
             "searches_unavailable": self.searches_unavailable,
             "searches_degraded": self.searches_degraded,
             "searches_reused": self.searches_reused,
+            "searches_carried": self.searches_carried,
             "searches_wasted": self.searches_wasted,
+            "search_span_s": _stats(self.spans_s),
+            "search_span_all_s": _stats(self.spans_all_s),
             "degraded_search_rate": self.degraded_search_rate,
             "degraded_causes": dict(sorted(self.degraded_causes.items())),
             "achieved_clean_per_hour": self.achieved_clean_per_hour,
@@ -214,7 +236,15 @@ class SessionReport:
         }
 
 
+def _stats(values: list[float]) -> dict[str, float | None]:
+    return {
+        "max": max(values, default=None),
+        "median": statistics.median(values) if values else None,
+    }
+
+
 def _add(report: SessionReport, tally: CaptureTally) -> None:
+    report.searches_carried += tally.searches_carried
     report.searches_clean += tally.searches_new
     report.searches_throttled += tally.searches_throttled
     report.searches_unavailable += tally.searches_unavailable
@@ -253,6 +283,7 @@ async def record_session(
     paced = PacedSearch(search, pacer)
     consecutive_refusals = 0
     pending = store.pending(plans)
+    carry: dict[str, dict[str, dict[str, Any]]] = {}  # request -> clean searches, THIS session only
 
     def log(event: dict[str, Any]) -> None:
         if log_path is None:
@@ -289,13 +320,19 @@ async def record_session(
             today=today,
             concurrency=concurrency,
             sleep=sleep,
+            carry=carry.get(request_id),
         )
         _add(report, capture.tally)
         report.capture_reports.append(capture)
         waited = 0.0
         if capture.outcome == "committed":
             consecutive_refusals = 0
+            carry.pop(request_id, None)
             report.requests_committed.append(request_id)
+            if capture.span_s is not None:
+                report.spans_s.append(capture.span_s)
+            if capture.span_all_s is not None:
+                report.spans_all_s.append(capture.span_all_s)
             report.pages_total += capture.pages_total
             report.pages_frozen_failed += capture.frozen_failed
             report.pages_new_ok += capture.tally.pages_new_ok
@@ -303,7 +340,7 @@ async def record_session(
             index += 1
         else:
             report.aborted_attempts += 1
-            report.searches_wasted += capture.tally.searches_new
+            carry[request_id] = capture.carry  # kept for the next attempt, this session only
             consecutive_refusals += 1
             base = min(cfg.backoff_max_s, cfg.backoff_base_s * 2 ** (consecutive_refusals - 1))
             waited = base * (1 + cfg.backoff_jitter * rng.random())
@@ -324,6 +361,10 @@ async def record_session(
                 "degraded_search_rate": report.degraded_search_rate,
                 "searches_degraded": report.searches_degraded,
                 "degraded_causes": report.degraded_causes,
+                "searches_carried": capture.tally.searches_carried,
+                "carry_held": len(carry.get(request_id, ())),
+                "search_span_s": capture.span_s,
+                "search_span_all_s": capture.span_all_s,
                 "frozen_failed": capture.frozen_failed,
                 "pages_total": capture.pages_total,
                 "retries_used": capture.tally.retries_used,
@@ -336,5 +377,7 @@ async def record_session(
     report.elapsed_s = clock() - began
     report.final_gap_s = pacer.gap_s
     report.requests_pending = store.pending(plans)
+    # what a session that ended with a request in flight loses: the next session starts it clean
+    report.searches_wasted = sum(len(held) for held in carry.values())
     log({"kind": "session_end", **report.summary()})
     return report

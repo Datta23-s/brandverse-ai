@@ -185,24 +185,68 @@ async def test_an_answer_already_in_the_store_costs_no_live_search_and_no_wait(t
 # ── Refusal: discard, wait, redo ─────────────────────────────────────────────────────────────
 
 
-async def test_a_refused_request_commits_nothing_is_redone_and_the_wait_grows_then_caps(tmp_path):
+async def test_a_refused_request_is_redone_carrying_its_clean_searches_and_the_wait_grows_then_caps(
+    tmp_path,
+):
     clock, store = FakeClock(), new_store(tmp_path)
     a = plan_for()
-    # the third live search of each of the first four attempts is throttled; the fifth is clean
-    live = Timed(a, urls_for(a), clock, fail_calls={3, 6, 9, 12})
+    # live calls 3, 5, 7 and 9 are throttled; the fifth attempt gets through
+    live = Timed(a, urls_for(a), clock, fail_calls={3, 5, 7, 9})
     log_path = tmp_path / "s.jsonl"
     report = await session(store, {"R01": a}, live, clock, log_path=log_path)
     assert report.requests_committed == ["R01"] and report.aborted_attempts == 4
     assert report.attempts == 5 and report.searches_throttled == 4
     lines = [json.loads(x) for x in log_path.read_text().splitlines()]
-    waits = [
-        x["waited_next_s"] for x in lines if x["kind"] == "attempt" and x["outcome"] == "aborted"
-    ]
-    assert waits == [60, 120, 240, 300]  # doubles, then capped at backoff_max_s
+    aborted = [x for x in lines if x["kind"] == "attempt" and x["outcome"] == "aborted"]
+    assert [x["waited_next_s"] for x in aborted] == [60, 120, 240, 300]  # doubles, then capped
+    assert report.waited_s == 60 + 120 + 240 + 300
+    # each clean search was captured ONCE and reused by every later attempt: 8 clean, none lost
+    assert report.searches_clean == 8 and live.n == 8 + 4
+    assert report.searches_carried == 2 + 3 + 4 + 5 and report.searches_wasted == 0
+    assert [x["carry_held"] for x in aborted] == [2, 3, 4, 5]
+
+
+async def test_nothing_is_carried_across_sessions_and_the_loss_is_what_wasted_measures(tmp_path):
+    clock, store = FakeClock(), new_store(tmp_path)
+    a = plan_for()
+    # session 1 captures two clean searches, then the engine goes dark until the session ends
+    dark = Timed(a, urls_for(a), clock, fail_calls=set(range(3, 400)))
+    first = await session(store, {"R01": a}, dark, clock)
+    assert first.ended == "dark_period_ceiling" and first.requests_committed == []
+    assert first.searches_wasted == 2  # the two clean searches held for a request left in flight
+    assert store.committed_requests() == set()
+    # session 2 starts clean: those two searches are fetched again, all eight are live
+    live = Timed(a, urls_for(a), clock)
+    second = await session(store, {"R01": a}, live, clock)
+    assert second.requests_committed == ["R01"] and live.n == 8
+    assert second.searches_carried == 0 and second.searches_wasted == 0
+
+
+async def test_each_request_records_its_capture_span_and_the_session_reports_max_and_median(
+    tmp_path,
+):
+    clock, store = FakeClock(), new_store(tmp_path)
+    plans, a, b, _ = two_requests()
+    live = Timed(a, urls_for(a), clock)
+    live.by_text.update({q.text: q.rank for q in b.queries})
+    report = await session(store, plans, live, clock)
+    assert len(report.spans_s) == 2
+    summary = report.summary()
     assert (
-        report.searches_wasted == 2 * 4
-    )  # two clean searches were lost with each discarded attempt
-    assert report.waited_s == sum(waits)
+        summary["search_span_s"]["max"] is not None
+        and summary["search_span_s"]["median"] is not None
+    )
+    assert summary["search_span_all_s"]["max"] >= summary["search_span_s"]["max"]
+    for line in store.committed.values():
+        assert (
+            line["search_span_s"] is not None
+            and line["first_search_utc"] <= line["last_search_utc"]
+        )
+    spans = store.manifest_summary()
+    assert (
+        spans["search_span_s"]["max"] is not None
+        and spans["search_span_all_s"]["median"] is not None
+    )
 
 
 async def test_the_retry_delay_is_jittered_within_its_bound(tmp_path):

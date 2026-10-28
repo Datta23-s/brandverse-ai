@@ -46,10 +46,11 @@ import json
 import os
 import shutil
 import time
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from app.errors import (
@@ -102,6 +103,15 @@ def _read_lines(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def _span(stamps: list[str]) -> float | None:
+    """Seconds from the earliest to the latest of sorted ISO timestamps; None if there are none."""
+    if not stamps:
+        return None
+    return round(
+        (datetime.fromisoformat(stamps[-1]) - datetime.fromisoformat(stamps[0])).total_seconds(), 1
+    )
 
 
 def is_transient(error: FetchError) -> bool:
@@ -228,7 +238,25 @@ class SnapshotStore:
             path = self.root / name
             digest.update(path.read_bytes() if path.exists() else b"")
         stamps = sorted(c["committed_utc"] for c in self.committed.values())
+        own = [
+            c["search_span_s"]
+            for c in self.committed.values()
+            if c.get("search_span_s") is not None
+        ]
+        every = [
+            c["search_span_all_s"]
+            for c in self.committed.values()
+            if c.get("search_span_all_s") is not None
+        ]
         return {
+            "search_span_s": {
+                "max": max(own, default=None),
+                "median": median(own) if own else None,
+            },
+            "search_span_all_s": {
+                "max": max(every, default=None),
+                "median": median(every) if every else None,
+            },
             "requests": len(self.committed),
             "searches": len(self._searches),
             "pages": len(self._pages),
@@ -316,7 +344,9 @@ def _replay_page(store: SnapshotStore, entry: dict[str, Any], url: str) -> Fetch
 @dataclass(slots=True)
 class CaptureTally:
     searches_new: int = 0
-    searches_reused: int = 0
+    searches_reused: int = 0  # answered from an EARLIER REQUEST's committed capture
+    searches_carried: int = 0  # answered from an earlier attempt at THIS request, same session
+    reused_fetch_utcs: list[str] = field(default_factory=list)  # when those were first fetched
     pages_new_ok: int = 0
     pages_reused: int = 0
     frozen_failed_permanent: int = 0
@@ -349,9 +379,14 @@ class RecordingSearch:
 
     async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         key = cache_key(query, self._declared)
-        known = self._store.search_entry(key) or self._staging.searches.get(key)
+        stored = self._store.search_entry(key)
+        known = stored or self._staging.searches.get(key)
         if known is not None:
-            self._tally.searches_reused += 1
+            if stored is not None:
+                self._tally.searches_reused += 1
+                self._tally.reused_fetch_utcs.append(stored["fetched_utc"])
+            else:  # staged: captured by an earlier attempt at this request in this session
+                self._tally.searches_carried += 1
             return _response(known, limit, self._declared)
         began = time.monotonic()
         try:
@@ -510,6 +545,14 @@ class CaptureReport:
     tally: CaptureTally
     pages_total: int  # distinct pages the request's queries returned
     frozen_failed: int  # of those, frozen as failed (permanent or exhausted retries)
+    # Clean searches captured for this request (an aborted attempt's, to be carried into the next
+    # attempt of the SAME session; never across sessions). Empty once committed.
+    carry: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # First to last search the request's evidence rests on, in seconds: `span_s` over the searches
+    # captured for this request, `span_all_s` also counting answers reused from other requests at
+    # the time THEY were first fetched. None until committed.
+    span_s: float | None = None
+    span_all_s: float | None = None
 
     @property
     def frozen_failed_share(self) -> float | None:
@@ -530,9 +573,16 @@ async def record_request(
     today: date,
     concurrency: int = 8,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    carry: Mapping[str, dict[str, Any]] | None = None,
 ) -> CaptureReport:
-    """Capture one request whole (the full ranked list, D2) or not at all."""
+    """Capture one request whole (the full ranked list, D2) or not at all.
+
+    `carry` is the clean searches an earlier attempt at THIS request captured in THIS session
+    (owner, 2026-10-28): they are reused, with their original fetch times, and the committed line
+    records the span they put between the request's first and last search. It is never read from
+    the store, so nothing is reused across sessions."""
     staging = store.begin(request_id)
+    staging.searches.update({k: dict(v) for k, v in (carry or {}).items()})
     tally = CaptureTally()
     recording_search = RecordingSearch(search, store, staging, declared, tally)
     recording_pages = RecordingPages(pages, store, staging, tally, retries=retries, sleep=sleep)
@@ -549,14 +599,24 @@ async def record_request(
             concurrency=concurrency,
         )
     except RequestAborted as e:
+        kept = {k: dict(v) for k, v in staging.searches.items()}
         store.discard(staging)
-        return CaptureReport(request_id, "aborted", str(e), tally, 0, 0)
+        return CaptureReport(request_id, "aborted", str(e), tally, 0, 0, carry=kept)
     except BaseException:
         store.discard(staging)
         raise
     frozen_failed = sum(1 for p in staging.pages.values() if p["outcome"] == "failed")
+    own = sorted(e["fetched_utc"] for e in staging.searches.values())
+    every = sorted([*own, *tally.reused_fetch_utcs])
     report = CaptureReport(
-        request_id, "committed", None, tally, outcome.distinct_urls, frozen_failed
+        request_id,
+        "committed",
+        None,
+        tally,
+        outcome.distinct_urls,
+        frozen_failed,
+        span_s=_span(own),
+        span_all_s=_span(every),
     )
     store.commit(
         staging,
@@ -568,6 +628,11 @@ async def record_request(
             "retries_bound": retries,
             "searches_new": tally.searches_new,
             "searches_reused": tally.searches_reused,
+            "searches_carried": tally.searches_carried,
+            "first_search_utc": own[0] if own else None,
+            "last_search_utc": own[-1] if own else None,
+            "search_span_s": report.span_s,
+            "search_span_all_s": report.span_all_s,
             "pages_reused": tally.pages_reused,
         },
     )

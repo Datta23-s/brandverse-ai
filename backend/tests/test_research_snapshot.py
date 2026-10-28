@@ -319,3 +319,87 @@ async def test_the_recording_carries_the_unit_costs_the_derived_web_time_needs(t
     assert len(report.tally.search_seconds) == 8 and len(report.tally.page_seconds) == 16
     assert all("elapsed_s" in e for e in store._searches.values())
     assert all("elapsed_s" in e for e in store._pages.values())
+
+
+# ── Session-scoped reuse of clean searches, and the span it puts on the record ───────────────
+
+
+async def test_an_aborted_attempt_hands_back_its_clean_searches_and_the_next_attempt_reuses_them(
+    tmp_path,
+):
+    store, plan = new_store(tmp_path), plan_for()
+    urls = urls_for(plan)
+    first = await capture(
+        store,
+        "R01",
+        LiveSearch(plan, urls, raise_on={4: SearchRateLimited("throttled")}),
+        LivePages(),
+    )
+    assert first.outcome == "aborted" and len(first.carry) == 3  # queries 1 to 3 were clean
+    assert store.committed_requests() == set()  # nothing committed, only handed back
+    retry = LiveSearch(plan, urls)
+    second = await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=retry,
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=no_sleep,
+        carry=first.carry,
+    )
+    assert second.outcome == "committed" and second.tally.searches_carried == 3
+    assert retry.calls == [4, 5, 6, 7, 8]  # only the five not yet captured went live
+
+
+async def test_the_committed_line_carries_the_span_including_a_carried_searchs_original_time(
+    tmp_path,
+):
+    store, plan = new_store(tmp_path), plan_for()
+    urls = urls_for(plan)
+    first = await capture(
+        store,
+        "R01",
+        LiveSearch(plan, urls, raise_on={3: SearchRateLimited("throttled")}),
+        LivePages(),
+    )
+    # the carried searches were fetched hours ago, as in a long session with many refusals
+    old = "2026-10-28T06:00:00+00:00"
+    carry = {k: {**v, "fetched_utc": old} for k, v in first.carry.items()}
+    report = await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls),
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=no_sleep,
+        carry=carry,
+    )
+    line = store.committed["R01"]
+    # the old searches were fetched at 06:00 UTC today; the new ones just now: a span of hours
+    assert report.span_s is not None and 3600 < report.span_s < 24 * 3600
+    assert line["search_span_s"] == report.span_s and line["first_search_utc"] == old
+    assert line["searches_carried"] == 2
+    assert store.manifest_summary()["search_span_s"]["max"] == report.span_s
+
+
+async def test_a_search_reused_from_another_request_counts_in_the_wider_span_only(tmp_path):
+    store, plan = new_store(tmp_path), plan_for()
+    urls = urls_for(plan)
+    await capture(store, "R01", LiveSearch(plan, urls), LivePages())
+    # make R01's recorded searches look old, as if they came from a session days earlier
+    for entry in store._searches.values():
+        entry["fetched_utc"] = "2026-10-20T00:00:00+00:00"
+    report = await capture(store, "R03", LiveSearch(plan, urls), LivePages())  # all eight reused
+    assert report.tally.searches_reused == 8 and report.tally.searches_new == 0
+    assert report.span_s is None  # nothing was captured FOR this request
+    assert report.span_all_s == 0.0  # eight answers from one instant
