@@ -357,7 +357,7 @@ Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds 
 | Source scoring | Authority, recency, specificity (corroboration not modelled: decided 2026-10-25, `Memory.md` §3.1) |
 | Provenance capture | Every finding carries its URL and score |
 | Zero-retention cache | Raw bodies in Redis with TTL only |
-| Query planner | One ranked query list per request from fixed templates over 4 facets (design approved 2026-10-28: `backend/app/research/planner.py`); D1 = first pass, D2 = all; generation is not adaptive; q = 8 conditional on the within-facet overlap measurement |
+| Query planner | One ranked query list per request from fixed templates over 4 facets (design approved 2026-10-28: `backend/app/research/planner.py`); D1 = first pass, D2 = all; generation is not adaptive; q = 8 confirmed by the within-facet overlap measurement (0.10; cross-facet 0.01) |
 
 **Exit criteria**
 - [ ] 20 searches complete within the latency budget
@@ -400,7 +400,7 @@ planner runs once per request (`docs/evaluation-plan.md` section 8). Every
 search result and fetched page carries an unpopulated `first_party` marker (V6).
 *Search with SearXNG* verified against the real engine (`docs/searxng.md`): a throttled search is
 refused rather than reported as no results, and failed engines reach the run report.
-*Query planner* built (`app/research/planner.py`, 16 tests): 4 facets with named consumers x 2 queries, a breadth-first interleave so D1 covers every facet, templates not an LLM (generation is not adaptive), category terms only (V7), the fetch cap `research.max_pages_per_query` null until the fetch-cost distribution is known. Nothing drives it yet: the driver (search, dedupe, fetch, extract, score, with partial results on rate limits) is next. The within-facet overlap measurement that confirms q = 8 waits for the engine-set hold.
+*Query planner* built (`app/research/planner.py`, 16 tests): 4 facets with named consumers x 2 queries, a breadth-first interleave so D1 covers every facet, templates not an LLM (generation is not adaptive), category terms only (V7), the fetch cap `research.max_pages_per_query` null until the fetch-cost distribution is known. Nothing drives it yet: the driver (search, dedupe, fetch, extract, score, with partial results on rate limits) is next. The within-facet overlap was measured on 2026-10-28 (median 0.10 against 0.30, cross-facet 0.01): q = 8 stands.
 A publisher name equal to the page's host is read as NOT STATED (trafilatura fills it in when the page
 names none). Language detection is UNVERIFIED (empty on all five fixtures): nothing may depend on it
 until it works on real fetched pages.

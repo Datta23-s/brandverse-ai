@@ -472,7 +472,7 @@ Default weights `wₙ=0.30, wᵤ=0.25, w_f=0.20, wₛ=0.15, wₑ=0.10`. **Weight
 |---|---|---|
 | `R < 0.35` | **D0** | Reuse memory only. Zero searches. |
 | `0.35 ≤ R < 0.70` | **D1** | Focused research: the planner's first pass, 4 queries, one per facet |
-| `R ≥ 0.70` | **D2** | Deep research: the planner's whole list, 8 queries (4 facets × 2). Multi-hop was considered and dropped on scope (`docs/evaluation-plan.md` §8); q = 8 is conditional on the within-facet overlap measurement |
+| `R ≥ 0.70` | **D2** | Deep research: the planner's whole list, 8 queries (4 facets × 2). Multi-hop was considered and dropped on scope (`docs/evaluation-plan.md` §8); q = 8 stands: the within-facet overlap measured 0.10 (cross-facet 0.01), `docs/evaluation-plan.md` §8 |
 
 ### 6.2 Pipeline
 

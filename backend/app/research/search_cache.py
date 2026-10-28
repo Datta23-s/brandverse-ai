@@ -84,6 +84,18 @@ class SearchRecord(BaseModel):
     undeclared_failures: tuple[tuple[str, str], ...] = ()
     undeclared_seen: tuple[str, ...] = ()  # outside the set, and returned a result anyway
 
+    @property
+    def contributing_count(self) -> int:
+        """How many engines actually contributed a result to this search (declared or not)."""
+        return len(self.engines_seen)
+
+    @property
+    def undeclared_contributing_count(self) -> int:
+        """How many engines OUTSIDE the declared set contributed rows to this search;
+        `undeclared_seen` says which. Recorded so that an undeclared engine failing silently cannot
+        make a search look clean with thinner evidence (owner, 2026-10-28; decision log 7.2)."""
+        return len(self.undeclared_seen)
+
 
 class SearchEvidenceReport(BaseModel):
     """What a run's web evidence was made of: the figure the evaluation compares between arms."""
@@ -111,7 +123,25 @@ class SearchEvidenceReport(BaseModel):
     declared_engines: tuple[str, ...] | None
     undeclared_failure_counts: dict[str, int]  # engines outside the set that failed, kept apart
     undeclared_engines_seen: tuple[str, ...]  # outside the set, yet returned a result: a mismatch
+    # The two numbers every result is reported with (owner, 2026-10-28): how many engines the
+    # configuration DECLARES, and how many actually contributed rows to some answered search.
+    # "Four engines" alone understates the evidence base; every enabled engine overstates it.
+    declared_count: int | None
+    contributing_count: int
     records: list[SearchRecord]
+
+    @property
+    def engines_line(self) -> str:
+        """One line for a report: declared and contributing counts, and which were undeclared."""
+        declared = (
+            "not declared" if self.declared_count is None else f"{self.declared_count} declared"
+        )
+        extra = (
+            f" (undeclared: {', '.join(self.undeclared_engines_seen)})"
+            if self.undeclared_engines_seen
+            else ""
+        )
+        return f"{declared}; {self.contributing_count} contributed{extra}"
 
 
 class SearchLedger:
@@ -163,6 +193,8 @@ class SearchLedger:
             declared_engines=self.declared_engines,
             undeclared_failure_counts=dict(sorted(undeclared_counts.items())),
             undeclared_engines_seen=tuple(sorted({e for r in answered for e in r.undeclared_seen})),
+            declared_count=None if self.declared_engines is None else len(self.declared_engines),
+            contributing_count=len({e for r in answered for e in r.engines_seen}),
             records=list(self.records),
         )
 

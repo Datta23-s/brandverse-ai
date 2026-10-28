@@ -471,8 +471,33 @@ async def test_an_undeclared_engine_that_returns_a_result_is_reported() -> None:
     assert search.report().undeclared_engines_seen == ("wikipedia",)
 
 
-def test_the_declared_set_is_null_in_config_until_the_probe_decides_it() -> None:
-    assert load_scoring().research.declared_engines is None  # not declared, on purpose
+def test_the_declared_set_is_the_four_engines_the_owner_declared_on_2026_10_28() -> None:
+    # Declared from the 45-search run-to-completion hold: answered with rows in every search, no
+    # failure of any kind (docs/evaluation-plan.md section 8). Changing it changes every cache key.
+    assert load_scoring().research.declared_engines == ["yep", "yandex", "yahoo", "duckduckgo web"]
+
+
+async def test_every_result_reports_both_the_declared_count_and_the_count_that_contributed() -> (
+    None
+):
+    inner = OfflineSearch({QUERY: [BRAVE, WIKI]}, declared_engines=["brave"])
+    search, *_ = cached(inner=inner, declared=("brave",))
+    await search.search(QUERY)
+    report = search.report()
+    assert report.declared_count == 1 and report.contributing_count == 2
+    assert report.undeclared_engines_seen == ("wikipedia",)
+    assert report.engines_line == "1 declared; 2 contributed (undeclared: wikipedia)"
+    record = report.records[0]
+    assert record.contributing_count == 2 and record.undeclared_contributing_count == 1
+    assert record.undeclared_seen == ("wikipedia",)  # and WHICH one
+
+
+async def test_an_undeclared_run_reports_no_declared_count_but_still_the_contributing_one() -> None:
+    search, *_ = brave_only(declared=None)
+    await search.search(QUERY)
+    report = search.report()
+    assert report.declared_count is None and report.contributing_count == 1
+    assert report.engines_line == "not declared; 1 contributed"
 
 
 @pytest.mark.parametrize("bad", [[], [""], ["brave", "Brave"], ["brave", " "]])

@@ -57,11 +57,12 @@ research:
   search_cache_degraded_ttl_s: 3600                    # one hour
   # The engines the search configuration is DECLARED to be, in advance, reported beside every result
   # (owner, 2026-10-26): "degraded" means one of these failed, not that an engine SearXNG could have
-  # run did. NOT DECLARED YET (null): the rate probe decides it from what actually answers, and the
-  # declaration is recorded in docs/evaluation-plan.md section 8 with its evidence before any
-  # recording. While null every engine SearXNG names counts, and the evaluation harness (when it
-  # exists) refuses to start. Never edited to make a run look complete.
-  declared_engines: null
+  # run did. DECLARED 2026-10-28 (owner): the four that answered with rows in all 45 searches of the
+  # run-to-completion hold with no failure of any kind (docs/evaluation-plan.md section 8, with the
+  # evidence). Other enabled engines (privacywall, swisscows, mojeek, brave, ...) are NOT declared: their
+  # failure is recorded and does not degrade a search, and every result reports both the declared
+  # count and the count that actually contributed. Never edited to make a run look complete.
+  declared_engines: [yep, yandex, yahoo, "duckduckgo web"]
   # Page-content extraction (backend/app/research/extraction.py). Main text shorter than the
   # minimum is no content (a login wall, a listing): the page is refused rather than passed on as
   # evidence. Longer than the maximum is cut at a paragraph boundary and flagged `truncated`, so no

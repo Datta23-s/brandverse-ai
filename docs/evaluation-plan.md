@@ -1001,6 +1001,12 @@ respect to a configuration declared in advance and reported beside every result.
 
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 
+*Degraded-search rate (added 2026-10-28; owner):* the time estimate below assumes a share of searches
+degrade and are retried. The evidence for that share is a bound, not a measurement: zero failures of the
+four declared engines in 45 searches puts the per-engine failure rate below about 6.5% (95%), and the share
+of degraded searches anywhere from about none to about a quarter (see "The declared engine set"). The first
+recording session logs it and reports it.
+
 The snapshot ruling means the arms replay one recording, but the recording itself needs real
 searches, and the live engines throttle this laptop's IP (`docs/searxng.md`): about ten searches in a
 few minutes, then no recovery in twenty-five. How many searches per hour the three engines sustain is
@@ -1500,6 +1506,38 @@ query exists to create. So in the middle band the alternatives are to keep 8 wit
 reported, or to restructure the facets, and restructuring on a single overlap measurement (three requests,
 one day, one engine set) would be overfitting the design to one probe. **At 0.50 or above** the second query
 is not earning its place and the owner rules on restructuring the facets, not on q alone.
+
+**RESULT (2026-10-28; `evaluation/planner_overlap/overlap-20261028T083221Z.jsonl`; 24 searches, R01, R19 and
+R25 from the frozen category field, the seven candidate engines, 2-minute gaps). q = 8 STANDS, as
+registered; no restructuring (owner).**
+
+*Lead result: the four facets retrieve genuinely different things.* The URL containment between the first
+queries of DIFFERENT facets is **0.01** (n = 18 pairs); between a facet's own two queries it is **0.10**
+(n = 11). A tenfold separation. The facet design was judgement, the developer's and the owner's; this is the
+first evidence it corresponds to anything, in the narrow sense that different facets bring back different
+pages. It does not show that the pages answer the facet's information need (relevance is not measured), and
+it is 3 requests on one day.
+
+*Within-facet, against the registered bands.* Median containment between a facet's query 1 and query 2:
+**0.10** (range 0.00 to 0.36), below the 0.30 band edge: the second query earns its place and depth
+(D1 against D2) differs in coverage, not only in volume. By facet (n of 2 to 3 each, **pointers, not
+estimates**): audience_needs 0.00, reference_facts 0.08, sector_rules 0.10, competitor_positioning 0.34.
+1 of the 24 searches was excluded (R01 competitor_positioning, query 2: a declared engine failed, so the
+search was degraded; the probe's record does not say which engine), leaving 11 of the 12 possible pairs and
+competitor_positioning with 2.
+
+*competitor_positioning is the one facet whose two angles are most alike (0.36 and 0.32, n = 2). Recorded,
+NOT acted on:* two pairs are no grounds for changing a facet design, and acting on them would be the
+overfitting the registered thresholds exist to prevent. It is re-examined if the recording's own data (153
+searches) shows the same pattern at scale.
+
+*Hosts overlap more than URLs: 0.22 against 0.10.* The same sites supply different pages, so the evidence
+base is narrower by host than by URL. That bounds how independent the sources are, which is V6's territory
+(authority against independence). **Hosts per search and host overlap (within a facet and between facets)
+are tracked during the recording and reported beside the URL figures**, not URLs alone.
+
+*Caveats, as measured:* 3 requests, 11 pairs, one day, one engine set (the seven, not the declared four), 23
+clean searches of 24. The measure is containment on canonical URLs.
 Those thresholds are developer judgement, untuned, and chosen before any number exists. The cross-facet
 containment of query 1 against query 1 is reported as the baseline for reading the figure (two queries about
 different needs that overlap this much are already as redundant as unrelated ones can be), and the by-facet
@@ -1609,6 +1647,47 @@ doing real work. **What the 45 searches establish and do not:** these seven sust
 minutes with no rate refusal. **Nothing is established about 4 hours or 120 searches.** The run was killed by
 memory pressure on the host, not by any engine (rule on shared use of the machine: `Architecture.md` section
 11).
+
+### The declared engine set (DECLARED 2026-10-28, owner)
+
+**Declared: yep, yandex, yahoo, duckduckgo web** (`research.declared_engines` in `config/scoring.yaml`). The
+rule it serves (section 8 above): "degraded" means a DECLARED engine failed, a degraded search is never
+recorded into the snapshot, and the harness refuses to start while the set is undeclared. **Evidence:** the
+run-to-completion hold, `evaluation/search_rate/hold-20261028T064809Z.jsonl`, 45 searches over 91 minutes at
+2-minute gaps (stopped by memory pressure, not by an engine): these four answered with rows in all 45 with no
+failure of any kind. privacywall and swisscows each failed once (a timeout) and mojeek returned a silent empty
+twice; no rate refusal for any of the seven. **Enabled but NOT declared:** privacywall, swisscows, mojeek,
+brave and every other enabled engine.
+
+*Why four and not seven.* A declared engine's failure degrades the search, so each flaky declared engine
+multiplies the retries a recording needs. Declaring all seven would have degraded 4 of those 45 searches
+(about one in eleven) on transient faults alone, for engines whose results arrive anyway when they work.
+
+*Two conditions travel with it.* (1) **Every search records how many undeclared engines contributed rows,
+and which** (`SearchRecord.undeclared_seen`, `.undeclared_contributing_count`), otherwise an undeclared
+engine silently failing makes a search look clean with thinner evidence (decision log 7.2 at another
+level). (2) **Every result reports both numbers**: the declared count and the count that actually
+contributed (`SearchEvidenceReport.declared_count`, `.contributing_count`, `.engines_line`, for example
+"4 declared; 6 contributed (undeclared: privacywall, swisscows)"). "Four engines" alone would understate
+the evidence base and "fourteen" would overstate it.
+
+*An unobserved failure is not a zero rate.* The four declared engines showed no failure in 45 searches. By
+the rule of three that puts a 95% upper bound of about 6.5% on the per-search failure rate of any one of them
+(3/45 = 6.7%; the exact one-sided bound is 6.4%). It is a bound, not an estimate. Across four engines, IF
+their failures are independent and each sits at the bound, up to about a quarter of searches (23 to 24%)
+could degrade; if they failed together it would be about 6.5%. The range consistent with the evidence is
+therefore **from about none up to about a quarter of searches degrading**, and the expectation for the
+recording is that range, not "no degradation expected". The bound also rests on one 91-minute stretch of
+one day and carries nothing about another day. **The adaptive recorder absorbs degradation (a degraded
+search is retried, never recorded), so a high rate costs time and not correctness. Its actual rate is the
+measurement: the first recording session tracks the degraded-search rate (degraded searches over searches
+issued, and which declared engine caused each) and reports it; 45 searches is a bound, not the answer.**
+
+*Not established.* Which contributing engines share an upstream index (URL containment in one search is the
+only evidence; the image documents a backend for two engines); anything about 4 hours or 120 searches; a
+rate for any day but 2026-10-28. *Recording arithmetic under this set:* 153 distinct searches (240 query
+slots), recomputed against the declared set in `tests/test_evaluation_test_set.py`: the engine set is part
+of the cache key, so a different declaration is a different 153 and re-records everything.
 
 ## 9. Required items
 

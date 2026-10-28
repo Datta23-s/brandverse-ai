@@ -41,7 +41,7 @@ avalw. Marginalia was tried and dropped: the image refuses to register it withou
 (`FSSAI honey adulteration standards`): answered with rows brave, yep, yandex, swisscows, duckduckgo web,
 yahoo, privacywall, gmx, mojeek, bing, avalw; failed duckduckgo (CAPTCHA), startpage (CAPTCHA), google,
 qwant, dogpile, searchmysite (access denied), tusksearch (HTTP error), seznam (timeout); answered nothing
-without an error crowdview, mwmbl, wiby, wikipedia. `research.declared_engines` is still null.
+without an error crowdview, mwmbl, wiby, wikipedia. `research.declared_engines` was null at the time of this search and is now declared (2026-10-28, owner): yep, yandex, yahoo, duckduckgo web, with the evidence in `docs/evaluation-plan.md` section 8.
 
 **Burst, 2026-10-28 02:55-03:09 UTC** (`evaluation/search_rate/engines-burst-20261028T025520Z.jsonl`; 8 searches at
 2-minute gaps, run one minute after the single search above). Per-engine, searches answered with rows out

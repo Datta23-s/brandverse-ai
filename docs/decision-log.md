@@ -564,7 +564,16 @@ alone, for engines whose results arrive anyway when they work. Two conditions tr
 each search records how many undeclared engines contributed rows and which (otherwise an undeclared engine
 failing silently would make a search look clean with thinner evidence, §7.2 again), and every result reports
 both numbers, the **four declared engines** and the **count that actually contributed**. "Four engines" alone
-would understate the evidence base and "fourteen" would overstate it. Which of the contributing engines share
+would understate the evidence base and "fourteen" would overstate it. **Zero failures is a bound, not a zero.** The four declared engines showed no failure in 45 searches, which by
+the rule of three puts a 95% upper bound of about 6.5% on the per-search failure rate of any one of them
+(3/45 = 6.7%; exact 6.4%). If their failures are independent and each sits at the bound, up to about a
+quarter of searches (23 to 24%) could degrade; if they failed together, about 6.5%. The expectation for the
+recording is therefore a range, from about none to about a quarter, and not "no degradation expected". The
+adaptive recorder absorbs it (a degraded search is retried, never recorded), so a high rate costs time and
+not correctness; the first recording session tracks the actual degraded-search rate and reports it. 45
+searches is a bound; the session is the measurement.
+
+Which of the contributing engines share
 an upstream index is **not established**: the only evidence is URL containment in one search, and the image
 documents a backend for only two engines.
 

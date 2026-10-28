@@ -86,7 +86,8 @@ def test_identical_queries_collapse_to_one_cache_entry_so_153_searches_are_recor
     from app.research.search_cache import cache_key
 
     cfg = load_scoring().research
-    declared = ("mojeek", "privacywall", "swisscows", "yahoo", "yandex", "yep", "duckduckgo web")
+    declared = tuple(sorted(load_scoring().research.declared_engines or ()))
+    assert declared == ("duckduckgo web", "yahoo", "yandex", "yep")  # the declared set
     slots = 0
     seen: set[str] = set()
     for req in plan_requests().values():
