@@ -1486,7 +1486,16 @@ adds breadth if it retrieves different things. With about 77 unique URLs per sea
 facet may overlap the first so heavily that D1 and D2 differ in redundancy, not coverage, and "depth"
 measures volume. **To be measured before q is fixed:** for a handful of real requests, the URL overlap
 between query 1 and query 2 within each facet (`scripts/planner_overlap_probe.py`). Low overlap: q = 8
-stands. High overlap: the templates diverge more, or q drops to 4. The figure is reported here. Until then
+stands. High overlap: the templates diverge more, or q drops to 4. The figure is reported here. **Registered before the measurement (2026-10-28): the metric and the thresholds.** Overlap is the
+containment of the smaller result set in the larger, on canonical URLs, within each facet between its
+query 1 and query 2, over three requests (R01 consumer electronics, R19 health supplements, regulated, R25
+home furnishing; 24 searches, the candidate seven-engine set, 2-minute gaps, no search counted if a steering
+engine failed). **Median within-facet containment below 0.30: q = 8 stands. 0.50 or above: the second
+query is not earning its place (templates diverge more, or q drops to 4). Between: the owner decides.**
+Those thresholds are developer judgement, untuned, and chosen before any number exists. The cross-facet
+containment of query 1 against query 1 is reported as the baseline for reading the figure (two queries about
+different needs that overlap this much are already as redundant as unrelated ones can be), and the by-facet
+medians are reported because one facet's second query may be redundant when the others are not. Until then
 8 is the design value and nothing is recorded under it. The measurement waits for the seven-engine hold to
 finish: searches issued during it would be load the hold is not measuring.
 
