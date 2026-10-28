@@ -9,11 +9,33 @@ use_default_settings:
     #
     # `keep_only` keeps an engine as the image defines it: bing is DISABLED by default, so it is
     # not listed here (listing it would suggest it runs; GET /config shows what does). Enabled:
-    # brave, duckduckgo, wikipedia (read from /config, docs/searxng.md).
+    # brave, duckduckgo, wikipedia (read from /config, docs/searxng.md); widened 2026-10-28 for the
+    # engine-set experiment, see the `engines:` block at the end of this file and docs/searxng.md.
     keep_only:
       - duckduckgo
       - brave
       - wikipedia
+      - google
+      - bing
+      - yahoo
+      - qwant
+      - yep
+      - mwmbl
+      - mojeek
+      - startpage
+      - marginalia
+      - wiby
+      - dogpile
+      - duckduckgo web
+      - gmx
+      - tusksearch
+      - privacywall
+      - searchmysite
+      - swisscows
+      - seznam
+      - yandex
+      - crowdview
+      - avalw
 
 general:
   instance_name: "brandverse-local"
@@ -39,3 +61,69 @@ outgoing:
   # Per-engine request timeout in seconds; a slow engine is dropped from the answer, not waited on.
   request_timeout: 5.0
   max_request_timeout: 10.0
+
+# Engines off in the image's defaults, switched on for the engine-set experiment (2026-10-28).
+engines:
+  - name: google
+    disabled: false
+    inactive: false
+  - name: bing
+    disabled: false
+    inactive: false
+  - name: yahoo
+    disabled: false
+    inactive: false
+  - name: qwant
+    disabled: false
+    inactive: false
+  - name: yep
+    disabled: false
+    inactive: false
+  - name: mwmbl
+    disabled: false
+    inactive: false
+  - name: mojeek
+    disabled: false
+    inactive: false
+  - name: startpage
+    disabled: false
+    inactive: false
+  - name: marginalia
+    disabled: false
+    inactive: false
+  - name: wiby
+    disabled: false
+    inactive: false
+  - name: dogpile
+    disabled: false
+    inactive: false
+  - name: duckduckgo web
+    disabled: false
+    inactive: false
+  - name: gmx
+    disabled: false
+    inactive: false
+  - name: tusksearch
+    disabled: false
+    inactive: false
+  - name: privacywall
+    disabled: false
+    inactive: false
+  - name: searchmysite
+    disabled: false
+    inactive: false
+  - name: swisscows
+    disabled: false
+    inactive: false
+  - name: seznam
+    disabled: false
+    inactive: false
+  - name: yandex
+    disabled: false
+    inactive: false
+  - name: crowdview
+    disabled: false
+    inactive: false
+  - name: avalw
+    disabled: false
+    inactive: false

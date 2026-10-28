@@ -34,6 +34,15 @@ disabled (the image disables it by default), so the list suggested an engine tha
 was removed, and `/config` now lists exactly these three, all enabled. The set is fixed by
 `use_default_settings.engines.keep_only`; changing it changes the results and is recorded here.
 
+**Engine set widened 2026-10-28 (experiment, owner-ordered; NOT the declared set).** `infra/searxng/settings.yml`
+now keeps 22 engines: the three above plus google, bing, yahoo, qwant, yep, mwmbl, mojeek, startpage, wiby,
+dogpile, duckduckgo web, gmx, tusksearch, privacywall, searchmysite, swisscows, seznam, yandex, crowdview,
+avalw. Marginalia was tried and dropped: the image refuses to register it without an API key. First search
+(`FSSAI honey adulteration standards`): answered with rows brave, yep, yandex, swisscows, duckduckgo web,
+yahoo, privacywall, gmx, mojeek, bing, avalw; failed duckduckgo (CAPTCHA), startpage (CAPTCHA), google,
+qwant, dogpile, searchmysite (access denied), tusksearch (HTTP error), seznam (timeout); answered nothing
+without an error crowdview, mwmbl, wiby, wikipedia. `research.declared_engines` is still null.
+
 **`json` must be in `search.formats`.** Without it the JSON API answers 403; `SearxngSearch` turns that
 into a `SearchUnavailable` whose message names `search.formats`. Confirmed against the real engine
 (`format=csv`, which is not enabled, answers 403).
