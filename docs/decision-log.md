@@ -32,11 +32,12 @@ caught in itself three times (§7, §10).
 **Entries marked [superseded]** record a decision later changed, with the reason. They are kept
 rather than edited away: a record showing only the surviving decisions is a reconstruction.
 
-**What has and has not been measured, as of 2026-10-27.** No evaluation run has been executed and
+**What has and has not been measured, as of 2026-10-28.** No evaluation run has been executed and
 no metric defined in the evaluation plan — ARR, SRR, CR, LR, Precision@10 — has been computed.
 Measurements that *have* been taken are: the lexical echo comparison between two corpora (§4.2),
-the diagnostics on a discarded labelling export (§4.5), storage per row, and partial search-rate
-probes (§6). Two freeze-script thresholds were set *after* seeing the discarded export, which is
+the diagnostics on a discarded labelling export (§4.5), storage per row, the search-rate probes and the
+fetch cost of one search (§6), and how many distinct research situations the 30 requests give the
+query planner (§1.7). Two freeze-script thresholds were set *after* seeing the discarded export, which is
 stated where it occurs (§4.5) rather than glossed.
 
 ---
@@ -522,25 +523,71 @@ methodological.
 | Constraint | Source of the figure | Design consequence |
 |---|---|---|
 | Strong model tier: 20 requests/day | Read from the project's own AI Studio account, 2026-10-14 | Evaluation data collection is wall-clock bound, not work bound |
-| Free search engines throttle this IP | Measured, partially — see below | Recording phase measured in overnight sessions; queries per request may be forced down |
-| Laptop memory: ~0.8–1.1 GB spare with a run in flight | Measured 2026-10-27 | Recording must not load the encoder (1.03 GB resident); overnight jobs can be killed, so recording must be resumable |
+| One free search engine (brave) throttles this IP hard; seven others sustained 2-minute gaps for 91 minutes | Measured 2026-10-26 to 2026-10-28 (below) | The engine set is declared (four engines), brave is enabled but undeclared; the recorder stays adaptive |
+| Laptop memory: ~0.8–1.1 GB spare with a run in flight | Measured 2026-10-27 | Recording must not load the encoder (1.03 GB resident); overnight jobs can be killed, so recording must be resumable; a long search job does not share the machine with builds (`Architecture.md` §11) |
+| Fetching the pages of one search: 24 s at concurrency 8, about 3.5 minutes sequential | Measured 2026-10-28, one search | Fetch is not the binding constraint; the per-query page cap is the planner's, and still unset |
 | No free background-worker hosting | Provider documentation | The laptop is the worker host; public deployment deferred |
 
-*Search rate, as measured so far.* Nine searches at 10-minute gaps over 90 minutes, all answered.
-A second run broke on the seventh search at 4-minute gaps, recovered for one search, then relapsed.
-A sliding-window reading and a token-bucket fit were each proposed, registered as predictions, and
-each falsified within the hour. No constant model fits both runs. **No sustained rate has been
-established.** A 4-hour hold at 10-minute gaps is the measurement intended to produce one.
+### 6.1 Search rate, as measured
 
-*Design consequence of the failure to fit.* If the limit is not one constant — varying by day, by
-time, or by whether refused requests count — then no measurement yields a stable planning figure.
-The recorder is therefore adaptive rather than scheduled: it backs off on refusal, resumes when
-clean, and records its achieved rate. The measured figure sizes the number of overnight sessions to
-budget, which is all a planning figure needs to do.
+**Brave alone (2026-10-26 to 27) never gave a rate.** Nine searches at 10-minute gaps over 90 minutes were
+all answered. A ramp broke on the seventh search at 4-minute gaps, recovered for one search, then
+relapsed. A sliding-window reading and a token-bucket fit were each proposed, registered as predictions,
+and each falsified within the hour. A hold at 6 searches an hour broke at the ninth search, 1.3 hours in.
+A silent wait (nobody asking) recovered between 60 and 90 minutes, and the confirming probe 10 minutes
+later was refused. No constant model fits these runs and **no sustainable brave rate was established**.
 
-*Recorded as a methodological cost.* If the sustainable rate forces the per-request query count
-down, that is infrastructure determining evidence depth, and the thesis says so rather than
-presenting the smaller number as a design choice.
+**Brave was the outlier (2026-10-28).** The engine set was widened to 22 and an 8-search burst at 2-minute
+gaps was run. Seven engines answered all eight searches (yep, yandex, yahoo, privacywall, duckduckgo web,
+swisscows, mojeek); brave answered one search after about 8.5 hours of silence and refused every fresh
+request after it. Failure counts at gaps under 3 minutes need care: SearXNG itself suspends a failed engine
+for 180 seconds (3600 for a CAPTCHA) and reports it as `Suspended`, so brave's eight failures were four
+refusals and four suspensions. The earlier brave logs used gaps above 180 seconds and are not affected.
+
+**The seven-engine hold stopped at 91 minutes and is not rerun.** The first attempt (stop at the first
+failure of any engine) ended at its second search on a yep HTTP 503, which is a service fault, not a
+throttle. The second (run to completion: a single failure logs, three in a row mean the engine has fallen)
+made **45 searches over 91 minutes at 2-minute gaps with no rate refusal from any of the seven**; its
+failures were two timeouts (swisscows, privacywall) and two silent empties (mojeek); no engine fell. It was
+killed by the host's memory-pressure reaper, not by an engine. **What the 45 searches establish:** these
+seven sustained 2-minute gaps for 91 minutes. **What they do not:** anything about 4 hours or 120
+searches, and nothing about a daily or hourly budget. The owner decided against a rerun: the recording run
+is the actual workload and is a better measurement than the hold, so its first session measures the
+sustainable rate while doing the work.
+
+**The declared engine set (owner, 2026-10-28): yep, yandex, yahoo, duckduckgo web.** These four answered with
+rows in all 45 searches with no failure of any kind. privacywall, swisscows, mojeek, brave and the rest stay
+enabled and are not declared. The reason is arithmetic about retries: a declared engine's failure degrades a
+search, a degraded search is never recorded, so every flaky declared engine multiplies retries during
+recording; declaring all seven would have degraded 4 of the 45 searches (about one in eleven) on transient faults
+alone, for engines whose results arrive anyway when they work. Two conditions travel with the declaration:
+each search records how many undeclared engines contributed rows and which (otherwise an undeclared engine
+failing silently would make a search look clean with thinner evidence, §7.2 again), and every result reports
+both numbers, the **four declared engines** and the **count that actually contributed**. "Four engines" alone
+would understate the evidence base and "fourteen" would overstate it. Which of the contributing engines share
+an upstream index is **not established**: the only evidence is URL containment in one search, and the image
+documents a backend for only two engines.
+
+**Fetch cost (2026-10-28, one search).** The 79 distinct URLs of one real search on 61 hosts took 24 seconds
+to fetch at concurrency 8 and about 3.5 minutes sequentially, with the per-host politeness delay of one
+second included: 67 pages fetched, 12 PDFs skipped unrequested (15%), no failures. An earlier estimate of
+about 26 minutes was the timeout ceiling (77 pages at 20 seconds each), not a cost, and is withdrawn. Fetch is
+not the binding constraint; the cap on pages fetched per query belongs to the query planner and is unset.
+
+**Recording arithmetic.** The planner's 8 queries per request give 240 query slots over the 30 requests and
+**153 distinct searches** (identical queries record once; the key includes the declared engine set, so the
+figure holds for one declared set). At 2-minute gaps that is about 5 hours, which is an expectation and not
+a measurement: the first recording session measures it.
+
+*Design consequence.* Because no single constant described brave and the seven engines were observed for
+only 91 minutes, the recorder is adaptive rather than scheduled: it backs off on refusal, resumes when
+clean, and records its achieved rate. The measured rate sizes the number of sessions to budget, which is
+all a planning figure needs to do.
+
+*Recorded as a methodological cost.* If the sustainable rate forces the per-request query count down, that
+is infrastructure determining evidence breadth, and the thesis says so rather than presenting the smaller
+number as a design choice. Likewise, the declared set is four engines because of how flaky the others were
+on one day, and a different day might have declared a different four.
 
 ---
 
