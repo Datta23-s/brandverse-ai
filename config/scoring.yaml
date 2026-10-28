@@ -66,6 +66,13 @@ research:
   # minimum is no content (a login wall, a listing): the page is refused rather than passed on as
   # evidence. Longer than the maximum is cut at a paragraph boundary and flagged `truncated`, so no
   # single page fills an agent's context. DEFAULTS, NOT TUNED.
+  # The query planner (backend/app/research/planner.py, docs/evaluation-plan.md section 8): 4 facets x
+  # planner_queries_per_facet = q (8). Chosen from what the planner must cover, not from the search
+  # rate; if the rate ever forces it down, that is recorded as infrastructure determining evidence
+  # breadth. max_pages_per_query is NULL ON PURPOSE until the fetch-cost distribution is known.
+  planner_queries_per_facet: 2
+  planner_locale: "India"
+  max_pages_per_query: null
   extraction_min_chars: 200
   extraction_max_chars: 20000
   # The page fetcher (backend/app/research/fetch.py). Raw page bodies live in Redis under this TTL

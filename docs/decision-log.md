@@ -608,6 +608,7 @@ is present in the first commit of that code.
 | V4 | Citation does not imply entailment | Open; partial numeric mitigation |
 | V5 | The source authority prior is the developer's untuned judgement | Mitigated by reporting results with the prior flattened |
 | V6 | The source model conflates authority with independence | Ruled; fix requires a brand domain field in Phase 6 |
+| V7 | The evaluation's searches can only return evidence about a product's category, never the product (pseudonyms); facet 3 cannot verify a specific product's claims | Stated 2026-10-28; bounds what the evaluation can show about claim grounding |
 
 Additional stated limitations: tests run as a database superuser, so privilege failures appearing
 only for a non-superuser role are invisible to CI; accent handling differs between the lexical and

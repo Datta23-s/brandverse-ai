@@ -113,6 +113,14 @@ class Research(_Strict):
     # decides it, docs/evaluation-plan.md section 8), so every engine counts. A required key: it is
     # written as null on purpose, not left out.
     declared_engines: list[str] | None
+    # The query planner (app/research/planner.py). Parameters of the results, reported beside them.
+    # 4 facets x this many = q. 2 is the smallest that makes depth a variable (at 1, D1 and D2 are
+    # the same list); NOT set from the search rate. A required key.
+    planner_queries_per_facet: int = Field(ge=1, le=2)
+    planner_locale: str = Field(min_length=1)
+    # The most pages fetched for one query. Written null on purpose until the fetch-cost
+    # distribution is known (docs/fetcher.md); reported beside every result either way.
+    max_pages_per_query: int | None
     extraction_min_chars: int = Field(ge=1)
     extraction_max_chars: int = Field(ge=1)
     # The page fetcher (app/research/fetch.py). Every one is a parameter of the results.

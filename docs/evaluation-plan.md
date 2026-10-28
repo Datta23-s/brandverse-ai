@@ -450,6 +450,20 @@ search pipeline carries a `first_party` marker on every result, unpopulated and 
 6, with the domain field, the rule above and an independence factor separate from authority. The
 independence factor is not designed here. (`Memory.md` §3.1; `Phases.md` Phases 5 and 6.)
 
+**V7 — The evaluation's searches can only return evidence about a product's CATEGORY, never about the
+product (recorded 2026-10-28; owner).** The test set's brands and products are pseudonyms, which no search
+engine can resolve, so the query planner takes the product's generic category and never a brand or product
+name. That is forced, and it is correct, and the consequence is larger than a note. **Facet 3 exists to
+find independent reference facts for a product's attributes, and under pseudonyms it can only ever return
+generic category facts.** So the claim-verification machinery is evaluated on evidence that cannot, in
+principle, verify a specific product's claims. This bounds what the evaluation can show about claim
+grounding: it can show that the pipeline finds, scores, stores and reuses category-level evidence and that
+the gates treat claims correctly given what they are handed; it cannot show that the system finds
+independent evidence for a particular product's specifications. The same applies to the competitor and
+audience facets, which describe a category and its buyers, not the pseudonymous brand. (`Memory.md`;
+`backend/app/research/planner.py`; related V6, which concerns whose evidence a page is, where V7 concerns
+what the search could ever find.)
+
 ### A defect found and fixed: a throttled search was indistinguishable from no evidence — 2026-10-26
 
 *Infrastructure failure masquerading as a system result.* The search provider was written against a
@@ -1442,6 +1456,51 @@ caveat fixed in advance:** SearXNG suspends a failed engine (180 s for access de
 by a `Suspended: ...` search in which the engine was not asked: three failures in a row can be one fresh
 refusal and its suspension. The analysis separates fresh failures from `Suspended` ones and says which a
 fall consisted of.
+
+### The query planner (design approved 2026-10-28; `backend/app/research/planner.py`)
+
+**One ranked list, from the request alone.** The planner runs once per request, before any arm picks a
+depth, and emits one list; D0 takes none, D1 the first pass, D2 all of it (the rulings above). **Facets**,
+each with a named consumer (a facet without a consumer does not exist): (1) competitor and category
+positioning, A2; (2) audience needs and objections, A3; (3) independent reference facts for the product's
+attributes, A1 and A7; (4) sector rules and advertising norms, sector risk and A7. A fifth, a timeliness
+hook, was considered and dropped: it needs keyword extraction from free text, and recency is already scored
+per source. **Ranking is a breadth-first interleave**: pass 1 is every facet's primary query in the facet
+priority order, pass 2 every facet's second-angle query. So D1 (the first pass, 4 queries) covers every facet
+once, a shorter prefix provably leaves a facet uncovered, and a cut forced by the budget removes the tail
+(the lowest-priority facet's second query) before any facet. **The facet priority is untuned developer
+judgement** (a regulated sector leads with sector rules, otherwise competitor positioning leads) and is
+reported with every result. `q = 4 facets x 2 = 8`; the per-facet count is `research.planner_queries_per_facet`.
+
+**QUERY GENERATION IS NOT ADAPTIVE.** The queries are filled from fixed templates by the request's fields
+(sector, regulated flag, category, audience) and by nothing else: not memory, not earlier results, not the
+arm. This is a thesis about adaptive marketing intelligence, and the adaptivity it studies lives in depth
+selection and memory reuse. The query generator is a lookup, and the thesis says so. Templates were chosen
+for being reproducible, free, testable offline and fixed when the request is recorded; the cost is generic
+phrasing (an LLM paraphrase behind the same interface is a Phase 6 option, not evaluated). The objective is
+carried on the plan and not used in query text, because using it would need the keyword extraction declined
+above.
+
+**q = 8 is CONDITIONAL on a measurement, and not yet confirmed (owner, 2026-10-28).** A second query only
+adds breadth if it retrieves different things. With about 77 unique URLs per search the second angle on a
+facet may overlap the first so heavily that D1 and D2 differ in redundancy, not coverage, and "depth"
+measures volume. **To be measured before q is fixed:** for a handful of real requests, the URL overlap
+between query 1 and query 2 within each facet (`scripts/planner_overlap_probe.py`). Low overlap: q = 8
+stands. High overlap: the templates diverge more, or q drops to 4. The figure is reported here. Until then
+8 is the design value and nothing is recorded under it. The measurement waits for the seven-engine hold to
+finish: searches issued during it would be load the hold is not measuring.
+
+**Multi-hop: considered, found COMPATIBLE with search held constant, dropped on scope.** The architecture
+document describes D2 as "multi-hop". That is not incompatible with the rule that search is held constant:
+the planner runs once per request, a hop-2 query derives from hop-1's recorded results, and the whole tree is
+recorded once and replayed by every arm, so arms would draw prefixes of a tree instead of a list. It is
+dropped because hop-2 derivation needs its own logic (what makes a good follow-up query) and that logic
+would need its own justification without being this thesis's contribution. D2 therefore means all 8 queries
+of the one list. (An earlier draft of this record called it incompatible; that was wrong.)
+
+**Per-query fetch cap.** `research.max_pages_per_query` is null on purpose until the fetch-cost distribution
+is known (one search: `docs/fetcher.md`, 79 URLs, about 3.5 minutes sequential); it is reported beside every
+result with `queries_per_facet` and the template version.
 
 ## 9. Required items
 
