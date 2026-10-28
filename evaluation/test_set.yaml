@@ -15,6 +15,10 @@
 #
 # real_* fields exist so claims can be checked. Generated output uses pseudonyms only (Rules.md T8).
 
+# category (per product, added 2026-10-28): the product's GENERIC category, the only product term the query
+# planner may use (brands and products are pseudonyms no search engine can resolve: V7). Authored by the
+# developer from what each request describes, untuned, like every other input here; no brand or product
+# name appears in one. Frozen by evaluation/test_set.categories.lock.
 retrieved_at: 2026-10-14
 budget_tier: standard        # identical for every request, so budget is not a confound
 
@@ -33,6 +37,7 @@ brands:
       A:
         pseudonym: Tidewell Loop N2
         real_name: boAt Rockerz 255 Pro+
+        category: "neckband earphones"
         evidence_url: https://www.boat-lifestyle.com/products/boat-rockerz-255-pro-ss-edition
         verified:
           - "In-ear wireless neckband earphones"
@@ -52,6 +57,7 @@ brands:
       B:
         pseudonym: Tidewell Pods Q1
         real_name: boAt Airdopes 141 ANC
+        category: "noise cancelling wireless earbuds"
         evidence_url: https://www.boat-lifestyle.com/products/airdopes-141-anc-earbuds
         verified:
           - "True wireless earbuds with active noise cancellation up to 32 dB"
@@ -72,6 +78,7 @@ brands:
       A:
         pseudonym: Kavira Arc
         real_name: Noise ColorFit Ultra 4
+        category: "smartwatch"
         evidence_url: https://www.gonoise.com/products/noise-colorfit-ultra-4-smartwatch
         verified:
           - "1.96-inch AMOLED display, 600 nits peak brightness"
@@ -85,6 +92,7 @@ brands:
       B:
         pseudonym: Kavira Orbit
         real_name: NoiseFit Halo 3
+        category: "bluetooth calling smartwatch"
         evidence_url: https://www.gonoise.com/products/noisefit-halo-3-smartwatch-with-ai-pro
         verified:
           - "1.43-inch AMOLED display, 466 x 466 resolution"
@@ -104,6 +112,7 @@ brands:
       A:
         pseudonym: Yatrik Glide Cabin
         real_name: Mokobara Transit Luggage - Cabin
+        category: "cabin suitcase"
         evidence_url: https://mokobara.com/products/the-transit-cabin-luggage
         verified:
           - "Dimensions 54 x 37.5 x 23.5 cm; capacity 40 litres"
@@ -118,6 +127,7 @@ brands:
       B:
         pseudonym: Yatrik Glide Pack
         real_name: Mokobara Transit Z Backpack
+        category: "travel backpack"
         evidence_url: https://mokobara.com/products/transit-z-backpack
         verified:
           - "Size 47 x 31 x 19 cm; capacity 30 litres; weight 1.3 kg"
@@ -137,6 +147,7 @@ brands:
       A:
         pseudonym: Pagdandi Stroll Lite
         real_name: Neeman's Begin Walk Lite (men)
+        category: "walking shoes"
         evidence_url: https://neemans.com/products/begin-walk-lite-for-men-grey
         verified:
           - "Knit upper"
@@ -148,6 +159,7 @@ brands:
       B:
         pseudonym: Pagdandi Grove Sneaker
         real_name: Neeman's Tree Sneakers
+        category: "sustainable sneakers"
         evidence_url: https://neemans.com/products/tree-sneakers-aspen-grey
         verified:
           - "Made using wood pulp fibers"
@@ -166,6 +178,7 @@ brands:
       A:
         pseudonym: Ustara Tri-Edge Razor
         real_name: Bombay Shaving Company Vita Charge3 Razor
+        category: "men's razor"
         evidence_url: https://www.bombayshavingcompany.com/products/vita-charge3-razor-2
         verified:
           - "3-blade system with pivot head"
@@ -177,6 +190,7 @@ brands:
       B:
         pseudonym: Ustara Haldi Shave Foam
         real_name: Bombay Shaving Company Turmeric Shaving Foam 264 g
+        category: "shaving foam"
         evidence_url: https://www.bombayshavingcompany.com/products/turmeric-shaving-foam
         verified:
           - "264 g pack"
@@ -199,6 +213,7 @@ brands:
       A:
         pseudonym: Ember Lane Protein Coffee - Classic
         real_name: Sleepy Owl Classic Protein Coffee Powder
+        category: "protein coffee"
         evidence_url: https://sleepyowl.co/products/protein-coffee-classic
         verified:
           - "15 g protein per sachet"
@@ -210,6 +225,7 @@ brands:
       B:
         pseudonym: Ember Lane Protein Coffee - Hazelnut
         real_name: Sleepy Owl Protein Coffee Powder - Hazelnut
+        category: "protein coffee"
         evidence_url: https://sleepyowl.co/products/protein-coffee-hazelnut
         verified:
           - "Hazelnut flavour"
@@ -229,6 +245,7 @@ brands:
       A:
         pseudonym: Verdano Whey Iso+Conc - Chocolate
         real_name: Wellbeing Nutrition Whey Protein Isolate + Concentrate, Swiss Chocolate, 1 kg
+        category: "whey protein powder"
         evidence_url: https://wellbeingnutrition.com/products/whey-protein-blend-swiss-chocolate
         verified:
           - "Whey protein isolate and concentrate blend, 1 kg"
@@ -247,6 +264,7 @@ brands:
       B:
         pseudonym: Verdano Marine Collagen - Orange
         real_name: Wellbeing Nutrition Marine Collagen, Valencia Orange
+        category: "marine collagen supplement"
         evidence_url: https://wellbeingnutrition.com/products/marine-collagen-valencia-orange
         verified:
           - "8000 mg marine collagen (Type I and III)"
@@ -266,6 +284,7 @@ brands:
       A:
         pseudonym: Lohaar Cast Iron Fry Pan 25
         real_name: The Indus Valley CASTrong Cast Iron Fry Pan 25 cm
+        category: "cast iron fry pan"
         evidence_url: https://www.theindusvalley.in/products/cast-iron-frying-pan-2
         verified:
           - "Cast iron, 25 cm, 1.6 L, 2.4 kg"
@@ -281,6 +300,7 @@ brands:
       B:
         pseudonym: Lohaar Cast Iron Kadai 2.5
         real_name: The Indus Valley Super Smooth Cast Iron Kadai 2.5 L
+        category: "cast iron kadai"
         evidence_url: https://www.theindusvalley.in/products/super-smooth-cast-iron-kadai-pre-seasoned-nonstick-100-pure-toxin-free-2-5l-2-4kg-10-in
         verified:
           - "Cast iron kadai, 2.5 L, 2.4 kg"
@@ -301,6 +321,7 @@ brands:
       A:
         pseudonym: Dozewell Classic Mattress
         real_name: Sleepycat Original Mattress
+        category: "memory foam mattress"
         evidence_url: https://www.sleepycat.in/products/original-mattress
         verified:
           - "Available in 4, 5, 6, 8 and 10 inch thicknesses"
@@ -313,6 +334,7 @@ brands:
       B:
         pseudonym: Dozewell Hybrid Latex Mattress
         real_name: Sleepycat The Founder's Mattress
+        category: "hybrid latex mattress"
         evidence_url: https://www.sleepycat.in/products/founders-mattress
         verified:
           - "9 inch thickness; four-layer hybrid"
@@ -333,6 +355,7 @@ brands:
       A:
         pseudonym: Hawaa Mini Personal Fan
         real_name: Atomberg Fluero Mini Personal Fan
+        category: "personal fan"
         evidence_url: https://atomberg.com/products/fluero-mini-personal-fan
         verified:
           - "145 mm BLDC personal fan, 5 W"
@@ -345,6 +368,7 @@ brands:
       B:
         pseudonym: Hawaa Pure Water Purifier
         real_name: Atomberg Intellon Water Purifier
+        category: "water purifier"
         evidence_url: https://atomberg.com/products/intellon-waterpurifier
         verified:
           - "RO + UF + UV + alkaliser; 7 stages; 4 modes"

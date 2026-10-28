@@ -1507,6 +1507,30 @@ dropped because hop-2 derivation needs its own logic (what makes a good follow-u
 would need its own justification without being this thesis's contribution. D2 therefore means all 8 queries
 of the one list. (An earlier draft of this record called it incompatible; that was wrong.)
 
+**The category field (added 2026-10-28; owner).** The planner's one product term is a generic category, and
+the test set had none: a missing field, found by needing it. `evaluation/test_set.yaml` now carries a
+`category` per product (20 products, 30 requests), authored by the developer from what each request describes
+and, like every other untuned input, reported as such; no brand or product name is in one (a test checks).
+It is frozen by `evaluation/test_set.categories.lock` (a SHA-256 of the 20 categories; a test fails if one
+changes, so a change is deliberate and dated). The rest of the test set is not locked. R19, the regulated
+request, is a whey isolate + concentrate blend (animal-derived, "whey protein powder"), not a plant protein;
+the file was read before the category was fixed. The overlap probe takes R01, R19 and R25's categories from
+this field.
+
+**How much research variety 30 requests give the planner (measured 2026-10-28, `scripts/planner_variety.py`;
+no network).** Requests that share a category share every query that does not read the audience: 7 of the 8.
+- Distinct ordered query lists: **30 of 30**, but only because the audience facet's primary query reads the
+  audience hint. Distinct **query texts: 153 of 240 slots**. Distinct first-pass (D1) texts: 77 of 120.
+- Distinct categories: **19**. Distinct audience-free cores (the 7 shared queries): **19**. **11 requests
+  repeat an earlier request's core**: R01/R03, R04/R06, R07/R09, R10/R12, R13/R15, R16/R17/R18, R19/R21,
+  R22/R24, R25/R27, R28/R30 (campaign 3 reuses campaign 1's product; B06's two products share one category).
+- Consequences stated, not ruled: the recording is 153 distinct searches if identical queries are recorded once
+  (the cache key is the normalised query), not 240; and the evaluation's evidence varies by category and
+  audience, not by request, so the claim that 30 requests give 30 research situations is false: 19 give
+  distinct category evidence. Options are the owner's: accept it and report that evidence varies by category;
+  add the objective to the query text (needs the keyword extraction declined above); or diversify the
+  categories. Awaiting the ruling.
+
 **Per-query fetch cap.** `research.max_pages_per_query` is null on purpose until the fetch-cost distribution
 is known (one search: `docs/fetcher.md`, 79 URLs, about 3.5 minutes sequential); it is reported beside every
 result with `queries_per_facet` and the template version.

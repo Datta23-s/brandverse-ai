@@ -12,8 +12,7 @@ Overlap is containment of the smaller result set in the larger, on canonical URL
 www., a trailing slash and the fragment ignored): |A & B| / min(|A|, |B|). Hosts are reported the
 same way. A search in which any steering engine failed is DEGRADED and is not counted. One log line
 per search, then a summary line; paced (default 2-minute gaps) because the engines throttle this IP.
-The category strings below are PROPOSED by the developer for these three requests; the test set has
-no category field yet and the owner reviews them before one is added.
+The categories come from the test set's frozen `category` field, not from this script.
 """
 
 import argparse
@@ -30,22 +29,17 @@ from urllib.parse import urlsplit
 import httpx
 
 from app.errors import SearchError
+from app.evaluation.test_set import plan_requests
 from app.memory.scoring import load_scoring
-from app.research.planner import PlanRequest, plan_queries
+from app.research.planner import plan_queries
 from app.research.search import SearxngSearch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEVEN = ("yep", "yandex", "yahoo", "privacywall", "duckduckgo web", "swisscows", "mojeek")
 
-# (test-set id, sector words, regulated, category, audience hint): categories proposed, not ruled.
-REQUESTS = [
-    ("R01", "consumer electronics", False, "neckband earphones",
-     "College students who commute and work out"),
-    ("R19", "health supplements", True, "whey protein supplement",
-     "Recreational gym-goers new to protein supplements"),
-    ("R25", "home furnishing", False, "memory foam mattress",
-     "Renters furnishing a first apartment"),
-]  # fmt: skip
+# The three requests measured, drawn from the frozen category field of evaluation/test_set.yaml:
+# R01 (consumer electronics), R19 (health supplements, regulated: a WHEY blend), R25 (mattress).
+REQUEST_IDS = ("R01", "R19", "R25")
 
 
 def canon(url: str) -> str:
@@ -75,10 +69,9 @@ async def main() -> None:
 
     async with httpx.AsyncClient(timeout=30) as client:
         search = SearxngSearch(args.url, client, declared_engines=SEVEN)
-        for rid, sector, regulated, category, audience in REQUESTS:
-            req = PlanRequest(
-                sector=sector, regulated=regulated, category=category, audience=audience
-            )
+        test_set = plan_requests()
+        for rid in REQUEST_IDS:
+            req = test_set[rid]
             plan = plan_queries(
                 req,
                 queries_per_facet=cfg.planner_queries_per_facet,
@@ -114,7 +107,7 @@ async def main() -> None:
 
     within, within_h, across, across_h = [], [], [], []
     per_facet: dict[str, list[float]] = {}
-    for rid, *_ in REQUESTS:
+    for rid in REQUEST_IDS:
         facets = sorted({f for (r, f, _a) in sets if r == rid})
         for f in facets:
             one, two = sets.get((rid, f, 1)), sets.get((rid, f, 2))
