@@ -1492,6 +1492,14 @@ query 1 and query 2, over three requests (R01 consumer electronics, R19 health s
 home furnishing; 24 searches, the candidate seven-engine set, 2-minute gaps, no search counted if a steering
 engine failed). **Median within-facet containment below 0.30: q = 8 stands. 0.50 or above: the second
 query is not earning its place (templates diverge more, or q drops to 4). Between: the owner decides.**
+
+**Middle band RULED before the number exists (owner, 2026-10-28): between 0.30 and 0.50, q STAYS AT 8 and the
+measured overlap is reported beside every result.** The reason is structural, not a preference. Dropping to one
+query per facet makes D1 and D2 identical and destroys depth as a variable, which is the thing the second
+query exists to create. So in the middle band the alternatives are to keep 8 with the partial redundancy
+reported, or to restructure the facets, and restructuring on a single overlap measurement (three requests,
+one day, one engine set) would be overfitting the design to one probe. **At 0.50 or above** the second query
+is not earning its place and the owner rules on restructuring the facets, not on q alone.
 Those thresholds are developer judgement, untuned, and chosen before any number exists. The cross-facet
 containment of query 1 against query 1 is reported as the baseline for reading the figure (two queries about
 different needs that overlap this much are already as redundant as unrelated ones can be), and the by-facet
