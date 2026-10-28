@@ -1401,6 +1401,19 @@ hold's other six are still read up to that point. A zero-row answer from a steer
 error is logged and does NOT stop the hold (a legitimate query can return nothing); it is reported.
 A late gap (machine slept) is recorded and a hold with one is `held_with_gaps`, never `held`.
 
+*Result (2026-10-28, `evaluation/search_rate/hold-20261028T062237Z.jsonl`; the laptop was on AC).* **The
+hold broke at the SECOND search, 125 s in, on yep: HTTP 503 from `api.yep.com`** (SearXNG's own error
+stats: 1 of 10 yep requests failed, 10%; yep had answered 20 rows in each of the 8 burst searches and in
+the hold's first). That is reading (4), not reading (2) or (3): not "too many requests", so it is not
+evidence of a count or a budget, and it says nothing about whether the other six hold for hours: they were
+observed for two searches, clean. Two things worth keeping from it. (a) **The stop-at-first-failure rule
+makes a hold of any set as fragile as its flakiest member**: one transient 503 ends a four-hour run in two
+minutes, and it cannot tell a throttle from an outage. (b) **mojeek answered ZERO rows in that same search
+with no error named** (10 rows in the first), a silent empty that the rule, as registered, logs and does not
+count. A searcher that returns nothing without saying so is the failure of the throttled empty 200 again
+(decision log 7.2), at the engine level; SearXNG's error stats list no mojeek errors, so the cause is
+unknown. Nothing here declares or undeclares anything. Next measurement: the owner's.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
