@@ -56,3 +56,49 @@ def test_the_regulated_request_is_the_whey_protein_not_a_plant_protein():
     # evidence base (owner, 2026-10-28)
     assert plan_requests()["R19"].category == "whey protein powder"
     assert plan_requests()["R19"].regulated is True
+
+
+def test_novel_and_repeat_tags_follow_the_shared_research_evidence():
+    from collections import Counter
+
+    from app.evaluation.test_set import evidence_tags
+
+    tags = evidence_tags()
+    assert Counter(t["kind"] for t in tags.values()) == {"novel": 19, "repeat": 11}
+    assert Counter(t["stage"] for t in tags.values()) == {
+        "cold_start": 10,
+        "warm_novel": 9,
+        "repeat": 11,
+    }
+    # every position-1 request is novel (and cold) by construction
+    assert all(
+        tags[f"R{i:02d}"]["stage"] == "cold_start" for i in (1, 4, 7, 10, 13, 16, 19, 22, 25, 28)
+    )
+    # B06's hazelnut flavour (product B) is the one repeat on a DIFFERENT product
+    different = [r for r, t in tags.items() if t["subtype"] == "different_product"]
+    assert different == ["R17"]
+    assert tags["R18"]["subtype"] == "same_product" and tags["R03"]["subtype"] == "same_product"
+
+
+def test_identical_queries_collapse_to_one_cache_entry_so_153_searches_are_recorded():
+    from app.memory.scoring import load_scoring
+    from app.research.planner import plan_queries
+    from app.research.search_cache import cache_key
+
+    cfg = load_scoring().research
+    declared = ("mojeek", "privacywall", "swisscows", "yahoo", "yandex", "yep", "duckduckgo web")
+    slots = 0
+    seen: set[str] = set()
+    for req in plan_requests().values():
+        plan = plan_queries(
+            req,
+            queries_per_facet=cfg.planner_queries_per_facet,
+            locale=cfg.planner_locale,
+            max_pages_per_query=None,
+        )
+        for q in plan.queries:
+            slots += 1
+            seen.add(cache_key(q.text, declared))
+            seen.add(cache_key("  " + q.text.upper() + " ", declared))  # case/space do not matter
+    assert slots == 240 and len(seen) == 153
+    assert cache_key("a b", declared) != cache_key("a b", ("yep",))  # the engine set still matters

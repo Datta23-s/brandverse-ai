@@ -59,3 +59,36 @@ def plan_requests(path: Path = TEST_SET) -> dict[str, PlanRequest]:
             objective=r.get("objective"),
         )
     return out
+
+
+def evidence_tags(path: Path = TEST_SET) -> dict[str, dict[str, str]]:
+    """Per request: is its research evidence NOVEL or a REPEAT of an earlier request's?
+
+    Two requests share research evidence when they share a sector and category (the planner's only
+    product term), which makes every query but the audience one identical. The first request of a
+    group in the set's order is `novel`; later ones are `repeat`, and a repeat is `same_product`
+    when an earlier request in the group used the same brand's same product, else
+    `different_product`. `stage` adds the position the cold-start question needs: a request in
+    position 1 has no memory by construction, so `novel` mixes cold starts with warm requests on a
+    new category: `cold_start` (position 1), `warm_novel` (position 2 or 3, new category), `repeat`.
+    """
+    data = _load(path)
+    brands = {b["id"]: b for b in data["brands"]}
+    seen: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    out: dict[str, dict[str, str]] = {}
+    for r in data["requests"]:
+        brand = brands[r["brand"]]
+        group = (str(brand["sector"]), brand["products"][r["product"]]["category"])
+        earlier = seen.setdefault(group, [])
+        product_id = (r["brand"], r["product"])
+        if not earlier:
+            kind, subtype = "novel", "first_in_group"
+        else:
+            kind = "repeat"
+            subtype = "same_product" if product_id in earlier else "different_product"
+        stage = (
+            "repeat" if kind == "repeat" else ("cold_start" if r["position"] == 1 else "warm_novel")
+        )
+        earlier.append(product_id)
+        out[r["id"]] = {"kind": kind, "subtype": subtype, "stage": stage}
+    return out

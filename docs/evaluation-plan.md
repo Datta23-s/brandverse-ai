@@ -1524,12 +1524,46 @@ no network).** Requests that share a category share every query that does not re
 - Distinct categories: **19**. Distinct audience-free cores (the 7 shared queries): **19**. **11 requests
   repeat an earlier request's core**: R01/R03, R04/R06, R07/R09, R10/R12, R13/R15, R16/R17/R18, R19/R21,
   R22/R24, R25/R27, R28/R30 (campaign 3 reuses campaign 1's product; B06's two products share one category).
-- Consequences stated, not ruled: the recording is 153 distinct searches if identical queries are recorded once
-  (the cache key is the normalised query), not 240; and the evaluation's evidence varies by category and
-  audience, not by request, so the claim that 30 requests give 30 research situations is false: 19 give
-  distinct category evidence. Options are the owner's: accept it and report that evidence varies by category;
-  add the objective to the query text (needs the keyword extraction declined above); or diversify the
-  categories. Awaiting the ruling.
+- **RULED 2026-10-28 (owner): accept it, and report it as DESIGN, not limitation.** Adding the objective to
+  the query text would make campaign 3 see DIFFERENT evidence from campaign 1 on the same product, which
+  confounds exactly the comparison the test set exists for: the Proposed arm's advantage on a repeat campaign
+  would be "it remembered" mixed with "it saw new evidence". Diversifying the categories does the same thing
+  more weakly. So repeat campaigns on the same product keep **identical research evidence**, because that is
+  what isolates memory reuse from fresh evidence. Reported accurately: **30 requests over 19 distinct
+  category situations, 11 requests repeating an earlier core**; "30 requests, 30 research situations" would be
+  false. **Recording budget: 153 distinct searches, not 240**, and the collapse is verified, not assumed:
+  `cache_key` is the SHA-256 of the engine-set scope and the normalised query, and a test
+  (`tests/test_evaluation_test_set.py`) computes the key for all 240 planned queries, and for case- and
+  space-mangled copies of them, and finds 153 distinct keys. The engine set is part of the key, so the 153
+  hold only for one declared set.
+
+**Sub-analysis, registered before any data (owner, 2026-10-28): novel versus repeat category.** Every request
+is tagged from the test set alone (`evidence_tags` in `backend/app/evaluation/test_set.py`, 6 tests): the
+first request of a (sector, category) group in the set's order is **novel** (19), later ones are **repeat**
+(11); a repeat is `same_product` (10) or `different_product` (1, R17). Every primary metric is reported per
+arm for each tag, with the number of requests in each cell, and the margin is Proposed's advantage over
+Baseline B (the arm that researches at full depth with no memory), signed so that positive is better for
+Proposed. **Prediction, stated before any run: a memory mechanism that works shows a larger margin on repeat
+requests than on novel ones. If it does not, that is a finding about the mechanism, not a measurement error.**
+*A refinement the numbers force, which the owner asked for two groups but needs three:* the novel group is not
+homogeneous. All 10 position-1 requests are novel and have **no memory by construction**, so Proposed cannot
+beat Baseline B through memory there; the 9 warm-novel requests (position 2 or 3, a new category) have brand
+and sector memory but no category memory. So the split is also reported in three stages, **cold start (10),
+warm novel (9), repeat (11)**, and the registered ordering is repeat margin > warm-novel margin >= cold-start
+margin, with the cold-start margin near zero. If only the two-group split were reported, "repeat beats novel"
+could be nothing more than "warm beats cold". **Power:** cells of 10, 9 and 11 requests; the split is
+descriptive, reported with intervals, and carries no significance claim on its own.
+
+**B06 (R16, R17, R18): three requests on two products sharing one category.** Read from the test set:
+product B is the hazelnut flavour of product A (same pack, same protein, "Hazelnut flavour" the only added
+verified claim), and the design asks only that campaign 2 be a "same brand, related product"
+(`Memory.md` section 7: "3rd+, same product family"; this plan's test-set table: "same or adjacent
+product"). So it is consistent with the design, and it is the one place where "related product" came out as
+"same category"; every other brand's product B is a different category (earbuds against a neckband, a razor
+against a foam). Nothing in the repository says it was chosen so that two products would share evidence, and
+it should not be described as if it were: it is the flavour variant that was picked. Consequence: R17 is the
+single `different_product` repeat, and a sensitivity run of the sub-analysis without R17 is reported next to
+it, so that one request cannot carry the repeat margin by itself.
 
 **Per-query fetch cap.** `research.max_pages_per_query` is null on purpose until the fetch-cost distribution
 is known (one search: `docs/fetcher.md`, 79 URLs, about 3.5 minutes sequential); it is reported beside every

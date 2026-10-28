@@ -156,6 +156,22 @@ rather than the parameter.
 *Blocked.* The sweep is evaluated by Precision@10, which is not reported (§4.5). It cannot run
 until a valid labelling exists. The pre-registration stands; the measurement does not.
 
+### 1.7 Repeat campaigns share their research evidence — **DESIGNED** (the planner and the tags are BUILT)
+**Ruled 2026-10-28.** The query planner reads the product's generic category and the audience, never the
+objective, so requests on the same category issue the same queries (except the audience one) and are
+replayed the same recorded evidence. 30 requests give 19 distinct category situations; 11 repeat an earlier
+one (`scripts/planner_variety.py`).
+
+*Reason.* Putting the objective in the query text would make a repeat campaign see different evidence from
+the first campaign on the same product, so the Proposed arm's advantage on it would mix "it remembered" with
+"it saw new evidence". Holding the evidence constant is what isolates memory from fresh evidence; changing
+the categories to diversify it does the same more weakly.
+
+*Registered with it.* A novel-versus-repeat sub-analysis (and, because position-1 requests have no memory by
+construction, a cold / warm-novel / repeat split), with the prediction that a working memory mechanism shows
+a larger margin on repeats (`docs/evaluation-plan.md` section 8). *Stated beside it:* the planner's query
+generation is not adaptive; the 153 distinct recorded searches hold only for one declared engine set.
+
 ---
 
 ## 2. The memory mechanism
