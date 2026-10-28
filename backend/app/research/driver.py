@@ -11,13 +11,20 @@ it against the frozen snapshot, and nothing here knows which. The arms never nee
 the whole ranked list. The cap on pages considered per query is the plan's `max_pages_per_query`, a
 safety bound that never binds in normal operation.
 
-**Partial results, not a crash.** A throttled search (`SearchRateLimited`) stops the remaining
-queries: asking an engine that has just refused is the thing most likely to prolong the throttle,
-so they are reported `not_attempted`. An unavailable search is recorded and the next query goes
-on. A page that cannot be fetched, a page with too little main text, and a page scoring below the
-acceptance threshold are each counted by reason and never reach an agent. Every outcome is
-reported, because a run that saw 40 pages and one that saw 4 are different evidence (the same
-discipline as the search and page ledgers).
+**Two modes that want opposite things (owner, 2026-10-28). The driver is told which it is in, and
+there is no default.** `Mode.PRODUCTION` follows `Rules.md` C4: degrade to partial rather than
+fail. A throttled search (`SearchRateLimited`) stops the remaining queries, because asking an
+engine that has just refused is the thing most likely to prolong the throttle, and they are
+reported `not_attempted`; an unavailable search is recorded and the next query goes on. A run that
+loses a facet to a throttle yields findings from the rest and DECLARES the gap (`uncovered_facets`)
+instead of yielding nothing. `Mode.RECORD` is the evaluation snapshot's capture: a request is
+committed whole or not at all, so ANY search that is throttled, unavailable or degraded raises
+`RequestAborted` at once; fetching pages for a request that will be discarded and redone is wasted
+work, and more load on an engine that is already refusing. In both modes a page that cannot be
+fetched, a page with too little main text, and a page scoring below the acceptance threshold are
+counted by reason and never reach an agent. Every outcome is reported, because a run that saw 40
+pages and one that saw 4 are different evidence (the same discipline as the search and page
+ledgers).
 
 **Counts are the result.** `searches_issued` and `pages_fetched` are what SRR and the web part of LR
 are computed from (LR is derived as time from these counts and recorded unit costs, never observed:
@@ -32,10 +39,17 @@ source then served them live or from a snapshot.
 import asyncio
 from dataclasses import dataclass, field
 from datetime import date
+from enum import StrEnum
 from typing import Literal
 from urllib.parse import urlsplit
 
-from app.errors import ExtractionFailed, FetchError, SearchRateLimited, SearchUnavailable
+from app.errors import (
+    BrandverseError,
+    ExtractionFailed,
+    FetchError,
+    SearchRateLimited,
+    SearchUnavailable,
+)
 from app.memory.scoring import SourceScoring
 from app.research.extraction import ExtractedPage, Extractor
 from app.research.fetch import PageSource
@@ -44,6 +58,23 @@ from app.research.search import SearchProvider, SearchResult
 from app.research.source_scoring import SourceScore, score_source
 
 QueryOutcome = Literal["ok", "rate_limited", "unavailable", "not_attempted"]
+
+
+class Mode(StrEnum):
+    """What the run is FOR. There is no default: the two want opposite things on a failed search."""
+
+    PRODUCTION = "production"  # degrade to partial, declare the gap (Rules.md C4)
+    RECORD = "record"  # the evaluation snapshot's capture: whole request or nothing
+
+
+class RequestAborted(BrandverseError):
+    """RECORD mode only: a search failed or came back degraded, so the request cannot be captured
+    whole and the capture is to be discarded and redone later. Carries what was seen so far, for
+    the log; nothing in it may be committed."""
+
+    def __init__(self, message: str, *, outcome: "ResearchOutcome") -> None:
+        super().__init__(message)
+        self.outcome = outcome
 
 
 def canonical_url(url: str) -> str:
@@ -105,6 +136,14 @@ class ResearchOutcome:
         return sum(1 for q in self.queries if q.outcome != "not_attempted")
 
     @property
+    def uncovered_facets(self) -> tuple[str, ...]:
+        """The facets with no successful query: the gap a production run DECLARES. A facet whose
+        queries all failed or were not attempted contributed nothing, whatever the others did."""
+        asked = {q.query.facet for q in self.queries}
+        covered = {q.query.facet for q in self.queries if q.outcome == "ok"}
+        return tuple(sorted(asked - covered))
+
+    @property
     def partial(self) -> bool:
         """True when anything the plan asked for did not complete."""
         return any(q.outcome != "ok" for q in self.queries)
@@ -128,6 +167,7 @@ async def research(
     plan: QueryPlan,
     depth: Depth,
     *,
+    mode: Mode,
     search: SearchProvider,
     pages: PageSource,
     extractor: Extractor,
@@ -138,6 +178,8 @@ async def research(
 ) -> ResearchOutcome:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
+    if not isinstance(mode, Mode):
+        raise TypeError("mode must be a Mode (record or production), not a flag")
     outcome = ResearchOutcome(depth=depth, plan_report=plan.report())
     planned = plan.for_depth(depth)
     cap = plan.max_pages_per_query
@@ -152,11 +194,18 @@ async def research(
             response = await search.search(q.text, limit=search_limit)
         except SearchRateLimited as e:
             outcome.queries.append(QueryRun(q, "rate_limited", error=str(e)))
+            if mode is Mode.RECORD:
+                raise RequestAborted(f"query {q.rank} throttled: {e}", outcome=outcome) from e
             stopped = True  # do not ask an engine that has just refused
             continue
         except SearchUnavailable as e:
             outcome.queries.append(QueryRun(q, "unavailable", error=str(e)))
+            if mode is Mode.RECORD:
+                raise RequestAborted(f"query {q.rank} unavailable: {e}", outcome=outcome) from e
             continue
+        if mode is Mode.RECORD and response.degraded:
+            outcome.queries.append(QueryRun(q, "ok", len(response.results), degraded=True))
+            raise RequestAborted(f"query {q.rank} answered degraded", outcome=outcome)
         considered = response.results if cap is None else response.results[:cap]
         outcome.queries.append(
             QueryRun(q, "ok", len(response.results), len(considered), degraded=response.degraded)

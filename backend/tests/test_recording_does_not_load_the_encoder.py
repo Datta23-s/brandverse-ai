@@ -43,6 +43,9 @@ RECORDING_MODULES = (
     "app.research.page_cache",
     "app.research.robots",
     "app.research.rate_ramp",
+    "app.research.snapshot",  # record_request: search + pages into the evaluation store
+    "app.research.driver",  # what the snapshot runs in RECORD mode
+    "app.research.planner",
     "app.memory.scoring",
 )
 # The encoder stack. `sentence_transformers` is the entry point; torch and transformers are what it

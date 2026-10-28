@@ -1660,6 +1660,45 @@ failed gives all three arms thinner evidence, which is correct because it is con
 not inferred from a gap. **A permanently failed page is itself evidence:** a cited source returning 404 is a fact
 about that source; the outcome is frozen, not nothing. The text below is the analysis these rulings rest on.
 
+#### Status: BUILT 2026-10-28 (`backend/app/research/snapshot.py`; 17 + 6 tests; not yet run on the live web)
+
+*What exists.* A write-once disk store in an evaluation namespace (a directory with a marker file, refused if
+inside the repository or not made as a store); `SnapshotSearch` and `SnapshotPages` that replay and never reach
+the network (an unrecorded query or URL is `SnapshotMiss`); `RecordingSearch` and `RecordingPages` that
+record, with a URL or query already in the store replayed and not refetched, so requests that share evidence
+read the same bytes; `record_request`, which captures a request whole (its full ranked list, D2) or not at all:
+entries are staged on disk and committed with the request's `committed` line written last, after the data is
+fsynced, and a reader trusts only committed requests, so a crash at any point leaves nothing visible. Failures:
+a permanent outcome is frozen as an outcome and replays as the same typed error; a transient one is retried at
+most `research.snapshot_page_retries` times, the attempts recorded, then frozen as failed; the frozen-failed
+share is in the capture report and the committed line. A degraded search is never recorded. Each entry carries
+the seconds it took live (the unit costs LR is derived from). `manifest_summary()` is what the repository
+holds: counts, a hash over the index files and the date range, never a body. *Not yet done:* a capture
+against the real web, the backup copy, and the recorder's overall session loop (back off, resume, achieved
+rate) around `record_request`.
+
+*The driver has two modes and no default* (owner, 2026-10-28). `Mode.RECORD` aborts the request at once on
+any throttled, unavailable or degraded search (`RequestAborted`; no page is fetched for a request that will be
+discarded and redone). `Mode.PRODUCTION` follows `Rules.md` C4: it degrades to partial and DECLARES the gap
+(`uncovered_facets`), so a live run that loses a facet to a throttle yields copy with a declared gap and not
+nothing. A flag cannot set it wrongly: it is a required enum and anything else is a `TypeError`.
+
+*The containment guard was shown to fail before it was trusted.* `tests/test_snapshot_containment.py` holds a
+detector (`find_raw_bodies`: plain text or gzip, anywhere under a root, except the namespace) and three kinds
+of evidence. (1) The detector finds a body planted in a non-evaluation path, a gzipped one, and a deeply
+nested one, and ignores the namespace. (2) The real pipeline (record, commit, replay, the driver) is run with a
+per-test random sentinel in every page body and the workspace, the whole repository and the pytest temp area
+are scanned: bodies are in the store and nowhere else. (3) Two tests run the same check against a store
+patched to leak a plain-text copy, and a gzipped copy, of every body to a stray path, and require it to raise.
+*And the real containment test was run against the real source with a leak edited in* (a line in
+`Staging.put_body` writing the body to `stray-copy.html` beside the store): it **failed**, naming
+`.../workspace/stray-copy.html` ("raw page bodies found outside the evaluation namespace"), and passed again
+once the line was removed (checked: no mutation marker left in the file). Two defects in the first draft of the
+test were found by the detector itself: the sentinel was a literal in `tests/snapshot_support.py`, and
+other tests' planted sentinels sat in the shared pytest temp area; each test now makes its own sentinel at
+run time. The recording-path import guard also made the new modules join `RECORDING_MODULES`, and shows the
+recording path reaches no encoder.
+
 #### The analysis (found 2026-10-28)
 
 **What the design does today.** The snapshot ruled above freezes SEARCH RESULTS and replays them for every

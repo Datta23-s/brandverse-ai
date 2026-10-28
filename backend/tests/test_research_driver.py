@@ -22,11 +22,11 @@ from app.errors import (
     SearchUnavailable,
 )
 from app.memory.scoring import load_scoring
-from app.research.driver import ResearchOutcome, canonical_url, research
+from app.research.driver import Mode, RequestAborted, ResearchOutcome, canonical_url, research
 from app.research.extraction import Extractor
 from app.research.fetch import FetchedPage
 from app.research.planner import PlanRequest, QueryPlan, plan_queries
-from app.research.search import OfflineSearch, SearchResponse, SearchResult
+from app.research.search import EngineFailure, OfflineSearch, SearchResponse, SearchResult
 
 pytestmark = pytest.mark.anyio
 CFG = load_scoring()
@@ -102,10 +102,12 @@ async def run(
     depth: str = "D2",
     cap: int | None = None,
     concurrency: int = 8,
+    mode: Mode = Mode.PRODUCTION,
 ) -> ResearchOutcome:
     return await research(
         plan(cap),
         depth,  # type: ignore[arg-type]
+        mode=mode,
         search=searches,  # type: ignore[arg-type]
         pages=pages,  # type: ignore[arg-type]
         extractor=EXTRACTOR,
@@ -259,3 +261,77 @@ async def test_it_runs_unchanged_against_the_offline_provider_which_is_what_repl
     out = await run(offline, Pages({}), "D1")
     assert out.searches_issued == 4 and len(out.findings) == 1
     assert out.plan_report["generation"] == "fixed templates; not adaptive"
+
+
+# ── The two modes ────────────────────────────────────────────────────────────────────────────
+
+
+async def test_the_mode_is_required_and_must_be_a_mode_not_a_flag():
+    kwargs = dict(
+        search=Searches(URLS),
+        pages=Pages({}),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        today=TODAY,
+    )
+    with pytest.raises(TypeError):  # no default
+        await research(plan(), "D2", **kwargs)  # type: ignore[call-arg, arg-type]
+    for wrong in (True, "record", None):
+        with pytest.raises(TypeError, match="must be a Mode"):
+            await research(plan(), "D2", mode=wrong, **kwargs)  # type: ignore[arg-type]
+
+
+async def test_record_mode_aborts_the_request_at_once_when_a_search_is_throttled():
+    s = Searches(URLS, raise_on={3: SearchRateLimited("brave: too many requests")})
+    p = Pages({})
+    with pytest.raises(RequestAborted) as caught:
+        await run(s, p, mode=Mode.RECORD)
+    assert s.asked == [1, 2, 3]  # nothing asked after the refusal
+    assert p.requested == []  # and no page fetched for a request that will be discarded
+    assert caught.value.outcome.queries[-1].outcome == "rate_limited"
+
+
+async def test_record_mode_aborts_on_an_unavailable_search_too():
+    s = Searches(URLS, raise_on={2: SearchUnavailable("down")})
+    p = Pages({})
+    with pytest.raises(RequestAborted):
+        await run(s, p, mode=Mode.RECORD)
+    assert s.asked == [1, 2] and p.requested == []
+
+
+async def test_record_mode_aborts_on_a_degraded_search_because_it_is_never_recorded():
+    class Degraded(Searches):
+        async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
+            response = await super().search(query, limit=limit)
+            if self.texts[query] == 2:
+                return SearchResponse(
+                    response.results, failed_engines=(EngineFailure("yep", "HTTP error"),)
+                )
+            return response
+
+    s, p = Degraded(URLS), Pages({})
+    with pytest.raises(RequestAborted, match="degraded"):
+        await run(s, p, mode=Mode.RECORD)
+    assert s.asked == [1, 2] and p.requested == []
+
+
+async def test_record_mode_on_a_clean_request_returns_the_whole_outcome():
+    out = await run(Searches(URLS), Pages({}), mode=Mode.RECORD)
+    assert not out.partial and out.searches_issued == 8 and out.pages_fetched == 16
+
+
+async def test_production_mode_degrades_to_partial_and_declares_the_gap():
+    # rank 3 is the reference-facts primary query; the throttle takes that facet and the next
+    s = Searches(URLS, raise_on={3: SearchRateLimited("too many requests")})
+    out = await run(s, Pages({}), mode=Mode.PRODUCTION)
+    assert out.partial and len(out.findings) == 4  # not nothing: facets 1 and 2 still produced
+    assert out.uncovered_facets == ("reference_facts", "sector_rules")  # the declared gap
+    clean = await run(Searches(URLS), Pages({}), mode=Mode.PRODUCTION)
+    assert clean.uncovered_facets == ()
+
+
+async def test_production_mode_carries_on_past_an_unavailable_search_and_covers_the_facet_later():
+    # facet 2's primary (rank 2) is down but its second query (rank 6) answers: the facet is covered
+    s = Searches(URLS, raise_on={2: SearchUnavailable("down")})
+    out = await run(s, Pages({}), mode=Mode.PRODUCTION)
+    assert out.partial and out.uncovered_facets == ()
