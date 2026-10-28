@@ -1582,6 +1582,20 @@ whether it carries the repeat margin by itself.
 is known (one search: `docs/fetcher.md`, 79 URLs, about 3.5 minutes sequential); it is reported beside every
 result with `queries_per_facet` and the template version.
 
+*Second run: STOPPED, not finished (2026-10-28, `evaluation/search_rate/hold-20261028T064809Z.jsonl`).* The
+run-to-completion hold was killed by Claude Code's memory-pressure reaper after **45 searches over 91 minutes**
+(06:48:12 to 08:19:15 UTC; gaps 123 to 125 s, no late ask; no summary line, so the outcome is neither `held`
+nor `collapsed`). It certifies nothing about 4 hours or 120 searches. What the 45 searches show, as far as
+they go: **yep, yandex, yahoo and duckduckgo web answered with rows in all 45; privacywall and swisscows each
+failed once (a timeout, searches 18 and 15) and mojeek returned zero rows with no error twice (searches 2 and
+37); no engine reached 3 failures in a row, so none fell, and at least 5 of the 7 answered in every search.**
+No refusal of the "too many requests" kind appeared for any of the seven. Memory available on the worker host
+fell from about 3 GB to 1.25 GB around 08:05 to 08:10 and was 2.07 GB at the last search; the SearXNG
+container held 280 MB, and a full test-suite run, mypy and ruff were being run on the same machine during the
+run, which is a plausible contributor and is not established as the cause. The run was not restarted (the
+reaper's note forbids restarting without being asked). The owner decides whether to rerun it, and with the
+other work closed.
+
 ## 9. Required items
 
 Each item is a hard requirement, not guidance. An item that applies and is not met blocks the
