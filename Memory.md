@@ -127,6 +127,15 @@ everything gets a constraint or a test rather than a documented gap — V4 is th
 a stated limitation, because entailment needs a detector that does not exist, not a check that was
 forgotten.
 
+**Stated limitation (quantified 2026-10-28): PDF sources are not read.** PDFs are skipped; they were 15% of URLs in a measured search (12 of 79, 2026-10-28), and the regulated-sector share by extension alone was 8.3%.
+The 12 of 79 is ONE search ("FSSAI honey adulteration standards", a regulated-sector query, 22-engine
+set, `evaluation/fetch_cost/fetch-20261028T033217Z.jsonl`) and the 8.3% is a floor from nine searches
+(10 of 120 distinct regulated-group URLs ending `.pdf`; 1 of 96 general). A PDF is skipped visibly
+(`FetchUnsupported` kind `pdf`), never silently, so evidence that lives only in a PDF (a regulator's
+circular, a lab report) is absent from E, not marked weak. Support is deferred, not decided against:
+Phase 6 and an end-to-end system come first (owner, 2026-10-28), and the decision to defer now rests
+on this number. The sampled HEAD estimate (`docs/evaluation-plan.md` section 8) has still not been run.
+
 ### 3.2 Reuse decision bands
 
 | `M` | Decision | Behaviour |

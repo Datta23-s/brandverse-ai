@@ -1236,6 +1236,15 @@ gap and the owner rules again. The by-extension count alone, from the 9-search l
 request made, is a **floor**: 10 of 120 distinct regulated-group URLs (8.3%) and 1 of 96 general ones
 (1.0%). It is a lower bound from nine searches and not the answer.
 
+**Quantified limitation (2026-10-28).** PDFs are skipped; they were 15% of URLs in a measured search (12 of 79, 2026-10-28), and the regulated-sector share by extension alone was 8.3%. The 15% is one search, a regulated-sector query
+(12 of 79 distinct URLs, from `scripts/fetch_cost_probe.py`, `evaluation/fetch_cost/fetch-20261028T033217Z.jsonl`);
+the 8.3% is the by-extension floor from nine searches. Both are lower bounds on the true PDF share
+(a PDF served from a path without `.pdf` is not counted), neither is an estimate with an interval, and the
+sampled HEAD estimate below has not been run. Every evaluation report states this beside the evidence it
+uses: evidence that exists only in a PDF is absent from E, not marked weak. **PDF support is deferred, not
+built** (owner, 2026-10-28): Phase 6 and an end-to-end system come first, and the deferral now rests on a
+measured number.
+
 **Ruled 2026-10-27 (owner): 50 HEAD requests, all on the regulated group, none on the general one.**
 The general group's free floor (1 of 96 by extension alone) already answers it and needs no request;
 the open question is only whether regulated PDFs are a real share, and 8.3% from nine searches
