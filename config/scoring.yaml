@@ -78,6 +78,9 @@ research:
   fetch_max_bytes: 2000000                             # 2 MB
   fetch_max_redirects: 5
   fetch_user_agent: "BrandverseResearch/0.1 (academic research project)"
+  # Per-host politeness (fetch.py): at least this long between two requests started to the same
+  # host, whatever they are for. Different hosts do not wait for each other. DEFAULT, NOT TUNED.
+  fetch_host_delay_s: 1.0
   # robots.txt is honoured (backend/app/research/fetch.py, robots.py): one fetch per origin, kept this
   # long (RFC 9309 allows up to a day), and only the first robots_max_bytes of it read (the RFC asks
   # for at least 500 KiB). The agent token is the User-Agent's first word.

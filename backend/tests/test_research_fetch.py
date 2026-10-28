@@ -86,17 +86,44 @@ class Clock:
         return self.now
 
 
+class Mono:
+    """A monotonic clock whose sleep just advances it, so politeness waits cost no real time and
+    can be read back: `slept` is every wait the fetcher asked for."""
+
+    def __init__(self) -> None:
+        self.now, self.slept = 1000.0, []
+
+    def __call__(self) -> float:
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
 def fetcher(
     handler: Callable[[httpx.Request], httpx.Response] = lambda _: html_response(),
     *,
     robots: Callable[[httpx.Request], httpx.Response] | None = None,
     clock: Callable[[], float] | None = None,
+    mono: Mono | None = None,
     **cfg: object,
 ) -> tuple[PageFetcher, Web]:
     web = Web(handler, robots)
     client = httpx.AsyncClient(transport=httpx.MockTransport(web))
     config: Research = CONFIG.model_copy(update=cfg)
-    return PageFetcher(client, config, resolver=resolver, clock=clock or Clock()), web
+    mono = mono or Mono()
+    return (
+        PageFetcher(
+            client,
+            config,
+            resolver=resolver,
+            clock=clock or Clock(),
+            monotonic=mono,
+            sleep=mono.sleep,
+        ),
+        web,
+    )
 
 
 # ── A page ───────────────────────────────────────────────────────────────────────────────────
@@ -718,3 +745,62 @@ async def test_head_redirects_are_followed_by_hand_under_the_address_policy() ->
     with pytest.raises(FetchRefused) as raised:
         await f.content_type_of("https://shop.example.test/old")
     assert raised.value.kind == "address" and web.hosts == ["shop.example.test"]
+
+
+# ── Per-host politeness ──────────────────────────────────────────────────────────────────────
+
+
+async def test_two_requests_to_one_host_are_spaced_by_the_configured_delay() -> None:
+    mono = Mono()
+    f, web = fetcher(mono=mono, fetch_host_delay_s=2.0)
+    await f.fetch(PAGE_URL + "-a")
+    await f.fetch(PAGE_URL + "-b")
+    # page a: robots.txt first (no wait), then the page 2 s later; page b: its page 2 s after that.
+    assert mono.slept == [2.0, 2.0]
+    assert f.waits == 2 and f.waited_s == 4.0
+    assert len(web.seen) == 2 and len(web.robots_seen) == 1
+
+
+async def test_different_hosts_do_not_wait_for_each_other() -> None:
+    mono = Mono()
+    f, _ = fetcher(mono=mono, fetch_host_delay_s=5.0)
+    await f.fetch("https://shop.example.test/a")
+    mono.slept.clear()
+    await f.fetch("https://other.example.test/a")
+    # the second host's own robots.txt and page are spaced from each other, never from the first
+    assert mono.slept == [5.0]
+
+
+async def test_a_redirect_hop_to_the_same_host_is_also_a_request_and_waits() -> None:
+    mono = Mono()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/old":
+            return httpx.Response(301, headers={"location": "/new"})
+        return html_response()
+
+    f, _ = fetcher(handler, mono=mono, fetch_host_delay_s=1.0)
+    await f.fetch("https://shop.example.test/old")
+    assert mono.slept == [1.0, 1.0]  # robots -> /old -> /new
+
+
+async def test_concurrent_fetches_of_one_host_get_consecutive_slots() -> None:
+    mono = Mono()
+    f, web = fetcher(mono=mono, fetch_host_delay_s=1.0)
+    await asyncio.gather(*(f.fetch(f"{PAGE_URL}-{i}") for i in range(4)))
+    assert len(web.seen) == 4
+    # four pages + one robots.txt = five request starts on one host, so at least four spacings of
+    # 1 s: had two callers been given the same slot, less than 4 s would have passed
+    assert sum(mono.slept) >= 4.0 and mono.now - 1000.0 >= 4.0
+
+
+async def test_a_delay_of_zero_turns_politeness_off() -> None:
+    mono = Mono()
+    f, _ = fetcher(mono=mono, fetch_host_delay_s=0.0)
+    await f.fetch(PAGE_URL + "-a")
+    await f.fetch(PAGE_URL + "-b")
+    assert mono.slept == [] and f.waits == 0
+
+
+def test_the_shipped_delay_is_a_courtesy_not_zero() -> None:
+    assert CONFIG.fetch_host_delay_s >= 1.0

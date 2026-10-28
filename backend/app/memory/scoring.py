@@ -122,6 +122,10 @@ class Research(_Strict):
     fetch_max_bytes: int = Field(ge=1)  # a longer body is refused, not truncated
     fetch_max_redirects: int = Field(ge=0)
     fetch_user_agent: str = Field(min_length=1)
+    # Politeness: the least time between two requests this fetcher starts to the SAME host (page,
+    # robots.txt and redirect hops alike). 0 turns it off. A property of how the fetcher behaves
+    # toward a server, not a planning parameter; reported like every number here.
+    fetch_host_delay_s: float = Field(ge=0)
     robots_ttl_s: int = Field(ge=1)  # how long one origin's robots.txt is kept (RFC 9309: <= 24 h)
     robots_max_bytes: int = Field(ge=1)  # only this much of a robots.txt is read (RFC: >= 500 KiB)
 

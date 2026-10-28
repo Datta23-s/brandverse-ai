@@ -48,8 +48,14 @@ counted skip, not an opaque failure or garbage text. No PDF extraction exists. A
 kind
 `not_html`; a response with no content type is kind `no_content_type`, refused rather than sniffed.
 
-Not done: per-host politeness delays and character-set sniffing from `<meta>` (the declared
-charset, else UTF-8 with replacement).
+**Per-host politeness** (`research.fetch_host_delay_s`): at least that long between two requests
+this fetcher STARTS to the same host (a page, its robots.txt and each redirect hop all count), so a
+result list with several pages on one site is spread out instead of hitting it in a burst. Hosts do
+not wait for each other, and concurrent fetches of one host queue in order of arrival. The wait is
+part of `fetch_total_timeout_s`: a long queue on one host can time out (kind `timeout`), which the
+planner avoids by capping pages per host. `waits` and `waited_s` count what politeness cost.
+Not done: `Crawl-delay` from robots.txt (the configured delay applies whatever it says) and
+character-set sniffing from `<meta>` (the declared charset, else UTF-8 with replacement).
 
 `first_party` on the page is unpopulated (None) until Phase 6 supplies a brand domain; nothing reads
 it (V6, docs/evaluation-plan.md).
@@ -133,8 +139,14 @@ class PageFetcher:
         *,
         resolver: Resolver = system_resolver,
         clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._client, self._cfg, self._resolver, self._clock = client, cfg, resolver, clock
+        self._monotonic, self._sleep = monotonic, sleep
+        self._next_start: dict[str, float] = {}  # host -> earliest next request start (monotonic)
+        self.waits = 0  # requests that had to wait for their host's turn
+        self.waited_s = 0.0  # the total time they waited
         self._agent = agent_token(cfg.fetch_user_agent)
         self._robots: dict[str, tuple[RobotsRules, float]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -207,6 +219,7 @@ class PageFetcher:
             await self._check(current)
             if check_robots:
                 await self._require_robots_permit(current)
+            await self._wait_for_turn(current)
             try:
                 async with self._client.stream(
                     method,
@@ -230,6 +243,21 @@ class PageFetcher:
         raise redirect_limit_error(
             f"more than {self._cfg.fetch_max_redirects} redirects from {start}", kind="redirects"
         )
+
+    async def _wait_for_turn(self, url: str) -> None:
+        """Reserve this request's start slot on its host, then wait for it. The slot is taken before
+        any await, so concurrent callers get consecutive slots rather than all the same one."""
+        delay = self._cfg.fetch_host_delay_s
+        if delay <= 0:
+            return
+        host = (urlsplit(url).hostname or "").lower()
+        now = self._monotonic()
+        slot = max(now, self._next_start.get(host, now))
+        self._next_start[host] = slot + delay
+        if slot > now:
+            self.waits += 1
+            self.waited_s += slot - now
+            await self._sleep(slot - now)
 
     async def _check(self, url: str) -> None:
         parts = urlsplit(url)

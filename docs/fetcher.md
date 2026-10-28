@@ -35,8 +35,8 @@ Per the RFC: a 4xx robots.txt means "none, everything allowed"; a **server error
 unreachable server is not permission** (`FetchFailed`, `robots_unavailable`, not cached, so the next
 page retries); a robots.txt that redirects more than the limit counts as unavailable. robots.txt is
 fetched under the same address policy as pages. Checked against Google's real file: `/search` is
-refused without being requested, `/about/` is fetched. Not done: `Crawl-delay` and per-host request
-spacing.
+refused without being requested, `/about/` is fetched. Not done: `Crawl-delay` (per-host spacing is
+done, below).
 
 ## PDFs: skipped on purpose, and measured (owner, 2026-10-26)
 
@@ -95,11 +95,44 @@ Thirteen cases, real DNS and TLS, then again through the cache against the local
   (a headless browser) is a different dependency and is not proposed here.
 - The mock web would not have shown that: it served the HTML it was given.
 
+## Per-host politeness (added 2026-10-28)
+
+`research.fetch_host_delay_s` (1.0 s, not tuned): at least that long between two requests the fetcher
+STARTS to the same host, whatever they are for (a page, its robots.txt, each redirect hop). Hosts do not
+wait for each other; concurrent fetches of one host take consecutive slots. It is a property of how the
+fetcher treats a server (the same obligation as honouring robots.txt), not a planning parameter, and
+`0` turns it off. The wait is inside `fetch_total_timeout_s`, so a long queue on one host can time out;
+the planner's cap per host is what prevents that. `waits` / `waited_s` count what it cost. Tests:
+`tests/test_research_fetch.py`, "Per-host politeness" (5), on a fake monotonic clock.
+
+## Fetch cost of one real search (measured 2026-10-28)
+
+`scripts/fetch_cost_probe.py`, log `evaluation/fetch_cost/fetch-20261028T033217Z.jsonl`. Input: the 22-engine
+search for "FSSAI honey adulteration standards" (81 merged results; 79 distinct URLs by this script's
+trailing-slash rule, 61 hosts). Real network, robots.txt honoured, politeness 1 s, concurrency 8, one pass,
+pages read and dropped.
+
+| | |
+|---|---|
+| Outcomes | 67 fetched, 12 PDFs skipped unrequested (15%), 0 robots refusals, 0 failures |
+| robots.txt fetched | 62 (one per origin) |
+| Wall clock at concurrency 8 | 23.8 s |
+| Sequential estimate | 167 s (sum of per-URL times) plus 41 s of politeness waits = about 3.5 min |
+| Per URL | median 1.9 s, p90 4.1 s, slowest 7.5 s |
+| Largest host | fssai.gov.in, 11 pages: at least 11 s of politeness on that host alone |
+| Median fetched body | 217,201 characters |
+
+So the "about 26 minutes sequential" worked out earlier was the timeout ceiling (77 x 20 s), not the
+cost: the cost of this search is minutes sequentially, tens of seconds concurrently. One search, one
+query, one day: it is the number to set the planner's cap against, not a distribution. Extraction
+(trafilatura, CPU) and the memory the pages occupy are not in it. The PDF share here (12 of 79) is
+higher than the 8.3% regulated floor measured earlier from extensions alone.
+
 ## Not done, and why
 
-- **`Crawl-delay` and per-host request spacing**: robots.txt is honoured, its crawl-delay is not.
+- **`Crawl-delay`**: robots.txt is honoured, its crawl-delay is not; the configured per-host delay applies whatever a file says.
 - **PDFs** are unsupported (regulators publish circulars as PDFs; a search for FSSAI labelling returned
   one as its second result in the first real probe); skipped visibly, share to be measured, above.
 - **Charset sniffing** from `<meta>`: the declared charset is used, else UTF-8 with replacement.
-- **Concurrency and per-host politeness**: one page per call; the planner decides how many at once.
+- **Concurrency and the cap on pages fetched**: one page per call; the planner decides how many at once and how many results to fetch (owner, 2026-10-28: the cap belongs to the planner, not here).
 - **JavaScript-rendered pages**: above.
