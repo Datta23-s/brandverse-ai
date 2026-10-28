@@ -43,6 +43,33 @@ yahoo, privacywall, gmx, mojeek, bing, avalw; failed duckduckgo (CAPTCHA), start
 qwant, dogpile, searchmysite (access denied), tusksearch (HTTP error), seznam (timeout); answered nothing
 without an error crowdview, mwmbl, wiby, wikipedia. `research.declared_engines` is still null.
 
+**Burst, 2026-10-28 02:55-03:09 UTC** (`evaluation/search_rate/engines-burst-20261028T025520Z.jsonl`; 8 searches at
+2-minute gaps, run one minute after the single search above). Per-engine, searches answered with rows out
+of 8: yep 8, yandex 8, yahoo 8, privacywall 8, duckduckgo web 8, swisscows 8, mojeek 8, bing 7, duckduckgo
+(plain) 7, gmx 5, avalw 3, seznam 1; answered but thin (0-9 rows) mwmbl 7 of 8 with 1-9 rows, wiby 3 of 8
+with 1 row. Failed every search: brave, google, qwant, dogpile, searchmysite, startpage, tusksearch. Rows per
+search (engine attributions, not unique URLs; the log did not store URLs): 98-115.
+
+**Read the failure counts with SearXNG's own suspension in mind.** After an engine error SearXNG stops
+querying that engine for a time (`search.suspended_times` in the image's settings: 180 s for access denied
+and for too many requests, 3600 s for CAPTCHA) and reports it as `Suspended: <reason>`. At 2-minute gaps a
+failed engine is therefore asked again only every other search: brave was REFUSED (fresh) at searches 0, 2, 4,
+6 and merely suspended at 1, 3, 5, 7. So brave's eight failures are four refusals, and google, qwant,
+dogpile and searchmysite (access denied from the first search) are one refusal each per 180 s, not eight
+independent ones. The earlier rate logs were at gaps of 4 minutes and more (above 180 s), and the only
+`Suspended` in them is the first search of the 2026-10-26 15:16 run.
+
+**Brave's budget.** Brave answered the single search at 02:54 (24 rows) after about 8.5 hours of silence and
+refused every fresh request after it (02:55, 02:59, 03:03, 03:07). One answer then refusal at a 1-minute and
+then 4-minute spacing is what a count-like limit predicts; it is one observation.
+
+**Backend-grouping check (inference, not a backend map).** In the one search swisscows' 11 URLs were all in
+brave's 23, and yahoo's 7 were all in duckduckgo web's 10. If swisscows were the same throttled upstream as
+brave, it should fail when brave fails; it answered all 8 searches while brave was refused four times and
+suspended four. So the containment seen in one search does not carry over to throttling. yahoo and
+duckduckgo web never failed, so the burst cannot corroborate or refute that pair. Engines answering: 12 of
+the 22 in at least one search; distinct backends: not established by this evidence.
+
 **`json` must be in `search.formats`.** Without it the JSON API answers 403; `SearxngSearch` turns that
 into a `SearchUnavailable` whose message names `search.formats`. Confirmed against the real engine
 (`format=csv`, which is not enabled, answers 403).
