@@ -1118,6 +1118,23 @@ design must be rethought before Phase 10, not during it.
 - Notifications for a job that finished while the machine was suspended arrive only when it wakes
   (here, hours late); the job's output file has the real time.
 
+### A long search job does not share the machine with builds (rule, owner, 2026-10-28)
+
+**The rule.** While a multi-hour search job is running (a rate probe, the recording sessions of Phase 10),
+nothing else heavy runs on the worker host: **no test suite, no mypy, no ruff, no build, no encoder or other
+model load, and the browsers are closed.** Documentation edits and `git` are fine. A change that needs
+checking waits until the job ends or is made while no job is running. The recording sessions are where this
+matters most: losing four hours there costs more than it did on 2026-10-28.
+
+**Why.** The reaper has now stopped a long job twice, and both times the machine had been running builds
+beside it. On 2026-10-26 the rate probe died near 22:40 local after test suites had been run in the preceding
+hours (above). On 2026-10-28 the seven-engine hold was stopped at 08:19 UTC after 45 searches and 91
+minutes, with available memory down from about 3 GB to 1.25 GB around 08:05 to 08:10 while a full test
+suite, mypy and ruff were being run; the SearXNG container held 280 MB. **The cause is not established**
+(Windows logged no exhaustion event in the first case, and the second has no per-process record), so this is
+a precaution that costs little, not a finding about what used the memory. It is in addition to, not instead
+of, the plug and the power setting below: a job needs AC power and a quiet machine.
+
 ### Redis free tier — checked, and why Redis runs locally
 
 Upstash's free plan (upstash.com/pricing/redis, checked 2026-10-14): **250 MB data, 500K commands

@@ -1592,9 +1592,15 @@ failed once (a timeout, searches 18 and 15) and mojeek returned zero rows with n
 No refusal of the "too many requests" kind appeared for any of the seven. Memory available on the worker host
 fell from about 3 GB to 1.25 GB around 08:05 to 08:10 and was 2.07 GB at the last search; the SearXNG
 container held 280 MB, and a full test-suite run, mypy and ruff were being run on the same machine during the
-run, which is a plausible contributor and is not established as the cause. The run was not restarted (the
-reaper's note forbids restarting without being asked). The owner decides whether to rerun it, and with the
-other work closed.
+run, which is a plausible contributor and is not established as the cause. **Not rerun (owner, 2026-10-28):** the 45 searches produced zero rate refusals for any of the seven; the
+three failures were two timeouts and a silent empty (service faults, not throttles); four more hours would
+mostly re-confirm that, and the recording run is a better measurement because it is the real workload and
+produces the artifact: 153 distinct searches at 2-minute gaps is about 5 hours, the adaptive recorder backs
+off, resumes and logs its achieved rate, so the first recording session measures the sustainable rate while
+doing real work. **What the 45 searches establish and do not:** these seven sustained 2-minute gaps for 91
+minutes with no rate refusal. **Nothing is established about 4 hours or 120 searches.** The run was killed by
+memory pressure on the host, not by any engine (rule on shared use of the machine: `Architecture.md` section
+11).
 
 ## 9. Required items
 
