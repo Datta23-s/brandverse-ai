@@ -403,3 +403,65 @@ async def test_a_search_reused_from_another_request_counts_in_the_wider_span_onl
     assert report.tally.searches_reused == 8 and report.tally.searches_new == 0
     assert report.span_s is None  # nothing was captured FOR this request
     assert report.span_all_s == 0.0  # eight answers from one instant
+
+
+# ── The unit costs exclude waiting (found by the first live capture) ─────────────────────────
+
+
+async def test_a_searchs_recorded_seconds_exclude_the_pacing_wait_before_it(tmp_path):
+    import asyncio
+
+    class SlowPace:
+        async def wait(self) -> None:
+            await asyncio.sleep(0.3)  # the gap between live searches
+
+        def clean(self) -> None: ...
+
+        def refused(self) -> None: ...
+
+    store, plan = new_store(tmp_path), plan_for()
+    await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls_for(plan)),
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=no_sleep,
+        pace=SlowPace(),
+    )
+    seconds = [e["elapsed_s"] for e in store._searches.values()]
+    assert (
+        len(seconds) == 8 and max(seconds) < 0.15
+    )  # the answer took about nothing; the gap was 0.3
+
+
+async def test_a_pages_recorded_seconds_exclude_the_retry_backoff(tmp_path):
+    import asyncio
+
+    async def real_sleep(_seconds: float) -> None:
+        await asyncio.sleep(0.3)
+
+    store, plan = new_store(tmp_path), plan_for()
+    urls = urls_for(plan, per_query=1)
+    flaky = urls[1][0]
+    pages = LivePages(failing={flaky: [FetchFailed("503", status=503, kind="http_status")]})
+    await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls),
+        pages=pages,
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=real_sleep,
+    )
+    entry = store.page_entry("r1-0.example/p")
+    assert entry["attempts"] == 2 and entry["elapsed_s"] < 0.15  # two quick attempts, 0.3 s backoff

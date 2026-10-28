@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, Protocol
 
 from app.errors import (
     BrandverseError,
@@ -362,9 +362,24 @@ class CaptureTally:
     page_seconds: list[float] = field(default_factory=list)
 
 
+class Pace(Protocol):
+    """How fast live searches may be asked. `wait` is called BEFORE a live search and is not part of
+    its cost; `clean` and `refused` report how it went, so the gap can adapt."""
+
+    async def wait(self) -> None: ...
+
+    def clean(self) -> None: ...
+
+    def refused(self) -> None: ...
+
+
 class RecordingSearch:
     """Searches live (or replays an earlier request's identical query) and stages the answer. A
-    degraded answer is never staged; the driver aborts the request in RECORD mode."""
+    degraded answer is never staged; the driver aborts the request in RECORD mode.
+
+    The pacing wait happens before the timer starts: the `elapsed_s` stored with an answer is what
+    the search itself took, which is the unit cost the derived web time of LR is computed from. (The
+    first live capture found the wait inside the timer, recording about 120 s per search.)"""
 
     def __init__(
         self,
@@ -373,9 +388,11 @@ class RecordingSearch:
         staging: Staging,
         declared: Iterable[str] | None,
         tally: CaptureTally,
+        pace: Pace | None = None,
     ) -> None:
         self._inner, self._store, self._staging, self._tally = inner, store, staging, tally
         self._declared = declare(list(declared) if declared else None)
+        self._pace = pace
 
     async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
         key = cache_key(query, self._declared)
@@ -388,22 +405,32 @@ class RecordingSearch:
             else:  # staged: captured by an earlier attempt at this request in this session
                 self._tally.searches_carried += 1
             return _response(known, limit, self._declared)
+        if self._pace is not None:
+            await self._pace.wait()
         began = time.monotonic()
         try:
             response = await self._inner.search(query, limit=limit)
         except SearchRateLimited:
             self._tally.searches_throttled += 1
+            if self._pace is not None:
+                self._pace.refused()
             raise
         except SearchUnavailable:
             self._tally.searches_unavailable += 1
+            if self._pace is not None:
+                self._pace.refused()
             raise
         elapsed = round(time.monotonic() - began, 3)
         if response.degraded:
+            if self._pace is not None:
+                self._pace.refused()
             self._tally.searches_degraded += 1
             for failure in response.failed_engines:
                 causes = self._tally.degraded_causes
                 causes[failure.engine] = causes.get(failure.engine, 0) + 1
             return response  # not staged
+        if self._pace is not None:
+            self._pace.clean()
         self._tally.searches_new += 1
         self._tally.search_seconds.append(elapsed)
         self._staging.searches[key] = {
@@ -462,20 +489,23 @@ class RecordingPages:
                 if stored is not None
                 else self._staged_page(known, clean)
             )
-        began = time.monotonic()
         attempts = 0
+        spent = 0.0  # seconds inside the fetcher; the retry backoff is not a cost of the page
         while True:
             attempts += 1
+            began = time.monotonic()
             try:
                 page = await self._inner.fetch(clean)
             except FetchError as e:
+                spent += time.monotonic() - began
                 if is_transient(e) and attempts <= self._retries:
                     self._tally.retries_used += 1
                     await self._sleep(self._backoff * attempts)
                     continue
-                self._freeze_failure(canon, clean, e, attempts, began)
+                self._freeze_failure(canon, clean, e, attempts, spent)
                 raise
-            self._freeze_page(canon, clean, page, attempts, began)
+            spent += time.monotonic() - began
+            self._freeze_page(canon, clean, page, attempts, spent)
             return page
 
     def _staged_page(self, entry: dict[str, Any], url: str) -> FetchedPage:
@@ -491,9 +521,9 @@ class RecordingPages:
         )
 
     def _freeze_page(
-        self, canon: str, url: str, page: FetchedPage, attempts: int, began: float
+        self, canon: str, url: str, page: FetchedPage, attempts: int, spent: float
     ) -> None:
-        elapsed = round(time.monotonic() - began, 3)
+        elapsed = round(spent, 3)
         self._tally.pages_new_ok += 1
         self._tally.page_seconds.append(elapsed)
         self._staging.pages[canon] = {
@@ -512,9 +542,9 @@ class RecordingPages:
         }
 
     def _freeze_failure(
-        self, canon: str, url: str, error: FetchError, attempts: int, began: float
+        self, canon: str, url: str, error: FetchError, attempts: int, spent: float
     ) -> None:
-        elapsed = round(time.monotonic() - began, 3)
+        elapsed = round(spent, 3)
         transient = is_transient(error)
         if transient:
             self._tally.frozen_failed_transient += 1
@@ -574,6 +604,7 @@ async def record_request(
     concurrency: int = 8,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     carry: Mapping[str, dict[str, Any]] | None = None,
+    pace: Pace | None = None,
 ) -> CaptureReport:
     """Capture one request whole (the full ranked list, D2) or not at all.
 
@@ -584,7 +615,7 @@ async def record_request(
     staging = store.begin(request_id)
     staging.searches.update({k: dict(v) for k, v in (carry or {}).items()})
     tally = CaptureTally()
-    recording_search = RecordingSearch(search, store, staging, declared, tally)
+    recording_search = RecordingSearch(search, store, staging, declared, tally, pace)
     recording_pages = RecordingPages(pages, store, staging, tally, retries=retries, sleep=sleep)
     try:
         outcome = await research(

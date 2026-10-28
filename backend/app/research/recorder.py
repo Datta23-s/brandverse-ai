@@ -4,7 +4,8 @@ test set's order, into the evaluation snapshot.
 
 **Adaptive, not scheduled.** No constant described the engines that throttled this IP, and the ones
 that sustained 2-minute gaps were observed for 91 minutes, so the recorder does not trust a rate.
-It asks at a *gap* between live searches (`PacedSearch`), stretches that gap when a request is
+It asks at a *gap* between live searches (`Pacer`, which the capture waits on before each live
+search and outside its timer), stretches that gap when a request is
 refused (multiplicative increase of the gap), and shortens it again after a run of clean searches
 (additive decrease), never below the starting gap: ordinary congestion control, which needs no model
 of why the limit moves, only the signal that it did.
@@ -55,7 +56,7 @@ from app.memory.scoring import Research, SourceScoring
 from app.research.extraction import Extractor
 from app.research.fetch import PageSource
 from app.research.planner import QueryPlan
-from app.research.search import SearchProvider, SearchResponse
+from app.research.search import SearchProvider
 from app.research.snapshot import CaptureReport, CaptureTally, SnapshotStore, record_request
 
 Sleep = Callable[[float], Awaitable[None]]
@@ -124,27 +125,6 @@ class Pacer:
         if self._clean_run >= self._cfg.clean_run_to_speed_up:
             self._clean_run = 0
             self.gap_s = max(self._cfg.search_gap_s, self.gap_s - self._cfg.gap_decrease_step_s)
-
-
-class PacedSearch:
-    """A search provider that waits its turn before every live call. Only calls that reach it are
-    live: an answer already in the store never does, and costs no wait."""
-
-    def __init__(self, inner: SearchProvider, pacer: Pacer) -> None:
-        self._inner, self._pacer = inner, pacer
-
-    async def search(self, query: str, *, limit: int = 10) -> SearchResponse:
-        await self._pacer.wait()
-        try:
-            response = await self._inner.search(query, limit=limit)
-        except Exception:
-            self._pacer.refused()
-            raise
-        if response.degraded:
-            self._pacer.refused()
-        else:
-            self._pacer.clean()
-        return response
 
 
 @dataclass(slots=True)
@@ -280,7 +260,6 @@ async def record_session(
     )
     began = clock()
     pacer = Pacer(cfg, clock, sleep)
-    paced = PacedSearch(search, pacer)
     consecutive_refusals = 0
     pending = store.pending(plans)
     carry: dict[str, dict[str, dict[str, Any]]] = {}  # request -> clean searches, THIS session only
@@ -311,7 +290,8 @@ async def record_session(
             request_id,
             plans[request_id],
             store=store,
-            search=paced,
+            search=search,
+            pace=pacer,
             pages=pages,
             extractor=extractor,
             source_cfg=source_cfg,

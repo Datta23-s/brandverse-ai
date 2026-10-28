@@ -1735,6 +1735,54 @@ other tests' planted sentinels sat in the shared pytest temp area; each test now
 run time. The recording-path import guard also made the new modules join `RECORDING_MODULES`, and shows the
 recording path reaches no encoder.
 
+#### First live capture (2026-10-28; R01, into a disposable trial store; `evaluation/snapshot_trial/capture-20261028T111403Z.json`)
+
+The snapshot had never touched the real web, so one request was captured end to end: 8 queries on the four
+declared engines, real fetches (robots.txt honoured, politeness on, the real extractor), real freeze, then a
+replay compared with what the live sources returned. Every body and every search answer was hashed as the live
+source returned it, not as the store holds it, so the check is not circular.
+
+**Replay: byte for byte.** 8 of 8 search answers, 252 of 252 page bodies (SHA-256) and 67 of 67 frozen failures
+(same typed error, kind and status) matched. The committed line and the replayed driver agree with the capture.
+*What "byte for byte" means:* the store freezes the page as the fetcher DECODED it (UTF-8), not the wire bytes;
+2 of 252 bodies (0.8%) contain a replacement character from a lossy decode, so the original bytes of those
+two cannot be recovered from the snapshot. The comparison is exact against the decoded text every arm reads.
+
+**What the real web did that the mocks did not:**
+- **Pages per request: 319, not 616.** The driver asks for 50 results a query (the provider's maximum), so 8
+  queries gave at most 400 URLs and 319 distinct ones (209 hosts; flipkart.com 13, amazon.in 10). My earlier
+  figure of 77 URLs a query came from a search asked for 50 plus merging, and was never the number a request
+  sees. **Storage is therefore smaller:** the 252 fetched pages are 19.1 MB gzipped (106.5 MB raw, 5.6x, 76 KB a
+  page, median raw body 265 KB, largest 1.86 MB), about 19 MB a request; the whole recording is about 0.4 GB
+  gzipped, not the 0.6 to 0.7 GB estimated above.
+- **21% of the request's pages froze as failed** (67 of 319), against none in the 79-URL search measured earlier
+  (a regulator-heavy query): 21 HTTP 403 (15 hosts that refuse an identified research client), 15 robots
+  refusals, 11 too large (over the 2 MB cap: refused, not cut), 8 robots.txt unreachable (7 with no status, 1
+  with 503), 5 HTTP 503, 3 PDFs (0.9%, not the 15% of the regulated query), 2 HTTP 404, 1 HTTP 410, 1 DNS
+  failure. This is the frozen-as-failed share the owner asked to see per request; it is constant across arms and
+  makes every arm's evidence thinner by the same fifth.
+- **Retries rarely helped.** 27 retries were spent on 14 transient failures; 1 cleared, 13 stayed failed after
+  the bound (8 of them robots.txt that would not load, 5 server errors). The bound did its job; the retries mostly
+  bought nothing.
+- **Only half the URLs became evidence.** Replayed through the driver: 252 pages served, 44 refused by the
+  extractor (too little main text), 48 discarded below the acceptance threshold, **160 accepted findings of 319
+  URLs (50%)**.
+- **A search takes about 5 s, not milliseconds**: the engine waits out its per-engine timeout (5 s) for the
+  engines that never answer (avalw, seznam, tusksearch and others among the 22 enabled), so every answer takes
+  the full 5 s whatever the four declared ones do. Harmless at 2-minute gaps, and a number the derived web time
+  must use (median 5.0 s, max 5.2 s).
+- **8 of 8 searches clean, none degraded**: the first live observation of the degraded-search rate, 0 of 8. At
+  n = 8 the 95% upper bound is about 31%; it is a datum, not a measurement. Capture span 839 s (7 gaps of 120 s),
+  one attempt, no refusal. The whole request took 1,010 s: 840 s of gaps, about 40 s of searching, about 165 s
+  fetching 319 pages at concurrency 8 (median page 2.0 s, 90th percentile 6.8 s, slowest 62.9 s including retries).
+
+**A defect only the real run could show, fixed the same day.** The unit costs stored with each search were about
+120 s each, not 5 s: the pacing wait sat inside the timed section, so the seconds-per-search that LR's derived
+web time is computed from were the gap, not the search. The wait is now outside the timer (`Pace` hooks on
+`RecordingSearch`), and a page's recorded seconds now exclude the retry backoff too. Two regression tests; the
+search one was shown to fail against the old ordering (it recorded 0.313 s where 0.15 is the bound). The trial
+store's own `elapsed_s` values are the old, wrong ones; it is disposable and was not used for any figure.
+
 #### The analysis (found 2026-10-28)
 
 **What the design does today.** The snapshot ruled above freezes SEARCH RESULTS and replays them for every
@@ -1754,7 +1802,7 @@ searches, of which about 85% fetched in the measured search (about 10,300 pages,
 dedupe). Size, from the 67 fetched pages of the one measured search and a re-fetched sample of 20: raw body
 mean 295 KB (median about 200 KB, largest 1.7 million characters); **gzip 5.2x, about 57 KB a page**; the
 extracted text, which is all an agent sees, mean 5,400 characters (the extractor refused 4 of the 20 for
-too little main text). So **about 0.6 to 0.7 GB gzipped for the whole recording** (3.0 to 3.7 GB raw), about
+too little main text). (Superseded by the first live capture below: a request has 319 pages, not 616, and the whole recording is about 0.4 GB.) So **about 0.6 to 0.7 GB gzipped for the whole recording** (3.0 to 3.7 GB raw), about
 35 MB a request; the extracted text alone would be about 56 MB. Time: a search's pages took 24 seconds at
 concurrency 8, and a search is followed by a 2-minute gap, so the fetching fits inside the waits and adds
 about nothing; done separately it is about an hour.
