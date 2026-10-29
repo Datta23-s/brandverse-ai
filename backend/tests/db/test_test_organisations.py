@@ -6,7 +6,7 @@ roles (0010, 0017). They stay out of every evaluation read because `organisation
 and every read filters on it, even when a test organisation's id is passed in by mistake.
 """
 
-import ast
+import importlib
 import json
 from pathlib import Path
 from uuid import UUID
@@ -15,7 +15,7 @@ import psycopg
 import pytest
 from psycopg import errors
 
-from app.evaluation.approvals import EVALUATION_APPROVALS_SQL
+from app.evaluation.approvals import EVALUATION_APPROVALS_SQL, PRACTICE_READS
 from app.evaluation.prompt_versions import prompt_versions_by_arm
 from app.evaluation.run_outcomes import run_outcomes_by_arm
 from tests.db.conftest import Seed, Tx
@@ -128,28 +128,49 @@ async def test_the_same_rows_are_counted_once_the_flag_is_off(db_url: str, seed:
 
 
 def _sql_strings() -> dict[str, str]:
-    """Every module-level *_SQL string constant in app/evaluation."""
+    """Every module-level *_SQL string in app/evaluation, derived ones included (the module is
+    imported, not parsed, so `X_SQL = Y_SQL.replace(...)` is seen too)."""
     found: dict[str, str] = {}
     for path in sorted(EVALUATION_DIR.glob("*.py")):
-        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if path.name == "__init__.py":
+            continue
+        module = importlib.import_module(f"app.evaluation.{path.stem}")
+        for name, value in vars(module).items():
             if (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id.endswith("_SQL")
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
+                name.endswith("_SQL")
+                and isinstance(value, str)
+                and value.lstrip().startswith(("select", "with"))
             ):
-                found[f"{path.name}:{node.targets[0].id}"] = node.value.value
+                found[f"{path.name}:{name}"] = value
     return found
 
 
 def test_every_evaluation_read_excludes_practice_and_test_organisations() -> None:
     reads = _sql_strings()
     assert len(reads) >= 3, f"evaluation reads not found: {sorted(reads)}"
+    practice = {n for n in reads if n.split(":")[1] in PRACTICE_READS}
+    assert {n.split(":")[1] for n in practice} == PRACTICE_READS, "a declared practice read is gone"
     for name, query in reads.items():
-        assert "not o.is_practice" in query, f"{name} does not exclude practice organisations"
         assert "not o.is_test" in query, f"{name} does not exclude test organisations"
+        if name in practice:
+            continue
+        assert "not o.is_practice" in query, f"{name} does not exclude practice organisations"
+
+
+def test_the_reads_that_include_practice_organisations_are_declared_and_read_one_kind() -> None:
+    """The exemption is not a gap: a practice read says `o.is_practice`, reads exactly one of
+    calibration or tuning, never evaluation, and an evaluation read cannot be on the list."""
+    reads = _sql_strings()
+    for name, query in reads.items():
+        short = name.split(":")[1]
+        if short in PRACTICE_READS:
+            assert "and o.is_practice" in query and "not o.is_practice" not in query, name
+            assert ("a.kind = 'calibration'" in query) != ("a.kind = 'tuning'" in query), name
+            assert "'evaluation'" not in query, name
+        else:
+            assert "o.is_practice" not in query.replace("not o.is_practice", ""), (
+                f"{name} reads practice organisations but is not declared in PRACTICE_READS"
+            )
 
 
 # ── Who may set the flag ─────────────────────────────────────────────────────────────────────

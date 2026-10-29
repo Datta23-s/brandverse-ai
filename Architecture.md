@@ -719,14 +719,18 @@ owner — see the stated limitation under "Audit log" below). `campaigns.approve
 approval state; `campaigns.quality_scores` holds only the blind raters' scores and never the
 approver's decision. Calibration decisions (`docs/approval-rubric.md` §6) are rows here too, made
 in a practice organisation where the second scorer holds `approver`, and flagged
-`is_calibration`. They are never deleted (within the limits stated under "Audit log" below); the evaluation harness excludes them by that flag
+`is_calibration` (`kind = 'calibration'`; migration 0032 added the `kind` column: evaluation,
+calibration or tuning, `is_calibration` true exactly when the kind is calibration). The tuning
+organisation that measures the strong calls a run takes is a practice organisation too, and its
+approvals are `kind = 'tuning'`: reported separately and never counted in the >= 8 of 10 calibration
+figure. They are never deleted (within the limits stated under "Audit log" below); the evaluation harness excludes them by that flag
 (`backend/app/evaluation/approvals.py`), as it excludes seed memory (`Memory.md` §7.1) — never by
 the practice org's id, which changes on a reseed. **The practice organisation is a row in
 `organisations`, not a second Supabase project**, so it does not use one of the free tier's two
 active projects (§11). The practice org is itself marked by a flag,
 `organisations.is_practice` (backend-set; owners cannot update it), and a trigger rejects any
-approval in a practice org without `is_calibration = true`, so an unflagged practice row cannot
-exist. The harness additionally excludes practice orgs, so it could not leak even if the trigger
+approval in a practice org that is not calibration or tuning (and any tuning approval outside one),
+so an unmarked practice row cannot exist. The harness additionally excludes practice orgs, so it could not leak even if the trigger
 were bypassed.
 
 **Trust-deciding columns — the general rule (adopted 2026-10-17).** *Any column that decides a

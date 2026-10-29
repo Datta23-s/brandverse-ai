@@ -132,7 +132,7 @@ Do this before run 1. It takes under an hour and it is the difference between a 
 1. Generate **10 practice campaigns** on brands that appear in **neither** the evaluation set nor the tuning set, in a dedicated **practice organisation**, marked `organisations.is_practice = true`.
 2. The approver scores all 10 against this rubric.
 3. A second team member independently scores the same 10. The second scorer holds an active `approver` role **in the practice organisation only** — no role in any evaluation organisation — so the database's approver key and active-approver trigger apply to their decisions unchanged.
-   Both scorers' decisions are recorded in `approvals` exactly as in §5, with `is_calibration = true`; the database rejects an approval in a practice organisation without it.
+   Both scorers' decisions are recorded in `approvals` exactly as in §5, with `is_calibration = true` and `kind = 'calibration'`; the database rejects an approval in a practice organisation that is neither calibration nor **tuning**. Tuning approvals (the practice organisation that measures the strong calls a run takes, `evaluation-plan.md` "Measuring s") are a THIRD KIND, `kind = 'tuning'`, and are never part of this exercise: the >= 8 of 10 figure counts `kind = 'calibration'` rows only (`calibration_agreement`, `backend/app/evaluation/approvals.py`), and a tuning row handed to it is refused, not skipped.
 4. Compare. Any disagreement means the rubric is ambiguous at that point — **amend this document**, do not simply argue to agreement.
 5. Re-run steps 2–4 until the two agree on at least 8 of 10.
 6. Commit the amended rubric. Record the calibration date and the final agreement rate in `evaluation-plan.md`.

@@ -211,7 +211,8 @@ erDiagram
     boolean arm_inferred
     text arm_inference_note
     timestamptz decided_at
-    boolean is_calibration "rubric 6 practice row"
+    boolean is_calibration "rubric 6 practice row; true iff kind = calibration"
+    text kind "evaluation, calibration or tuning (0032)"
   }
 ```
 

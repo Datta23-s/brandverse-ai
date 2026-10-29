@@ -9,7 +9,12 @@ import psycopg
 import pytest
 from psycopg import errors
 
-from app.evaluation.approvals import EVALUATION_APPROVALS_SQL
+from app.evaluation.approvals import (
+    CALIBRATION_APPROVALS_SQL,
+    EVALUATION_APPROVALS_SQL,
+    TUNING_APPROVALS_SQL,
+    calibration_agreement,
+)
 from tests.db.conftest import Tx
 
 pytestmark = pytest.mark.db
@@ -619,11 +624,23 @@ def test_decisions_readable_only_by_own_org(tx: Tx) -> None:
 # ── Calibration rows (docs/approval-rubric.md §6) ────────────────────────────────────────
 
 
-def _calibration_decision(tx: Tx, scorer: str, campaign: object, org: object) -> None:
+def _calibration_decision(
+    tx: Tx, scorer: str, campaign: object, org: object, outcome: str = "approve"
+) -> None:
     tx.execute(
-        "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
-        "is_calibration) values (%s, %s, %s, 'approve', 60, true)",
-        (campaign, org, tx.seed.users[scorer]),
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "
+        "is_calibration, kind) values (%s, %s, %s, %s, 'x', 60, true, 'calibration')",
+        (campaign, org, tx.seed.users[scorer], outcome),
+    )
+
+
+def _tuning_decision(
+    tx: Tx, scorer: str, campaign: object, org: object, outcome: str = "approve"
+) -> None:
+    tx.execute(
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "
+        "is_calibration, kind) values (%s, %s, %s, %s, 'x', 60, false, 'tuning')",
+        (campaign, org, tx.seed.users[scorer], outcome),
     )
 
 
@@ -662,7 +679,7 @@ def test_unflagged_practice_approval_is_rejected(tx: Tx) -> None:
 
 def test_unflagged_practice_approval_never_reaches_evaluation_query(tx: Tx) -> None:
     # The harness excludes practice orgs itself, even with the database trigger bypassed.
-    tx.execute("alter table approvals disable trigger approvals_practice_is_calibration")
+    tx.execute("alter table approvals disable trigger approvals_practice_kind")
     _unflagged_practice_decision(tx)
     _decide(tx)
     tx.as_service_role()
@@ -762,3 +779,86 @@ def test_table_owner_deleting_an_organisation_still_removes_its_memory(tx: Tx) -
     )
     tx.execute("delete from organisations where id = %s", (org,))
     assert tx.execute("select id from memory_items where org_id = %s", (org,)) == []
+
+
+# ── Tuning approvals are a third kind, never calibration (migration 0032) ───────────────────
+
+
+def test_a_tuning_approval_is_accepted_in_a_practice_organisation(tx: Tx) -> None:
+    _tuning_decision(tx, "approver_a", tx.seed.campaign_practice, tx.seed.org_practice)
+    rows = tx.execute("select kind, is_calibration from approvals")
+    assert rows == [("tuning", False)]
+
+
+def test_a_tuning_approval_is_refused_outside_a_practice_organisation(tx: Tx) -> None:
+    with pytest.raises(errors.RaiseException, match="belong to a practice organisation"):
+        _tuning_decision(tx, "approver_a", tx.seed.campaign_a, tx.seed.org_a)
+
+
+# A BEFORE trigger runs ahead of a CHECK constraint, so a row must get past the trigger to reach
+# the constraint a test names. In a practice organisation the trigger (calibration or tuning only)
+# refuses first; the constraints are reached where the trigger allows the kind, and the trigger's
+# own refusal is tested beside them.
+_FLAG_VS_KIND = [
+    # (kind, is_calibration, organisation that lets the row reach the constraint)
+    ("tuning", True, "practice"),
+    ("calibration", False, "practice"),
+    ("evaluation", True, "ordinary"),
+]
+
+
+@pytest.mark.parametrize(("kind", "flag", "where"), _FLAG_VS_KIND)
+def test_the_kind_and_the_calibration_flag_cannot_disagree(
+    tx: Tx, kind: str, flag: bool, where: str
+) -> None:
+    campaign, org = (
+        (tx.seed.campaign_practice, tx.seed.org_practice)
+        if where == "practice"
+        else (tx.seed.campaign_a, tx.seed.org_a)
+    )
+    with pytest.raises(errors.CheckViolation, match="approvals_kind_matches_flag"):
+        tx.execute(
+            "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
+            "is_calibration, kind) values (%s, %s, %s, 'approve', 60, %s, %s)",
+            (campaign, org, tx.seed.users["approver_a"], flag, kind),
+        )
+
+
+def test_an_unknown_kind_is_refused_by_the_constraint(tx: Tx) -> None:
+    with pytest.raises(errors.CheckViolation, match="approvals_kind_check"):
+        tx.execute(
+            "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
+            "kind) values (%s, %s, %s, 'approve', 60, 'practice')",
+            (tx.seed.campaign_a, tx.seed.org_a, tx.seed.users["approver_a"]),
+        )
+
+
+@pytest.mark.parametrize("kind", ["evaluation", "practice"])
+def test_a_practice_organisation_refuses_any_kind_but_calibration_and_tuning(
+    tx: Tx, kind: str
+) -> None:
+    with pytest.raises(errors.RaiseException, match="must have kind calibration or tuning"):
+        tx.execute(
+            "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
+            "kind) values (%s, %s, %s, 'approve', 60, %s)",
+            (tx.seed.campaign_practice, tx.seed.org_practice, tx.seed.users["approver_a"], kind),
+        )
+
+
+def test_a_tuning_approval_cannot_be_counted_as_calibration(tx: Tx) -> None:
+    orgs = {"org_ids": [tx.seed.org_a, tx.seed.org_b, tx.seed.org_practice]}
+    campaign, org = tx.seed.campaign_practice, tx.seed.org_practice
+    # the two scorers agree on the calibration campaign; the tuning approvals DISAGREE with them
+    _calibration_decision(tx, "approver_a", campaign, org)
+    _calibration_decision(tx, "second_scorer", campaign, org)
+    _tuning_decision(tx, "approver_a", campaign, org, "reject")
+    _tuning_decision(tx, "second_scorer", campaign, org, "reject")
+    _decide(tx)  # and one evaluation decision
+    tx.as_service_role()
+    calibration = tx.execute(CALIBRATION_APPROVALS_SQL, orgs)
+    assert {r[4] for r in calibration} == {"calibration"} and len(calibration) == 2
+    assert calibration_agreement(calibration).agreed == 1  # the tuning rows did not change it
+    tuning = tx.execute(TUNING_APPROVALS_SQL, orgs)
+    assert {r[4] for r in tuning} == {"tuning"} and len(tuning) == 2  # reported on their own
+    evaluation = tx.execute(EVALUATION_APPROVALS_SQL, orgs)
+    assert [(r[1], r[4]) for r in evaluation] == [(tx.seed.campaign_a, "reject")]

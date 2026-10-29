@@ -95,7 +95,7 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     # Trigger functions: executable by PUBLIC (the default), harmless — a trigger function
     # cannot be called directly.
     "approvals_active_approver": (False, "migration", ALL_API),
-    "approvals_practice_is_calibration": (False, "migration", ALL_API),
+    "approvals_practice_kind": (False, "migration", ALL_API),  # 0032 (was ..._is_calibration)
     "audit_log_append_only": (False, "migration", ALL_API),
     "campaigns_active_approver": (False, "migration", ALL_API),
     "product_claims_provenance": (False, "migration", ALL_API),  # 0017
