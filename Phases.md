@@ -538,6 +538,10 @@ with an empty `channels` list although their summaries name a discovery channel 
 for a v2). A7 flagged nothing on clean copy, and on one deliberately PLANTED copy (four anti-patterns,
 written for the test) it flagged all four with exact quotes and dropped none. That is the easy case,
 one sample: it says the quote guard has real output to work on and nothing about the miss rate.
+**Ruled 2026-10-29: the approver does not see the advisory** (calibration and evaluation alike; shown in
+production); it is recorded and compared afterwards with the approver's own S2.1 findings, a comparison
+registered in `docs/evaluation-plan.md` before any approval. **Chunk E requirement:** the approval screen
+and API must not return `validation["advisory"]` to the approver's session, one setting for both modes.
 
 ---
 

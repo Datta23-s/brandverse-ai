@@ -90,6 +90,11 @@ Evaluate in order. **Stop at the first failed blocking gate** and record that ga
 
 ---
 
+**What the approver does not see (ruled 2026-10-29).** The system may attach a model-written risk
+advisory to a campaign (A7's read of the eight anti-patterns). The approver is not shown it, in
+calibration or in the evaluation, so that every arm is judged under the same conditions
+(`docs/evaluation-plan.md`, threat V3). S2.1 is applied by the approver alone, from the copy.
+
 ## 4. The decision
 
 | Outcome | When |

@@ -552,9 +552,32 @@ unmeasured**, and so is the approver's miss rate: the advisory does not measure 
 not reduce it by any known amount (it may reduce it, or may make an approver more trusting of a copy
 with no flags). `Rules.md` T5 (block the eight, not warn) **stays unmet**: a model's opinion is not the
 detector T5 asks for, and the dissertation still must not claim the system blocks anti-patterns
-(A6). Open, to be fixed before the first approval that counts: whether the approver sees the advisory
-during calibration and during the evaluation's approvals. Showing it in one and not the other would make
-the calibration agreement not transfer.
+(A6).
+
+**RULED 2026-10-29 (owner): the approver does not see A7's advisory, in calibration or in the
+evaluation, identically.** Two reasons. (1) *Symmetry between the arms.* Baseline A is a single call with
+no A7, so it has no advisory; Baseline B and Proposed have one. An approver who saw advisories on two
+arms and not the third would judge the arms under different conditions, and approval rates would differ
+for reasons unrelated to copy quality. (2) *A measurement that showing it destroys.* With the advisory
+produced and recorded but unseen, the two can be compared afterwards without entanglement.
+
+- It is still **produced, stored and reported** as built, under `validation["advisory"]`, in every run
+  that has an A7.
+- The approval screen (Phase 6 chunk E) does not render it, and the approval API does not return it to
+  the approver's session, in calibration (`docs/approval-rubric.md` §6) or in the evaluation. One
+  setting governs both, and a test must show it cannot differ between them.
+- **Registered now, before any approval exists: the advisory is analysed after the fact against the
+  approver's own findings.** For each approved or rejected campaign with an advisory, the approver's
+  `failed_gate` S2.1 decisions (anti-pattern present) are compared with A7's flags, and reported as four
+  counts and no more: flagged by A7 and caught by the approver; flagged by A7 and not caught; caught by
+  the approver and not flagged by A7; neither. The comparison is made per campaign (an advisory flag
+  matches an approver finding when both name the same anti-pattern category in the same campaign), is
+  descriptive, and carries no accuracy claim: with no ground truth beyond one approver, "not caught" is
+  a disagreement, not a verified miss. It is not tuned on and does not feed any decision about the
+  system.
+- **In production the advisory would be shown to the approver.** That is a deployment choice, not an
+  evaluation one. The evaluation withholds it to keep the arms comparable; the system does not hide it
+  from its users, and nothing in this plan should be read as saying it does.
 
 **V4 — Citation does not imply entailment (recorded 2026-10-18).** The claim gate's citation check
 confirms that a cited claim **exists, belongs to the product, is active and is verified**. It does
