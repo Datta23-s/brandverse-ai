@@ -1,0 +1,192 @@
+{
+ "summary": {
+  "ended": "dark_period_ceiling",
+  "started_utc": "2026-10-29T10:39:18.089912+00:00",
+  "elapsed_s": 15361.9,
+  "committed": [
+   "R13",
+   "R14",
+   "R15",
+   "R16",
+   "R17",
+   "R18",
+   "R19",
+   "R20",
+   "R21",
+   "R22",
+   "R23",
+   "R24",
+   "R25"
+  ],
+  "pending": [
+   "R26",
+   "R27",
+   "R28",
+   "R29",
+   "R30"
+  ],
+  "attempts": 55,
+  "aborted_attempts": 42,
+  "aborts_rate_refused": 0,
+  "aborts_fault": 42,
+  "waited_s": 2858.2,
+  "searches_live": 108,
+  "searches_clean": 66,
+  "searches_throttled": 0,
+  "searches_unavailable": 0,
+  "searches_degraded": 42,
+  "searches_rate_refused": 0,
+  "searches_degraded_not_throttled": 42,
+  "searches_reused": 38,
+  "searches_carried": 0,
+  "searches_wasted": 0,
+  "search_span_s": {
+   "max": 841.9,
+   "median": 720.2
+  },
+  "search_span_all_s": {
+   "max": 2250.8,
+   "median": 1397.8
+  },
+  "degraded_search_rate": 0.3888888888888889,
+  "degraded_causes": {
+   "yahoo": 42,
+   "yep": 42
+  },
+  "searches_recorded_with_failure": 13,
+  "searches_by_declared_answering": {
+   "3": 14,
+   "4": 52
+  },
+  "achieved_clean_per_hour": 15.466878064692564,
+  "pages_total": 4107,
+  "pages_new_ok": 1707,
+  "pages_reused": 1923,
+  "pages_frozen_failed": 477,
+  "pages_fetched": 2184,
+  "frozen_failed_share_of_fetched": 0.2184065934065934,
+  "retries_used": 446,
+  "final_gap_s": 120.0,
+  "config": {
+   "search_gap_s": 120.0,
+   "gap_ceiling_s": 900.0,
+   "gap_increase_factor": 2.0,
+   "gap_decrease_step_s": 15.0,
+   "clean_run_to_speed_up": 5,
+   "backoff_base_s": 60.0,
+   "backoff_max_s": 1800.0,
+   "backoff_jitter": 0.25,
+   "dark_ceiling_s": 5400.0,
+   "wall_limit_s": 36000.0,
+   "snapshot_page_retries": 2
+  }
+ },
+ "manifest": {
+  "search_span_s": {
+   "max": 841.9,
+   "median": 720.5
+  },
+  "search_span_all_s": {
+   "max": 4399.5,
+   "median": 1587.8
+  },
+  "requests": 25,
+  "searches": 129,
+  "pages": 4352,
+  "pages_ok": 3387,
+  "pages_frozen_failed": 965,
+  "engine_coverage": {
+   "searches": 129,
+   "by_declared_answering": {
+    "4": 114,
+    "3": 15
+   },
+   "per_engine_searches": {
+    "duckduckgo web": 129,
+    "yahoo": 126,
+    "yandex": 126,
+    "yep": 120
+   },
+   "searches_below_full_by_request": {
+    "R01": 1,
+    "R13": 2,
+    "R16": 1,
+    "R19": 3,
+    "R24": 1,
+    "R25": 7
+   }
+  },
+  "sha256": "e62a7e4d1392c49189f3ecbf8d41a66aa1d566e1697603609c554b1e281fa619",
+  "first_committed_utc": "2026-10-28T15:56:25.114385+00:00",
+  "last_committed_utc": "2026-10-29T13:32:05.478866+00:00"
+ },
+ "backup": {
+  "ok": false,
+  "verified": 3376,
+  "problems": [
+   "backup-waivers.jsonl: differs from the backup's copy (write-once file)",
+   "backup-waivers.jsonl: hash differs in the backup"
+  ]
+ },
+ "verification": {
+  "byte_for_byte": true,
+  "problems": [],
+  "searches_compared": 104,
+  "pages_compared": 1707,
+  "frozen_failures_compared": 477,
+  "live_searches_seconds": {
+   "n": 108,
+   "median": 3.39,
+   "max": 5.19
+  },
+  "live_pages": {
+   "ok": 1707,
+   "failed": 477,
+   "failures_by_kind": {
+    "FetchFailed/http_status/403": 174,
+    "FetchRefused/robots/None": 135,
+    "FetchFailed/timeout/None": 42,
+    "FetchFailed/robots_unavailable/None": 39,
+    "FetchFailed/http_status/404": 29,
+    "FetchUnsupported/pdf/None": 24,
+    "FetchFailed/network/None": 8,
+    "FetchFailed/dns/None": 4,
+    "FetchUnsupported/too_large/None": 4,
+    "FetchFailed/http_status/429": 4,
+    "FetchFailed/http_status/410": 3,
+    "FetchFailed/http_status/503": 3,
+    "FetchFailed/robots_unavailable/503": 2,
+    "FetchFailed/http_status/406": 2,
+    "FetchFailed/http_status/401": 1,
+    "FetchUnsupported/not_html/None": 1,
+    "FetchFailed/http_status/409": 1,
+    "FetchFailed/robots_unavailable/525": 1
+   },
+   "bytes_median": 371144,
+   "bytes_max": 4707282,
+   "with_redirects": 51,
+   "final_url_differs_from_requested": 49,
+   "content_types": {
+    "text/html": 1707
+   }
+  },
+  "replayed_driver_run": {
+   "searches": 8,
+   "pages_fetched": 319,
+   "pages_served": 241,
+   "pages_extracted": 197,
+   "extraction_refused": 44,
+   "discarded_low_score": 37,
+   "accepted_findings": 160,
+   "failures_by_kind": {
+    "extract:ExtractionFailed": 44,
+    "fetch:FetchFailed/http_status": 32,
+    "fetch:FetchFailed/network": 1,
+    "fetch:FetchFailed/robots_unavailable": 11,
+    "fetch:FetchFailed/timeout": 7,
+    "fetch:FetchRefused/robots": 21,
+    "fetch:FetchUnsupported/pdf": 6
+   }
+  }
+ }
+}

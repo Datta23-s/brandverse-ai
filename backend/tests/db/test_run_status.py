@@ -23,7 +23,7 @@ def test_every_reported_status_is_allowed(tx: Tx, status: str) -> None:
     tx.execute("update runs set status = %s where id = %s", (status, tx.seed.run_a))
 
 
-@pytest.mark.parametrize("status", ["running", "awaiting_approval", "BLOCKED", ""])
+@pytest.mark.parametrize("status", ["running", "approved", "BLOCKED", ""])
 def test_any_other_status_is_refused(tx: Tx, status: str) -> None:
     with pytest.raises(errors.CheckViolation, match="runs_status_check"):
         tx.execute("update runs set status = %s where id = %s", (status, tx.seed.run_a))
@@ -100,6 +100,7 @@ async def test_blocked_runs_are_counted_per_arm_with_zeros_kept(db_url: str) -> 
     assert report["baseline_b"].blocked == 0
     assert report["baseline_a"].by_status == {
         "queued": 0,
+        "awaiting_approval": 0,
         "completed": 0,
         "partial": 0,
         "failed": 2,

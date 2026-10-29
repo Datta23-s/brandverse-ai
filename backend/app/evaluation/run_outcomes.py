@@ -21,9 +21,16 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 
-RunStatus = Literal["queued", "completed", "partial", "failed", "blocked"]
-# Migration 0015's CHECK, in the same order.
-RUN_STATUSES: tuple[RunStatus, ...] = ("queued", "completed", "partial", "failed", "blocked")
+RunStatus = Literal["queued", "awaiting_approval", "completed", "partial", "failed", "blocked"]
+# Migration 0033's CHECK (0015's plus awaiting_approval), in the same order.
+RUN_STATUSES: tuple[RunStatus, ...] = (
+    "queued",
+    "awaiting_approval",
+    "completed",
+    "partial",
+    "failed",
+    "blocked",
+)
 ARMS = ("baseline_a", "baseline_b", "proposed")
 
 RUN_OUTCOMES_BY_ARM_SQL = """

@@ -337,6 +337,13 @@ they are recorded here so they are not reinvented.
   | `completed` | Every step ran | false |
   | `partial` | Stopped by a budget refusal; the completed steps' output is kept and returned | true |
   | `failed` | Any other error, cancellation included; re-raised to the caller | false |
+  | `blocked` | A truth or safety gate stopped the run (0015, `app/core/admission.py`); a result in its own right | false |
+
+  And one non-terminal status, added 2026-10-29 (Phase 6 chunk A, migration 0033):
+
+  | Status | Meaning | Written by |
+  |---|---|---|
+  | `awaiting_approval` | The graph is suspended at the human-approval interrupt (§5.3), its state held in the checkpoint. Not terminal: the run leaves it by resuming to one of the four terminal statuses above (an approval, a rejection, or a failure on resume). `completed_at` stays null. | `suspend_run` in `app/core/budgeted_run.py`, the executor's own module: the graph never writes `runs.status` |
 
 **Reasoning.** `partial` is separate from `completed` because C4 forbids a silent truncation and
 `Rules.md` A2 requires capped runs to be counted in the evaluation, not to vanish into
@@ -351,9 +358,10 @@ is not built (next section), so it fails the run rather than being disguised as 
 executor — as `Step`s, or by ending the run through `end_run` with a `RunOutcome` — and must not
 write `runs.status` itself or build a second executor (`Phases.md` Phase 6 deliverables). New
 statuses (for example a running state for the UI, or one for a latency-budget stop) are added
-here, in this table, before any code writes them. **Stated limitation:** `runs.status` has no
-database CHECK, so nothing but this rule stops another writer using another value; a CHECK on the
-four statuses is a one-line migration that should land before the evaluation's first run.
+here, in this table, before any code writes them. **The database enforces the list:** `runs_status_check`
+(0015, replaced by 0033 to add `awaiting_approval`) refuses any other value, so a writer cannot invent
+a status; the rule above decides who writes the ones that exist. (This section said until 2026-10-29
+that `runs.status` had no CHECK. It has had one since 0015; the sentence was stale.)
 
 Tested with a mocked provider in `tests/db/test_budgeted_run.py`: run call cap, run cost cap,
 organisation monthly cap (each `partial`, flagged), within budget (`completed`), another error

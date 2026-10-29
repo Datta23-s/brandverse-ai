@@ -10,7 +10,10 @@ true`. The refusal itself is already in llm_calls with its reason (app/llm/ledge
 Run statuses written here: 'completed', 'partial' (stopped by the budget, with output),
 'failed' (any other error; re-raised). `end_run` also writes 'blocked', for a run a truth or safety
 gate stopped (migration 0015; app/core/admission.py) — reported per arm as a result in its own
-right (app/evaluation/run_outcomes.py). `llm_call_count` and `total_cost_usd` on the runs row are
+right (app/evaluation/run_outcomes.py). `suspend_run` writes the one non-terminal status,
+'awaiting_approval' (migration 0033; Architecture.md §4.4): the LangGraph pipeline is parked at its
+human-approval interrupt, and `end_run` later moves the run on from there.
+`llm_call_count` and `total_cost_usd` on the runs row are
 derived from llm_calls when the run ends — one query, never a counter kept alongside (Rules.md
 A1); `total_cost_usd` is rounded to the column's 4 decimals, so the raw log stays the source.
 
@@ -117,6 +120,21 @@ async def end_run(
     return None
 
 
+_SUSPEND_SQL = """
+update public.runs set status = 'awaiting_approval'
+where id = %(run)s and status in ('queued', 'awaiting_approval')
+"""
+
+
+async def suspend_run(pool: AsyncConnectionPool[AsyncConnection], run_id: UUID) -> None:
+    """Park a run at the human-approval interrupt. A run that is `queued` (first time) or already
+    waiting (a "revise" round parks it again) can be suspended; one that ended cannot."""
+    async with pool.connection() as conn:
+        cur = await conn.execute(_SUSPEND_SQL, {"run": run_id})
+        if cur.rowcount != 1:
+            raise RuntimeError(f"run {run_id} has ended or does not exist: it cannot be suspended")
+
+
 async def run_steps(
     steps: Sequence[Step],
     *,
@@ -190,3 +208,12 @@ async def _end_failed(
                 extra={"run_id": str(run_id), "corrections": len(corrections.corrections)},
             )
     await end_run(pool, run_id, "failed", budget_exhausted=False)
+
+
+async def fail_run(
+    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID, corrections: StagedMemory | None
+) -> None:
+    """End a run `failed` outside `run_steps` (the LangGraph runner), shielded from cancellation,
+    with the same rules: corrections commit if there are any, and the run ends `failed` either
+    way."""
+    await asyncio.shield(_end_failed(pool, run_id, corrections))
