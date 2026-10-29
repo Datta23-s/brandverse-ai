@@ -23,8 +23,13 @@ report (`searches_rate_refused`, `searches_degraded_not_throttled`), so the back
 how often it had a legitimate trigger.
 
 **A refused request is aborted and redone** (`Mode.RECORD` aborts it at once). The redo waits a
-delay that grows on every consecutive refusal, from a base to a ceiling, with jitter, so retries
-never form a tight loop.
+delay, with jitter, so retries never form a tight loop. The delay grows, from a base to a ceiling,
+on every consecutive RATE REFUSAL and on nothing else (owner, 2026-10-29, the same rule as the gap
+and for the same reason): an abort caused by one engine's fault redoes the request after the wait
+already in force, the base when no refusal came before it. The first full session showed why: one
+engine (yahoo) went down, every abort doubled the delay to its ceiling, and the dark-period ceiling
+ended the session with seven attempts in 104 minutes. The two kinds of abort are counted apart
+(`aborts_rate_refused`, `aborts_fault`) and each attempt's line names its kind.
 
 **Clean searches survive an aborted attempt, within the session (owner, 2026-10-28).** The atomic
 rule exists so a request's queries are captured close together. Within one session that holds even
@@ -162,6 +167,8 @@ class SessionReport:
     requests_pending: list[str] = field(default_factory=list)
     attempts: int = 0
     aborted_attempts: int = 0
+    aborts_rate_refused: int = 0  # of those, the ones a rate refusal caused: they lengthen the wait
+    aborts_fault: int = 0  # the rest: redone after the wait already in force
     waited_s: float = 0.0
     searches_clean: int = 0
     searches_throttled: int = 0
@@ -220,8 +227,17 @@ class SessionReport:
         return self.searches_clean / (self.elapsed_s / 3600) if self.elapsed_s > 0 else None
 
     @property
-    def frozen_failed_share(self) -> float | None:
-        return self.pages_frozen_failed / self.pages_total if self.pages_total else None
+    def pages_fetched(self) -> int:
+        """Pages fetched live in this session: the denominator of the failure share. `pages_total`
+        also counts the pages each request found already stored, which no fetch was spent on."""
+        return self.pages_new_ok + self.pages_frozen_failed
+
+    @property
+    def frozen_failed_share_of_fetched(self) -> float | None:
+        """Failed over fetched live (22.5% in the first full session). It replaces
+        `frozen_failed_share`, which divided by `pages_total` and so read 12.9% for the same
+        session: reused pages are in that denominator and were never fetched (owner, 2026-10-29)."""
+        return self.pages_frozen_failed / self.pages_fetched if self.pages_fetched else None
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -232,6 +248,8 @@ class SessionReport:
             "pending": self.requests_pending,
             "attempts": self.attempts,
             "aborted_attempts": self.aborted_attempts,
+            "aborts_rate_refused": self.aborts_rate_refused,
+            "aborts_fault": self.aborts_fault,
             "waited_s": round(self.waited_s, 1),
             "searches_live": self.searches_live,
             "searches_clean": self.searches_clean,
@@ -252,7 +270,8 @@ class SessionReport:
             "pages_new_ok": self.pages_new_ok,
             "pages_reused": self.pages_reused,
             "pages_frozen_failed": self.pages_frozen_failed,
-            "frozen_failed_share": self.frozen_failed_share,
+            "pages_fetched": self.pages_fetched,
+            "frozen_failed_share_of_fetched": self.frozen_failed_share_of_fetched,
             "retries_used": self.retries_used,
             "final_gap_s": self.final_gap_s,
             "config": self.config,
@@ -349,6 +368,7 @@ async def record_session(
         _add(report, capture.tally)
         report.capture_reports.append(capture)
         waited = 0.0
+        abort_kind: str | None = None
         if capture.outcome == "committed":
             consecutive_refusals = 0
             carry.pop(request_id, None)
@@ -365,8 +385,17 @@ async def record_session(
         else:
             report.aborted_attempts += 1
             carry[request_id] = capture.carry  # kept for the next attempt, this session only
-            consecutive_refusals += 1
-            base = min(cfg.backoff_max_s, cfg.backoff_base_s * 2 ** (consecutive_refusals - 1))
+            # only a rate refusal lengthens the wait, as it does the gap; any other abort redoes the
+            # request after the wait already in force (the base, when no refusal came before it)
+            if capture.tally.searches_rate_refused:
+                abort_kind = "rate_refusal"
+                report.aborts_rate_refused += 1
+                consecutive_refusals += 1
+            else:
+                abort_kind = "fault"
+                report.aborts_fault += 1
+            level = max(consecutive_refusals - 1, 0)
+            base = min(cfg.backoff_max_s, cfg.backoff_base_s * 2**level)
             waited = base * (1 + cfg.backoff_jitter * rng.random())
             report.waited_s += waited
         elapsed = clock() - began
@@ -377,6 +406,7 @@ async def record_session(
                 "request": request_id,
                 "outcome": capture.outcome,
                 "abort_reason": capture.abort_reason,
+                "abort_kind": abort_kind,
                 "attempt_s": round(clock() - attempt_began, 1),
                 "waited_next_s": round(waited, 1),
                 "gap_s": pacer.gap_s,

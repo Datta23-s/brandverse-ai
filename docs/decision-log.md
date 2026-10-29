@@ -172,6 +172,20 @@ captures and the stopped session) was a single engine failing — yahoo, then ye
 rate-refused. *What it does not touch:* the queries, the engine set, the fetching, the freezing — the pacing
 is not part of the captured evidence. (`docs/evaluation-plan.md` section 8.)
 
+#### 1.4c The wait between attempts backs off for a rate refusal only — **BUILT** (disclosed 2026-10-29)
+The wait before redoing an aborted request (60 s doubling per consecutive abort, to 1800 s) is now lengthened
+only by a **rate refusal**, by the same shared test as the gap; any other abort redoes the request after the wait
+already in force. Counted apart (`aborts_rate_refused`, `aborts_fault`); each attempt line names its kind.
+*Changed after seeing its cost, and the earlier decision is recorded with it.* It was reported as the same type
+confusion on 2026-10-28 and the owner declined to change it that night, on a cost estimate that assumed transient
+faults. The first full session then met a sustained outage (yahoo, from 18:40 UTC): seven attempts at R13 in 104
+minutes, the wait doubled to its ceiling, and the dark-period ceiling ended the session with 12 of 30 requests
+committed. Unlike 1.4b, recording data exists this time (12 committed requests, verified byte for byte); the change
+touches none of it nor anything still to be captured. *Not changed:* the dark-period ceiling, which still ends a
+session if one declared engine stays down for 90 minutes. The session report's failed-page share now divides by
+pages fetched live (`frozen_failed_share_of_fetched`, 22.5%), not by all pages in the requests (12.9%, the wrong
+figure, whose key is removed). (`docs/evaluation-plan.md` section 8.)
+
 ### 1.5 The authority prior is reported twice — **DESIGNED**
 **Ruled 2026-10-25.**
 

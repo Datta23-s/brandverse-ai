@@ -400,3 +400,84 @@ async def test_the_session_report_separates_rate_refusals_from_faults(tmp_path):
     assert summary["searches_rate_refused"] == 1  # the SearchRateLimited at search 2
     assert summary["searches_degraded_not_throttled"] == 1  # the degraded answer at search 5
     assert summary["searches_degraded"] == 1 and summary["searches_throttled"] == 1
+
+
+# ── The wait between attempts moves for a rate refusal and nothing else (owner, 2026-10-29) ──
+
+
+def attempt_lines(log_path: Path) -> list[dict]:
+    lines = [json.loads(x) for x in log_path.read_text(encoding="utf-8").splitlines()]
+    return [x for x in lines if x["kind"] == "attempt" and x["outcome"] == "aborted"]
+
+
+async def test_aborts_from_one_engines_faults_are_redone_after_the_unchanged_base_wait(tmp_path):
+    clock, store = FakeClock(), new_store(tmp_path)
+    a = plan_for()
+    live = Timed(a, urls_for(a), clock, degrade_calls={n: "yahoo" for n in range(1, 7)})
+    log_path = tmp_path / "s.jsonl"
+    report = await session(store, {"R01": a}, live, clock, log_path=log_path)
+    aborted = attempt_lines(log_path)
+    assert report.requests_committed == ["R01"] and len(aborted) == 6
+    assert [x["waited_next_s"] for x in aborted] == [60] * 6  # did not double
+    assert {x["abort_kind"] for x in aborted} == {"fault"}
+    assert (report.aborts_fault, report.aborts_rate_refused) == (6, 0)
+
+
+async def test_a_rate_refusal_lengthens_the_wait_and_a_later_fault_keeps_it_where_it_is(tmp_path):
+    clock, store = FakeClock(), new_store(tmp_path)
+    a = plan_for()
+    # calls 1 and 2 are throttled, call 3 is one engine erroring; the next attempt gets through
+    live = Timed(a, urls_for(a), clock, fail_calls={1, 2}, degrade_calls={3: "yahoo"})
+    log_path = tmp_path / "s.jsonl"
+    report = await session(store, {"R01": a}, live, clock, log_path=log_path)
+    aborted = attempt_lines(log_path)
+    assert [x["waited_next_s"] for x in aborted] == [60, 120, 120]
+    assert [x["abort_kind"] for x in aborted] == ["rate_refusal", "rate_refusal", "fault"]
+    assert (report.aborts_rate_refused, report.aborts_fault) == (2, 1)
+
+
+async def test_a_degraded_answer_that_names_a_rate_refusal_lengthens_the_wait(tmp_path):
+    clock, store = FakeClock(), new_store(tmp_path)
+    a = plan_for()
+    live = Timed(a, urls_for(a), clock, degrade_calls={1: "yep", 2: "yep"})
+    live.degrade_reason = "Suspended: too many requests"
+    log_path = tmp_path / "s.jsonl"
+    report = await session(store, {"R01": a}, live, clock, log_path=log_path)
+    assert [x["waited_next_s"] for x in attempt_lines(log_path)] == [60, 120]
+    assert report.aborts_rate_refused == 2 and report.aborts_fault == 0
+
+
+async def test_a_sustained_outage_of_one_engine_keeps_attempting_until_the_ceiling(tmp_path):
+    """The first full session's end, replayed: one declared engine down, every attempt dying on
+    query 1. With the wait doubling for each abort the session made seven attempts in 104 minutes
+    and ended on the dark-period ceiling; at the unchanged wait it keeps trying, each attempt
+    spaced by the gap, so it would carry on the moment the engine returned."""
+    clock, store = FakeClock(), new_store(tmp_path)
+    a = plan_for()
+    live = Timed(a, urls_for(a), clock, degrade_calls={n: "yahoo" for n in range(1, 500)})
+    report = await session(store, {"R01": a}, live, clock)
+    assert report.ended == "dark_period_ceiling" and report.requests_committed == []
+    assert report.attempts >= 25  # doubling to the cap gives about 14 in the same time
+    assert report.aborts_rate_refused == 0 and report.aborts_fault == report.attempts
+
+
+async def test_the_failed_page_share_divides_by_the_pages_fetched_not_the_pages_in_the_requests():
+    from app.research.recorder import SessionReport
+
+    # the first full session's figures: 3790 pages across the requests, 1622 of them already stored
+    report = SessionReport(pages_total=3790, pages_new_ok=1680, pages_frozen_failed=488)
+    assert report.pages_fetched == 2168
+    assert report.frozen_failed_share_of_fetched == pytest.approx(0.2251, abs=1e-4)
+    summary = report.summary()
+    assert "frozen_failed_share" not in summary  # the mis-denominated key is gone, not kept
+    assert summary["frozen_failed_share_of_fetched"] == report.frozen_failed_share_of_fetched
+
+
+async def test_a_real_session_counts_only_live_fetches_in_the_failure_share(tmp_path):
+    clock, store = FakeClock(), new_store(tmp_path)
+    plans, a, b, _ = two_requests()
+    live = Timed(a, urls_for(a), clock)
+    live.by_text.update({q.text: q.rank for q in b.queries})
+    report = await session(store, plans, live, clock)
+    assert report.pages_reused > 0  # R04 found pages already stored
+    assert report.pages_fetched == report.pages_total - report.pages_reused

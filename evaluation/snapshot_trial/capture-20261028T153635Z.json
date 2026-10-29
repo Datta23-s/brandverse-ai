@@ -1,0 +1,171 @@
+{
+ "summary": {
+  "ended": "dark_period_ceiling",
+  "started_utc": "2026-10-28T15:36:35.944886+00:00",
+  "elapsed_s": 17279.1,
+  "committed": [
+   "R01",
+   "R02",
+   "R03",
+   "R04",
+   "R05",
+   "R06",
+   "R07",
+   "R08",
+   "R09",
+   "R10",
+   "R11",
+   "R12"
+  ],
+  "pending": [
+   "R13",
+   "R14",
+   "R15",
+   "R16",
+   "R17",
+   "R18",
+   "R19",
+   "R20",
+   "R21",
+   "R22",
+   "R23",
+   "R24",
+   "R25",
+   "R26",
+   "R27",
+   "R28",
+   "R29",
+   "R30"
+  ],
+  "attempts": 21,
+  "aborted_attempts": 9,
+  "waited_s": 6379.5,
+  "searches_live": 72,
+  "searches_clean": 63,
+  "searches_throttled": 0,
+  "searches_unavailable": 0,
+  "searches_degraded": 9,
+  "searches_rate_refused": 0,
+  "searches_degraded_not_throttled": 9,
+  "searches_reused": 33,
+  "searches_carried": 0,
+  "searches_wasted": 0,
+  "search_span_s": {
+   "max": 840.5,
+   "median": 720.5
+  },
+  "search_span_all_s": {
+   "max": 4399.5,
+   "median": 2091.95
+  },
+  "degraded_search_rate": 0.125,
+  "degraded_causes": {
+   "yahoo": 9
+  },
+  "achieved_clean_per_hour": 13.125711735642083,
+  "pages_total": 3790,
+  "pages_new_ok": 1680,
+  "pages_reused": 1622,
+  "pages_frozen_failed": 488,
+  "frozen_failed_share": 0.1287598944591029,
+  "retries_used": 606,
+  "final_gap_s": 120.0,
+  "config": {
+   "search_gap_s": 120.0,
+   "gap_ceiling_s": 900.0,
+   "gap_increase_factor": 2.0,
+   "gap_decrease_step_s": 15.0,
+   "clean_run_to_speed_up": 5,
+   "backoff_base_s": 60.0,
+   "backoff_max_s": 1800.0,
+   "backoff_jitter": 0.25,
+   "dark_ceiling_s": 5400.0,
+   "wall_limit_s": 36000.0,
+   "snapshot_page_retries": 2
+  }
+ },
+ "manifest": {
+  "search_span_s": {
+   "max": 840.5,
+   "median": 720.5
+  },
+  "search_span_all_s": {
+   "max": 4399.5,
+   "median": 2091.95
+  },
+  "requests": 12,
+  "searches": 63,
+  "pages": 2168,
+  "pages_ok": 1680,
+  "pages_frozen_failed": 488,
+  "sha256": "36ea9fa2e9dd68e256046973ace490734a2b66e80ef2f2b33260676ea1060eb4",
+  "first_committed_utc": "2026-10-28T15:56:25.114385+00:00",
+  "last_committed_utc": "2026-10-28T18:40:48.746635+00:00"
+ },
+ "backup": {
+  "ok": true,
+  "verified": 1683,
+  "problems": []
+ },
+ "verification": {
+  "byte_for_byte": true,
+  "problems": [],
+  "searches_compared": 96,
+  "pages_compared": 1680,
+  "frozen_failures_compared": 488,
+  "live_searches_seconds": {
+   "n": 72,
+   "median": 3.38,
+   "max": 5.05
+  },
+  "live_pages": {
+   "ok": 1680,
+   "failed": 488,
+   "failures_by_kind": {
+    "FetchFailed/http_status/403": 215,
+    "FetchRefused/robots/None": 111,
+    "FetchFailed/timeout/None": 54,
+    "FetchFailed/robots_unavailable/None": 46,
+    "FetchFailed/http_status/404": 18,
+    "FetchUnsupported/pdf/None": 14,
+    "FetchFailed/dns/None": 5,
+    "FetchFailed/network/None": 4,
+    "FetchFailed/http_status/500": 4,
+    "FetchUnsupported/too_large/None": 3,
+    "FetchFailed/http_status/410": 3,
+    "FetchFailed/http_status/503": 2,
+    "FetchFailed/http_status/400": 2,
+    "FetchFailed/http_status/429": 2,
+    "FetchUnsupported/not_html/None": 2,
+    "FetchFailed/http_status/402": 1,
+    "FetchFailed/http_status/405": 1,
+    "FetchFailed/robots_unavailable/503": 1
+   },
+   "bytes_median": 376810,
+   "bytes_max": 4962607,
+   "with_redirects": 56,
+   "final_url_differs_from_requested": 54,
+   "content_types": {
+    "text/html": 1680
+   }
+  },
+  "replayed_driver_run": {
+   "searches": 8,
+   "pages_fetched": 319,
+   "pages_served": 241,
+   "pages_extracted": 197,
+   "extraction_refused": 44,
+   "discarded_low_score": 37,
+   "accepted_findings": 160,
+   "failures_by_kind": {
+    "extract:ExtractionFailed": 44,
+    "fetch:FetchFailed/http_status": 32,
+    "fetch:FetchFailed/network": 1,
+    "fetch:FetchFailed/robots_unavailable": 11,
+    "fetch:FetchFailed/timeout": 7,
+    "fetch:FetchRefused/robots": 21,
+    "fetch:FetchUnsupported/pdf": 6
+   }
+  }
+ }
+}

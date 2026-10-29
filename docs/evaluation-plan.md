@@ -1569,6 +1569,41 @@ it, and both are recorded. **The change does not touch what is captured** — no
 set, the fetching or the freezing — only how long the recorder waits between searches, so it does not
 affect the content of the snapshot, and the stopped session had captured nothing in any case.
 
+**The wait between attempts backs off for a rate refusal only — CHANGED 2026-10-29, AFTER seeing its cost, and
+the owner's earlier decision not to is recorded with it.** The gap was ruled on 2026-10-28; the wait between
+attempts at an aborted request (60 s, doubling per consecutive abort, to 1800 s) was reported then as the same
+type confusion one layer up (the counter was named `consecutive_refusals` and counted every abort), and the owner
+declined to change it that night, on a cost estimate that assumed *transient* faults. The first full session
+then met a *sustained* outage, and it ended the session.
+
+*What happened.* Session 2 ran 15:36:35 to 20:24:35 UTC and ended on `dark_period_ceiling`, not the 10-hour wall
+limit, with **12 of 30 requests committed**. After R12 committed at 18:40:48, yahoo (a declared engine) stopped
+answering. R13 was attempted seven times in 104 minutes, each attempt dying on its first query after about three
+seconds, and the waits between them were 72, 144, 285, 544, 1056, 2031 and 2026 s: the doubling reached its
+ceiling after six aborts. No search was answered cleanly for 5,400 s, and the ceiling ended the session. No
+attempt was a rate refusal (`searches_rate_refused` 0); all nine degraded searches were yahoo.
+
+*What changed.* The same rule as the gap, with the same shared test (`is_rate_refusal`, through
+`CaptureTally.searches_rate_refused`): an abort caused by a **rate refusal** lengthens the wait (doubling, as
+before); **any other abort** redoes the request after the wait already in force, which is the 60 s base when no
+rate refusal came before it. The request is still aborted and redone atomically. The two kinds are counted apart
+(`aborts_rate_refused`, `aborts_fault`) and every attempt's log line carries `abort_kind`.
+
+*Disclosure, and how this differs from the pacer change.* It was changed after seeing its cost. Unlike the pacer
+change, **recording data exists this time: 12 committed requests (63 searches, 2,168 pages) sit in the store**,
+verified byte for byte. The change does not touch them or anything still to be captured: not the queries, the
+engine set, the fetching or the freezing, only how long the recorder pauses before retrying. A committed request
+is never re-captured on resume.
+
+*What it fixes, and what it does not.* At the 120 s gap a down engine now gets about one attempt every two
+minutes, so the 104 minutes of that outage would have held about fifty attempts, not seven (the test
+`test_a_sustained_outage_of_one_engine_keeps_attempting_until_the_ceiling` shows 30 attempts an hour against 14
+for the doubling in the same simulated time), and the session would have carried on once yahoo answered. **It does
+not change the dark-period ceiling, and that ceiling will still end a session if one declared engine stays
+down for 90 minutes.** The owner's ruling is that the ceiling is fine once the backoff stops starving it; this is
+the case it is still there for. Proof the tests hold the rule: with the old rule restored (every abort doubles)
+three of them fail; with it, they pass.
+
 ### The seven-engine hold (owner order 2026-10-28; registered before it starts)
 
 *Registered 2026-10-28, committed before the first search of the hold; the burst and the single
@@ -2083,6 +2118,67 @@ trial's and the recording's stored per-search seconds**, which have the pacing w
 yandex, yep) and the enabled list as recorded (16 engines after this change: bing, brave, crowdview, duckduckgo, duckduckgo web, gmx, mojeek, mwmbl, privacywall, seznam, swisscows, wiby, wikipedia, yahoo, yandex, yep, in `infra/searxng/settings.yml`),
 and not a property of searching; it is reported with both, and a different enabled list is a different unit
 cost.
+
+**The first full recording session, and the unit costs it measured (2026-10-28 15:36 to 20:24 UTC; reported
+2026-10-29).** 12 of 30 requests committed (R01 to R12), 63 of the 153 distinct searches, 2,168 pages fetched
+live; the session ended on the dark-period ceiling (see "The wait between attempts backs off for a rate refusal
+only"). The partial store was backed up and verified byte for byte (1,683 files; 96 searches, 1,680 pages and 488
+frozen failures replayed identically). **The pacer fix behaved: 0 rate-refused searches, 9 degraded-not-throttled,
+final gap 120 s as it started.**
+
+| Unit cost, as recorded | n | median | mean | p90 | max |
+|---|---|---|---|---|---|
+| Per search (s) | 63 | 3.41 | 3.54 | | 5.05 |
+| Per page fetch, all (s) | 2,168 | 6.59 | **11.72** | 32.89 | 60.38 |
+| Per page fetch, fetched OK (s) | 1,680 | 6.36 | 10.03 | 25.20 | 57.92 |
+| Per page fetch, frozen failed (s) | 488 | 8.50 | 17.52 | 52.83 | 60.38 |
+
+*The estimator.* The derived web time is a count difference times a unit cost, an expected total, and for a
+right-skewed distribution (mean 1.8 times the median) the median underestimates a total. So **the mean is the
+estimator** (3.54 s a search, 11.72 s a page fetch, failed fetches included: they cost time in every arm). **Both
+are reported**, because LR is derived rather than measured and the choice moves the page part by a factor of 1.78:
+
+| Derived web time per 1,000 pages fewer | Mean (the estimator) | Median (sensitivity) |
+|---|---|---|
+| Seconds | 11,720 | 6,590 |
+| Hours | 3.26 | 1.83 |
+
+The search part moves by 4% between the two (3.54 against 3.41 s a search), so it does not matter which is used
+there. Every LR figure is stated under both, with these three numbers (median, mean, p90) beside it.
+
+*The assumption, and why the recording says it is wrong.* The derivation assumes the pages an arm skips are a
+random draw from the whole population of pages. **They are not, in this recording, and the data say so:** the
+per-request median page time ran from 3.06 s to 21.41 s across the 12 requests, and the requests that reused
+most of their pages (R03, R06, R09 and R12 fetched only 32 to 45 pages each) were left holding the slow and
+failing hosts, with medians of 10.8 to 21.4 s, while R01 (a full set of new pages) came in at 3.66 s. An arm that
+fetches fewer pages may be skipping systematically different pages (the cheap ones, or the dear ones), not a
+sample. **This is a limitation of the derivation and is stated in the write-up beside LR:** the mean times a
+count difference is the right total only if the skipped pages cost what an average page costs, and nothing here
+shows they do. The one-request trial's 2.96 s median per page was the cheapest possible composition (one request
+against an empty store) and is not a unit cost.
+
+Two further things a reader of LR must be told. The per-page seconds are per-fetch durations measured with eight
+fetches in flight; whether a derived time divides by that concurrency is part of the derivation and is reported
+with it, not hidden in it. And the unit cost is configuration-dependent (the paragraph above): these are the
+costs under this declared set, this enabled list, the 5 MB cap and this agent string.
+
+*Failure rate, the comparable figure.* **488 of 2,168 pages fetched live failed: 22.5%** (the trial: 21%): HTTP 403
+x215 (9.9%), robots refusal x111 (5.1%), timeout x54, robots.txt unreachable x47, HTTP 404 x18, PDF x14, and the
+rest in single digits. The session report used to print `frozen_failed_share` 0.129 for the same session: that
+divided by `pages_total` (3,790), which also counts the 1,622 pages that requests found already stored and that
+no fetch was spent on. **The 12.9% is the wrong number to quote.** The report now prints
+`frozen_failed_share_of_fetched` (failed over pages fetched live, `pages_new_ok + pages_frozen_failed`) and the old
+key is gone, so it cannot be read by mistake. The per-request share in a committed line (failed over the
+request's distinct pages) is a different quantity and is unchanged.
+
+*The degraded-search rate against the registered bound.* **9 of 72 live searches degraded: 12.5%**, every one
+yahoo, against the bound registered on 2026-10-28 *before* the recording (a per-engine failure rate below about
+6.5% at 95% from zero failures in 45 searches, so the share of degraded searches anywhere from about none to about
+a quarter): **a prediction met**, and the bound was not fitted afterwards. Two cautions that go with the figure:
+seven of the nine are one engine's single outage retried (R13's seven attempts), so this is **two episodes, not
+nine independent draws** (the other two were R08's, two minutes apart at 17:21 and 17:23 UTC: one episode of
+two attempts, against R13's one outage of seven), and the rate is a per-search rate, not an
+independence-weighted one. And it is one engine on one evening, which is what the bound is wide enough to hold.
 
 ## 9. Required items
 

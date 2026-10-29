@@ -370,6 +370,12 @@ class CaptureTally:
     search_seconds: list[float] = field(default_factory=list)
     page_seconds: list[float] = field(default_factory=list)
 
+    @property
+    def searches_rate_refused(self) -> int:
+        """The live searches a declared engine refused the rate of, by either route (a throttled
+        search or a degraded one): what moves the gap and the wait between attempts."""
+        return self.searches_throttled + self.searches_degraded_rate_refused
+
 
 class Pace(Protocol):
     """How fast live searches may be asked. `wait` is called BEFORE a live search and is not part of
