@@ -170,9 +170,14 @@ a `completed` row, the same as a whole campaign. Migration 0035 adds `runs.decla
 failed, written by the backend with the terminal status, forced to empty for API roles like every outcome
 column), and `run_outcomes_by_arm` reports `with_gaps` beside the status counts. The run record also now
 carries what the graph knew and the columns never held: `depth`, `research_score`, `selected_agents`,
-`memory_hit_count`, `search_count`. `latency_ms` is still not written: a run parked for approval waits
-days, so wall time from creation is not a latency, and N1/N2 are measured in chunk F with the approval
-wait removed.
+`memory_hit_count`, `search_count`. `latency_ms` is the ACTIVE time (migration 0036): a run parked for
+approval waits days, so wall time from creation is not a latency. Each wait is a row in `run_waits`,
+opened when the run parks and closed when the decision arrives (or the run ends), and `end_run` writes
+`latency_ms` = wall time minus the waits, in the statement that ends the run. Before this the park and
+the arrival existed only as timestamps inside the checkpointer's private tables, in the library's
+format, which the evaluation does not read. `app/evaluation/latency.py` derives the same figure from the
+raw intervals so the two can be checked. A decision that arrives and is then lost (the process dies
+between closing the wait and applying the decision) counts the few seconds in between as active time.
 
 **How an agent reads page text under replay.** Run state carries only what a finding is (URL, title,
 score), because a checkpoint is a Postgres row written at every step and page text is third-party prose.

@@ -102,6 +102,10 @@ class RunFacts:
     declared_gaps: tuple[dict[str, Any], ...] = ()
 
 
+_CLOSE_WAITS_SQL = """
+update public.run_waits set resumed_at = now() where run_id = %(run)s and resumed_at is null
+"""
+
 _END_RUN_SQL = """
 update public.runs r
 set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
@@ -111,7 +115,11 @@ set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
     selected_agents = coalesce(%(agents)s, r.selected_agents),
     memory_hit_count = coalesce(%(hits)s, r.memory_hit_count),
     search_count = coalesce(%(searches)s, r.search_count),
-    declared_gaps = %(gaps)s::jsonb
+    declared_gaps = %(gaps)s::jsonb,
+    -- active latency: wall time minus the time spent waiting for a person (migration 0036)
+    latency_ms = greatest(0, (extract(epoch from (now() - r.created_at)) * 1000
+        - coalesce((select sum(extract(epoch from (w.resumed_at - w.parked_at)) * 1000)
+                    from public.run_waits w where w.run_id = r.id), 0))::bigint)::int
 from (select count(*) filter (where outcome <> 'refused')::int as calls,
              coalesce(sum(cost_usd), 0) as cost
       from public.llm_calls where run_id = %(run)s) u
@@ -134,6 +142,8 @@ async def end_run(
     if memory and memory.adds_trust and status != "completed":
         raise ValueError("memory that adds trust is committed only for a completed run")
     async with pool.connection() as conn, conn.transaction():
+        # A run that ends while parked (a failure on resume) must not leave its wait open.
+        await conn.execute(_CLOSE_WAITS_SQL, {"run": run_id})
         f = facts or RunFacts()
         cur = await conn.execute(
             _END_RUN_SQL,
@@ -162,13 +172,29 @@ where id = %(run)s and status in ('queued', 'awaiting_approval')
 """
 
 
+_OPEN_WAIT_SQL = """
+insert into public.run_waits (org_id, run_id)
+select org_id, id from public.runs where id = %(run)s
+on conflict (run_id) where resumed_at is null do nothing
+"""
+
+
 async def suspend_run(pool: AsyncConnectionPool[AsyncConnection], run_id: UUID) -> None:
-    """Park a run at the human-approval interrupt. A run that is `queued` (first time) or already
-    waiting (a "revise" round parks it again) can be suspended; one that ended cannot."""
-    async with pool.connection() as conn:
+    """Park a run at the human-approval interrupt, and start timing the wait. A run that is
+    `queued` (first time) or already waiting (a "revise" round parks it again) can be suspended; one
+    that ended cannot. Idempotent: a second call while parked opens no second wait."""
+    async with pool.connection() as conn, conn.transaction():
         cur = await conn.execute(_SUSPEND_SQL, {"run": run_id})
         if cur.rowcount != 1:
             raise RuntimeError(f"run {run_id} has ended or does not exist: it cannot be suspended")
+        await conn.execute(_OPEN_WAIT_SQL, {"run": run_id})
+
+
+async def resume_run(pool: AsyncConnectionPool[AsyncConnection], run_id: UUID) -> None:
+    """The approver's decision has arrived: close the wait. The status stays `awaiting_approval`
+    until the run ends (a few seconds of steps 13 to 15); only the wait is timed here."""
+    async with pool.connection() as conn:
+        await conn.execute(_CLOSE_WAITS_SQL, {"run": run_id})
 
 
 async def run_steps(

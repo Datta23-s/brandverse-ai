@@ -728,8 +728,23 @@ called `setup()` first, in `public`, with row-level security off (the library's 
 This repository's own record shows what a new `public` table carries on this platform: 0029 and 0030 had
 to revoke `anon` and `authenticated` writes that Supabase's defaults had granted on `memory_items`. So the
 expectation, not a demonstrated read, is that another organisation's saved campaign state could have been
-read through the REST API. `setup()` was never run against the project, so the exposure was found by
-reading the library's DDL against the platform's documented behaviour, and not observed.
+read through the REST API. `setup()` was never run against the project (it would create the tables in
+`public`, the thing being prevented).
+
+*Verified 2026-10-29 on an equivalent Postgres, and what that does and does not show.* `setup()` was run
+against a scratch database on the test server (pgvector/pg17, with the platform stub applied). It chose
+**`public`** (the default `search_path` is `"$user", public`, and the library's DDL names no schema) and left
+**row-level security off** on all four tables. Both are the library's behaviour, independent of the
+platform. The grants are NOT independent evidence there: `anon` and `authenticated` could `SELECT` and
+`INSERT`, but only because `tests/db/supabase_platform_stub.sql` declares Supabase's default privileges by
+hand. The platform's side was read from the live project instead, in the rolled-back dry runs that
+changed nothing: a column added to `public.runs` (0035) came back granted `INSERT`, `UPDATE`, `SELECT` and
+`REFERENCES` to `anon`, `authenticated` and `service_role`, and a new table in `public` (0036) kept
+`SELECT`, `REFERENCES` and `TRIGGER` for `anon`, `authenticated` and `service_role` after four privileges
+had been revoked, so the defaults were at least that. Remaining unproven: that this project exposes
+`public` through PostgREST (its row-level security policies on `public` tables assume it does) and that
+`setup()` itself, run there, would add nothing to that. So: the schema, the missing RLS and the default
+grants are demonstrated; the read through the REST API is still the inference those three support.
 
 *Fix.* Migration 0034 creates the library's own DDL (versions 0 to 9, compared with it column by column by
 a test, so a library upgrade fails a test instead of writing to tables that differ) in a private schema,

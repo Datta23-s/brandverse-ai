@@ -38,6 +38,7 @@ EXPECTED: dict[str, dict[str, tuple[bool, bool]]] = {
     "organisations": NONE,  # manual postgres procedure only (0010)
     "product_claims": NONE,  # retired, never deleted; product deletion still cascades (0017)
     "products": OWNER_AND_BACKEND_DELETE,  # not once it has runs (FK)
+    "run_waits": NONE,  # raw log of the waits for a person (0036)
     "runs": NONE,  # raw logs, Rules.md A1 (0010)
     "sector_constraints": NONE,  # retired, never deleted (0011)
     "sectors": NONE,  # registry keys (0011)

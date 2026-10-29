@@ -32,7 +32,7 @@ from langgraph.graph.state import CompiledStateGraph
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from app.core.budgeted_run import RunFacts, end_run, fail_run, suspend_run
+from app.core.budgeted_run import RunFacts, end_run, fail_run, resume_run, suspend_run
 from app.core.infrastructure import classify_infrastructure_failure
 from app.core.pipeline import PIPELINE_STEPS
 from app.errors import BrandverseError, BudgetExceeded
@@ -63,6 +63,8 @@ class RunLedger(Protocol):
 
     async def suspend(self, run_id: UUID) -> None: ...
 
+    async def resumed(self, run_id: UUID) -> None: ...
+
     async def end(
         self,
         run_id: UUID,
@@ -90,6 +92,9 @@ class PoolRunLedger:
 
     async def suspend(self, run_id: UUID) -> None:
         await suspend_run(self._pool, run_id)
+
+    async def resumed(self, run_id: UUID) -> None:
+        await resume_run(self._pool, run_id)
 
     async def end(
         self,
@@ -174,6 +179,7 @@ class Pipeline:
             raise ValueError("a reason is required for anything but approve")
         if decision == "revise" and snapshot.values.get("revision_round", 0) >= self._max_revisions:
             raise ValueError(f"no regeneration rounds left (limit {self._max_revisions})")
+        await self._ledger.resumed(run_id)  # the decision has arrived: the wait ends here
         await self._graph.aupdate_state(
             config,
             {"approval": {"decision": decision, "by": str(by), "reason": reason}},

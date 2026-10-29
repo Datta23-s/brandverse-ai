@@ -81,6 +81,9 @@ class Ledger:
     async def suspend(self, run_id: UUID) -> None:
         self.calls.append(("suspend",))
 
+    async def resumed(self, run_id: UUID) -> None:
+        self.calls.append(("resumed",))
+
     async def end(
         self,
         run_id: UUID,
@@ -394,7 +397,7 @@ async def test_revise_is_a_regeneration_round_inside_the_same_bound() -> None:
     again = await h.decide("revise", "tone is too flat")
     assert again.status == "suspended" and a6.calls == 2 and again.state["revision_round"] == 1
     assert again.state["approval"] is None  # the earlier decision does not carry over
-    assert [c[0] for c in h.ledger.calls] == ["suspend", "suspend"]
+    assert [c[0] for c in h.ledger.calls] == ["suspend", "resumed", "suspend"]
     with pytest.raises(ValueError, match="no regeneration rounds left"):
         await h.decide("revise", "again")
     assert (await h.decide("approve")).status == "completed"
