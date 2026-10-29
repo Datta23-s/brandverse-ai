@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 import app.orchestrator  # noqa: F401  (sets the strict-msgpack switch before LangGraph is used)
 from app.agents.base import Agent, AgentContext
-from app.agents.mock import mock_agents
+from app.agents.mock import lexical_extractor, mock_agents
 from app.core.gates import load_superlatives
 from app.llm.ledger import CallLedger
 from app.llm.prompts import PromptRef
@@ -160,6 +160,7 @@ def build_pipeline(
         research=research,
         agents=agents,
         write_memory=writeback_step(pool, HashingEncoder()),
+        extract_statements=lexical_extractor,
         lexicon=load_superlatives("v1"),
         today=lambda: ON,
     )

@@ -512,6 +512,16 @@ applied**. Requirements this creates for later chunks: **B** reads finding text 
 reads latency from `runs.latency_ms` and `app/evaluation/latency.py`: the approval wait is a recorded interval (`run_waits`, 0036), already removed. The re-execution ruling is in
 `docs/evaluation-plan.md`, "Re-executed steps".
 
+**Chunk B progress (2026-10-29), first slice, mocked model only: zero real calls.** Built: A6, the copy
+writer (`app/agents/copywriter.py`, prompt `a6_copy@v1`), and step 11 on the claim classifier. A6 is shown
+only active verified and deduced claims (T2), never says what it relied on, and never writes a disclaimer:
+the registry's required disclaimers are appended verbatim as the `footer` by code
+(`gates.required_disclaimers`). A rejected draft is described to it in fixed words per finding kind, never
+the finding's message or the draft's text (a restricted phrase the model wrote cannot be handed back). Step
+11 extracts the statements with the classifier (a model call, strong tier for a regulated sector: T4, so
+it fails closed outside the tuning organisation), stores them, and step 15 re-judges them
+deterministically with no second model call. A1, A2, A3 and A7's risk read are still mocks.
+
 ---
 
 ## Phase 7 — Adaptive Intelligence

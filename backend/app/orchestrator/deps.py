@@ -11,8 +11,8 @@ from datetime import date
 from typing import Any, Protocol
 from uuid import UUID
 
-from app.agents.base import Agent, EvidenceReader
-from app.core.gates import GateReport, Superlatives
+from app.agents.base import Agent, AgentContext, EvidenceReader
+from app.core.gates import GateReport, Statement, Superlatives
 from app.core.truth import ProductTruth
 from app.memory.writeback import MemoryStage
 from app.models.runs import RunEvent
@@ -41,6 +41,9 @@ class ResearchResult:
     report: dict[str, Any]
 
 
+# Step 11: the factual statements in a draft, extracted by the claim classifier (a model call made
+# with the step's own execution context) and never supplied by the writer.
+ExtractStatements = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
 LoadContext = Callable[[UUID, UUID], Awaitable[ProductContext | None]]
 Retrieve = Callable[[RunState], Awaitable[MemoryResult]]
 Research = Callable[[RunState, Depth], Awaitable[ResearchResult]]
@@ -56,6 +59,7 @@ class GraphDeps:
     research: Research
     agents: Mapping[str, Agent]
     write_memory: WriteMemory
+    extract_statements: ExtractStatements
     lexicon: Superlatives
     today: Callable[[], date]
     # Regeneration rounds after the first draft (Phases.md Phase 6 chunk B: bounded at 2).

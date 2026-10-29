@@ -26,7 +26,7 @@ from langgraph.types import Send
 
 from app.agents.base import AgentContext
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
-from app.core.gates import GateReport, Statement, evaluate
+from app.core.gates import Finding, GateReport, Statement, evaluate
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded
@@ -310,20 +310,41 @@ class Nodes:
             "_detail": f"draft {round_ + 1}",
         }
 
+    def _gate_error(self, ctx: AgentContext, why: str) -> GateReport:
+        sector = ctx.truth.sector.describe() if ctx.truth.sector is not None else "no sector"
+        finding = Finding("gate_error", why)
+        return GateReport((finding,), (), sector, self.d.lexicon.version, ctx.on)
+
     async def _gate(self, state: RunState) -> tuple[GateReport | None, ProductTruth]:
-        """The real gates over the current draft, against the truth as it is now."""
+        """Step 15's view of the draft: the DETERMINISTIC gates over the statements step 11 already
+        extracted, against the truth as it is now (a claim retired while the run waited is judged as
+        retired). No model call: the extraction is not repeated. A draft whose extraction failed
+        stays a `gate_error` block."""
         ctx = await self.context(state)
         creative = state.get("creative")
         if creative is None:
             return None, ctx.truth
-        statements = [Statement(**s) for s in creative["statements"]]
+        stored = (state.get("validation") or {}).get("statements")
+        if stored is None:
+            return self._gate_error(ctx, "the draft's statements were never extracted"), ctx.truth
+        statements = [Statement(**s) for s in stored]
         return evaluate(creative["copy"], statements, ctx.truth, self.d.lexicon, ctx.on), ctx.truth
 
     async def validate_evidence(self, state: RunState) -> dict[str, Any]:
-        report, _ = await self._gate(state)
-        if report is None:
-            validation: dict[str, Any] = {
+        """Step 11. A7's claim verification: the classifier EXTRACTS the statements from the copy (a
+        model call, on the strong tier for a regulated sector: Rules.md T4) and the deterministic
+        gates judge them. A7's own risk read follows, in the same execution (one execution id for
+        both, migration 0035). A failed extraction is a `gate_error` block, as in the classifier; a
+        budget refusal is not a block and ends the run partial."""
+        creative = state.get("creative")
+        errors: list[dict[str, Any]] = []
+        revision_round = state.get("revision_round", 0)
+        ctx = await self.context(state, VALIDATION_STEP, revision_round)
+        validation: dict[str, Any]
+        if creative is None:
+            validation = {
                 "outcome": "block",
+                "statements": None,
                 "findings": [
                     {
                         "kind": "no_creative",
@@ -335,10 +356,32 @@ class Nodes:
                 ],
             }
         else:
+            statements: list[Statement] | None
+            try:
+                statements = await self.d.extract_statements(ctx, creative["copy"])
+                report = evaluate(creative["copy"], statements, ctx.truth, self.d.lexicon, ctx.on)
+            except BudgetExceeded:
+                raise
+            except Exception as e:
+                log.exception("claim extraction failed; blocking the copy")
+                statements = None
+                report = self._gate_error(
+                    ctx, f"claim extraction failed, so the copy is unchecked: {type(e).__name__}"
+                )
             validation = report_dict(report)
-        errors: list[dict[str, Any]] = []
+            validation["statements"] = (
+                None
+                if statements is None
+                else [
+                    {
+                        "text": s.text,
+                        "claim_id": s.claim_id,
+                        "labelled_deduction": s.labelled_deduction,
+                    }
+                    for s in statements
+                ]
+            )
         try:
-            ctx = await self.context(state, VALIDATION_STEP, state.get("revision_round", 0))
             risk = await self.d.agents["A7"].run(state, ctx)
             validation["a7"] = risk.model_dump(mode="json")
         except BudgetExceeded:

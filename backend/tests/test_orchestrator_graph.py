@@ -19,9 +19,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 
 from app.agents.base import Agent, AgentContext
-from app.agents.mock import CopyStatement, CreativeOutput, mock_agents
+from app.agents.mock import lexical_extractor, mock_agents
+from app.agents.outputs import CreativeOutput
 from app.core.budgeted_run import RunFacts
-from app.core.gates import GateReport, load_superlatives
+from app.core.gates import GateReport, Statement, load_superlatives
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
 from app.errors import BudgetExceeded
@@ -116,6 +117,7 @@ class Harness:
         truth: ProductTruth | None = None,
         agents: Mapping[str, Agent] | None = None,
         max_revisions: int = 2,
+        extractor: Any = None,
     ) -> None:
         self.sink, self.ledger = Sink(), Ledger()
         self.memory_calls: list[dict[str, Any]] = []
@@ -146,6 +148,7 @@ class Harness:
             research=research,
             agents=agents or mock_agents(),
             write_memory=write_memory,
+            extract_statements=extractor or lexical_extractor,
             lexicon=load_superlatives("v1"),
             today=lambda: ON,
             max_revisions=max_revisions,
@@ -354,33 +357,41 @@ async def test_a_node_that_itself_raises_cancelled_error_is_a_failure_not_a_canc
 
 
 class Drafts:
-    """A6 whose first `bad` drafts cite a claim that does not exist, then clean ones."""
+    """A6 that writes a draft each time it is asked, and counts."""
 
     id = "A6"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> CreativeOutput:
+        self.calls += 1
+        return CreativeOutput(copy={"headline": "Battery lasts 8 hours."})
+
+
+class BadCites:
+    """The classifier stand-in: the first `bad` extractions cite a claim that does not exist."""
 
     def __init__(self, bad: int) -> None:
         self.bad, self.calls = bad, 0
 
-    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> CreativeOutput:
+    async def __call__(self, ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
         self.calls += 1
         claim = "no-such-claim" if self.calls <= self.bad else "c1"
-        return CreativeOutput(
-            copy={"headline": "Battery lasts 8 hours."},
-            statements=[CopyStatement(text="Battery lasts 8 hours", claim_id=claim)],
-        )
+        return [Statement("Battery lasts 8 hours", claim)]
 
 
 async def test_a_blocked_draft_is_regenerated_until_the_gates_pass() -> None:
-    a6 = Drafts(bad=1)
-    h = Harness(agents={**mock_agents(), "A6": a6})
+    a6, extractor = Drafts(), BadCites(bad=1)
+    h = Harness(agents={**mock_agents(), "A6": a6}, extractor=extractor)
     out = await h.start()
-    assert a6.calls == 2 and out.state["revision_round"] == 1
+    assert a6.calls == 2 and extractor.calls == 2 and out.state["revision_round"] == 1
     assert out.state["validation"]["outcome"] == "pass"
 
 
 async def test_regeneration_is_bounded_and_the_approver_sees_what_is_still_blocked() -> None:
-    a6 = Drafts(bad=99)
-    h = Harness(agents={**mock_agents(), "A6": a6})
+    a6 = Drafts()
+    h = Harness(agents={**mock_agents(), "A6": a6}, extractor=BadCites(bad=99))
     out = await h.start()
     assert out.status == "suspended" and a6.calls == 3  # the draft plus two rounds
     assert out.state["revision_round"] == 2
@@ -389,8 +400,8 @@ async def test_regeneration_is_bounded_and_the_approver_sees_what_is_still_block
 
 
 async def test_revise_is_a_regeneration_round_inside_the_same_bound() -> None:
-    a6 = Drafts(bad=0)
-    h = Harness(agents={**mock_agents(), "A6": a6}, max_revisions=1)
+    a6 = Drafts()
+    h = Harness(agents={**mock_agents(), "A6": a6}, max_revisions=1, extractor=BadCites(bad=0))
     await h.start()
     with pytest.raises(ValueError, match="reason is required"):
         await h.decide("revise")
@@ -611,7 +622,7 @@ async def test_an_agent_reads_a_findings_text_from_the_snapshot_never_from_the_n
         async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
             assert ctx.evidence is not None
             text = await ctx.evidence.text(state["findings"][0]["url"])
-            return CreativeOutput(copy={"headline": text or ""}, statements=[])
+            return CreativeOutput(copy={"headline": text or ""})
 
     h = Harness(agents={**mock_agents(), "A2": Reads()})
     h.deps.evidence = reader

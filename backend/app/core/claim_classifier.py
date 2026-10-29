@@ -40,6 +40,7 @@ from app.core.gates import (
     record_gate_block,
 )
 from app.core.truth import Claim, ProductTruth
+from app.errors import BudgetExceeded
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallContext
 from app.llm.prompts import PromptLibrary
@@ -85,7 +86,8 @@ def classifier_tier(truth: ProductTruth) -> tuple[Tier, str]:
     return Tier.STANDARD, "claim extraction: default tier"
 
 
-def _claims_block(claims: Sequence[Claim]) -> str:
+def claims_block(claims: Sequence[Claim]) -> str:
+    """The claims as the prompts list them: `id | type | text`, one per line."""
     if not claims:
         return "(none)"
     return "\n".join(f"{c.id} | {c.claim_type} | {c.text}" for c in claims)
@@ -101,7 +103,7 @@ async def extract_statements(
     tier, reason = classifier_tier(truth)
     prompt = prompts.get(*CLAIM_EXTRACT).render(
         copy="\n\n".join(f"[{name}]\n{text}" for name, text in copy.items()),
-        claims=_claims_block(truth_context(truth)),
+        claims=claims_block(truth_context(truth)),
     )
     extracted = await gateway.structured(
         ExtractedStatements,
@@ -126,6 +128,8 @@ async def check_copy(
     """Extract, then run every gate. A failed extraction is a `gate_error` block, never a pass."""
     try:
         statements = await extract_statements(gateway, prompts, ctx, copy, truth)
+    except BudgetExceeded:
+        raise  # the run's caps, not a fault of the copy: the run ends partial (Rules.md C4)
     except Exception as e:
         log.exception("claim extraction failed; blocking the copy")
         sector = truth.sector.describe() if truth.sector is not None else "no sector"

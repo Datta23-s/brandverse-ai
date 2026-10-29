@@ -358,6 +358,38 @@ def _superlatives(
     return findings
 
 
+def required_disclaimers(copy: Mapping[str, str], truth: ProductTruth, on: date) -> list[str]:
+    """The required disclaimers the registry puts on this copy, as the registry words them, in rule
+    order. A disclaimer is required when its rule is active for the sector and either has no trigger
+    or its trigger matches the copy; one disclaimer's wording can trigger another, so this adds them
+    until nothing more applies. The copy writer APPENDS these verbatim (a model never writes them,
+    Architecture.md section 8.1); the gate then finds them present, and a rule that cannot be
+    applied raises `RegistryRuleInvalid`, which the caller treats as a block."""
+    if truth.sector is None:
+        return []
+    rules = [
+        r
+        for r in truth.rules
+        if r.kind == "required_disclaimer"
+        and r.disclaimer_text is not None
+        and r.sector_id == truth.sector.id
+        and r.is_active(on)
+    ]
+    added: list[str] = []
+    while True:
+        text = _copy_text({**copy, "_added": "\n".join(added)})
+        new = [
+            r.disclaimer_text
+            for r in rules
+            if r.disclaimer_text is not None
+            and r.disclaimer_text not in added
+            and (r.pattern is None or matches_rule(text, r.match_type, r.pattern))
+        ]
+        if not new:
+            return added
+        added.append(new[0])
+
+
 def _registry(copy: str, truth: ProductTruth, on: date) -> tuple[list[Finding], tuple[str, ...]]:
     findings: list[Finding] = []
     coverage = check_registry_coverage(truth.sector, truth.rules, on)

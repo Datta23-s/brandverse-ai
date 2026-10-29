@@ -12,7 +12,7 @@ findings it reasons over is a decision for chunk B, where the first agent that n
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date
 from typing import Any
 from uuid import UUID
@@ -20,12 +20,23 @@ from uuid import UUID
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from app.core.gates import GateReport
+from app.agents.base import AgentContext
+from app.core.claim_classifier import extract_statements
+from app.core.gates import GateReport, Statement
 from app.core.truth import ProductTruth, load_product_truth
 from app.errors import ExtractionFailed, FetchError
+from app.llm.gateway import LLMGateway
+from app.llm.prompts import PromptLibrary
 from app.memory.scoring import SourceScoring
 from app.memory.writeback import MemoryStage, WritebackEncoder, write_memory
-from app.orchestrator.deps import LoadContext, ProductContext, Research, ResearchResult, WriteMemory
+from app.orchestrator.deps import (
+    ExtractStatements,
+    LoadContext,
+    ProductContext,
+    Research,
+    ResearchResult,
+    WriteMemory,
+)
 from app.orchestrator.state import Depth, RunState
 from app.research.driver import Mode, research
 from app.research.extraction import Extractor
@@ -60,6 +71,16 @@ class PageEvidence:
             ).text
         except ExtractionFailed:
             return None
+
+
+def classifier_extractor(gateway: LLMGateway, prompts: PromptLibrary) -> ExtractStatements:
+    """Step 11's extraction over the claim classifier (`claim_extract@v1`). The call is made as A7,
+    in the step's own execution, so a re-run of the step is told apart in the call log."""
+
+    async def run(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
+        return await extract_statements(gateway, prompts, ctx.call_context("A7"), copy, ctx.truth)
+
+    return run
 
 
 def pool_context_loader(pool: AsyncConnectionPool[AsyncConnection]) -> LoadContext:

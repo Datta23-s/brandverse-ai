@@ -12,6 +12,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.agents.base import Agent, AgentContext
+from app.agents.outputs import CreativeOutput
+from app.core.gates import Statement
 
 
 class ProductBrandOutput(BaseModel):
@@ -33,19 +35,6 @@ class Persona(BaseModel):
 
 class CustomerOutput(BaseModel):
     personas: list[Persona]
-
-
-class CopyStatement(BaseModel):
-    text: str
-    claim_id: str | None
-    labelled_deduction: bool = False
-
-
-class CreativeOutput(BaseModel):
-    copy_: dict[str, str] = Field(alias="copy")
-    statements: list[CopyStatement]
-
-    model_config = {"populate_by_name": True}
 
 
 class RiskOutput(BaseModel):
@@ -85,11 +74,14 @@ class MockA6:
 
     async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> CreativeOutput:
         claims = ctx.truth.active("verified")
-        text = " ".join(c.text.rstrip(".") + "." for c in claims)
-        return CreativeOutput(
-            copy={"headline": text},
-            statements=[CopyStatement(text=c.text, claim_id=c.id) for c in claims],
-        )
+        return CreativeOutput(copy={"headline": " ".join(c.text.rstrip(".") + "." for c in claims)})
+
+
+async def lexical_extractor(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
+    """A stand-in for the claim classifier: a statement for each active verified claim whose text
+    appears in the copy, citing that claim. No model, deterministic."""
+    text = "\n".join(copy.values())
+    return [Statement(c.text, c.id) for c in ctx.truth.active("verified") if c.text in text]
 
 
 class MockA7:

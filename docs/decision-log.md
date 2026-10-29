@@ -801,6 +801,9 @@ the checkpointed state (completed or blocked), without committing the dead proce
 
 ### 7.9 Other closed defects
 - A password leaking into a settings validation error.
+- `check_copy` turned a `BudgetExceeded` into a `gate_error` block, so a run out of budget at step 11
+  would have shown the approver a "blocked" draft instead of ending `partial` (Rules.md C4). It now
+  re-raises. Found 2026-10-29 wiring step 11; no earlier test pinned the old behaviour.
 - Step 15's refused-candidates audit row was written once per execution, so a re-run step would have
   written it twice (audit rows cannot be deleted). Now one per run. Found 2026-10-29 in the re-execution audit.
 - `Architecture.md` §4.4 said `runs.status` had no database CHECK; it had one since 0015. Found 2026-10-29
