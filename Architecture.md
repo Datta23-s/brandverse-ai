@@ -248,7 +248,15 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-17 10:35 | `scripts/llm_smoke.py` (cap 2) | local `brandverse_e2e` | 1 | 0 | 0 |
 | 2026-10-18 02:22–02:29 | `scripts/v2_probe.py` (cap 10; approved: 10 strong) | local `brandverse_v2_probe` | 0 | 0 | 10 |
 | 2026-10-18 02:58–11:07 | `scripts/schema_confirm.py` (cap 3 across runs; approved: 3 cheap) | local `brandverse_v2_probe` | 3 | 0 | 0 |
-| **Total** | | | **4** | **0** | **10** |
+| 2026-10-29 17:33 | `scripts/chunk_b_live.py` (cap 6; approved: 6 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 4 | 0 |
+| 2026-10-29 17:35 | `scripts/chunk_b_a7_probe.py` (cap 1, within the same 6) | local `brandverse_chunk_b` | 0 | 1 | 0 |
+| **Total** | | | **4** | **5** | **10** |
+
+2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
+rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227
+out, A6 505 / 83, the claim classifier 418 / 124, A7 445 / 5 (copy clean: no flags), $0.0016 list price in all; then one A7
+call on a PLANTED copy, 443 / 238. The run parked at the approval step as designed. Outputs:
+`evaluation/probes/chunk_b_live_20261029T173345Z.json`, `chunk_b_a7_planted_20261029T173528Z.json`. One call of the six remains.
 
 2026-10-18, V2 probe: all ten strong-tier calls ended `error` and produced no result — eight
 `400 INVALID_ARGUMENT`, one client timeout at 90 s, one `503 UNAVAILABLE`. Whether Google counted

@@ -529,6 +529,16 @@ OPINION, not a detector: it flags and never blocks, is stored apart from the gat
 (`validation["advisory"]`), drops flags whose quote is not in the copy, and does not change `Rules.md` T5
 (unmet) or threat V3 (amended in `docs/evaluation-plan.md`). A1 and A2 are still mocks.
 
+**Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
+(`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One
+run at D0 on a non-regulated product in a throwaway tuning organisation: the real A3, A6, classifier and
+A7 read produced a copy that passed every gate with no findings, the classifier cited both claims
+correctly, and the run parked at the approval step. Observed, not concluded from: both personas came back
+with an empty `channels` list although their summaries name a discovery channel (a prompt-quality note
+for a v2). A7 flagged nothing on clean copy, and on one deliberately PLANTED copy (four anti-patterns,
+written for the test) it flagged all four with exact quotes and dropped none. That is the easy case,
+one sample: it says the quote guard has real output to work on and nothing about the miss rate.
+
 ---
 
 ## Phase 7 — Adaptive Intelligence

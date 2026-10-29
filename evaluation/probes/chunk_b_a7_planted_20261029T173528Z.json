@@ -1,0 +1,53 @@
+{
+ "date_utc": "2026-10-29T17:35:28.428544+00:00",
+ "planted_copy": {
+  "headline": "Only 3 pairs left today - don't miss out!",
+  "body": "Join 10,000 happy runners. Everyone is buying these. Was Rs 9,999, now Rs 2,999. Click 'No thanks, I'd rather keep running slow' to leave."
+ },
+ "note": "PLANTED copy written to show four anti-patterns; not model output",
+ "expected_categories": [
+  "confirmshaming",
+  "fabricated_social_proof",
+  "false_scarcity",
+  "price_anchoring"
+ ],
+ "result": {
+  "source": "model_opinion",
+  "advisory_only": true,
+  "flags": [
+   {
+    "category": "false_scarcity",
+    "quote": "Only 3 pairs left today - don't miss out!",
+    "note": "Creates invented urgency and limited supply without any supporting basis."
+   },
+   {
+    "category": "fabricated_social_proof",
+    "quote": "Join 10,000 happy runners. Everyone is buying these.",
+    "note": "Uses customer counts and general popularity claims that the copy cannot support."
+   },
+   {
+    "category": "price_anchoring",
+    "quote": "Was Rs 9,999, now Rs 2,999.",
+    "note": "Uses a crossed-out or prior price discount presented as fact without proof."
+   },
+   {
+    "category": "confirmshaming",
+    "quote": "No thanks, I'd rather keep running slow",
+    "note": "Uses wording that shames the user for declining the offer."
+   }
+  ],
+  "dropped_unverifiable": 0
+ },
+ "calls": [
+  [
+   "A7",
+   "11",
+   "standard",
+   "a7_risk",
+   "ok",
+   "443",
+   "238"
+  ]
+ ],
+ "error": null
+}
