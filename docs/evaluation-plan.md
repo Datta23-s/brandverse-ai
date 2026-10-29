@@ -164,8 +164,9 @@ pages are replayed from the frozen snapshot, so web time is removed from every a
 wall-clock latency reduction is unmeasurable. It is NOT fixed with a live, non-replayed run: that would
 reintroduce exactly the confound replay exists to remove. Instead: **(a) measured directly, per arm per
 request:** searches issued and pages fetched (SRR is the search part of this). **(b) measured separately,
-once:** the unit costs, seconds per search and per page fetch at the declared concurrency, taken from the
-recording itself, which is real web time under real conditions (the concurrency, the declared engine set and
+once:** the unit costs, seconds per search (serial) and, for pages, the fetch WALL time per page fetched at the
+declared concurrency (amended 2026-10-29: not a per-fetch duration, which eight concurrent fetches make larger
+than the time a page costs), taken from the recording itself, which is real web time under real conditions (the concurrency, the declared engine set and
 the politeness delay are reported with them). **(c) derived:** estimated time saving = (count difference) x
 (unit cost), reported as a **derivation with its inputs and never as an observed latency**. Model time
 (LLM calls, rate-limit waits recorded separately) is not replayed and IS observed; so LR is reported in two
@@ -2126,41 +2127,74 @@ only"). The partial store was backed up and verified byte for byte (1,683 files;
 frozen failures replayed identically). **The pacer fix behaved: 0 rate-refused searches, 9 degraded-not-throttled,
 final gap 120 s as it started.**
 
-| Unit cost, as recorded | n | median | mean | p90 | max |
+| Per-fetch durations as recorded (DESCRIPTIVE: not an LR input for pages) | n | median | mean | p90 | max |
 |---|---|---|---|---|---|
 | Per search (s) | 63 | 3.41 | 3.54 | | 5.05 |
 | Per page fetch, all (s) | 2,168 | 6.59 | **11.72** | 32.89 | 60.38 |
 | Per page fetch, fetched OK (s) | 1,680 | 6.36 | 10.03 | 25.20 | 57.92 |
 | Per page fetch, frozen failed (s) | 488 | 8.50 | 17.52 | 52.83 | 60.38 |
 
-*The estimator.* The derived web time is a count difference times a unit cost, an expected total, and for a
-right-skewed distribution (mean 1.8 times the median) the median underestimates a total. So **the mean is the
-estimator** (3.54 s a search, 11.72 s a page fetch, failed fetches included: they cost time in every arm). **Both
-are reported**, because LR is derived rather than measured and the choice moves the page part by a factor of 1.78:
+*Which of these is LR's input — RULED 2026-10-29 (owner), and why it is not the per-fetch duration.* Pages are
+fetched eight at a time, so skipping 1,000 pages does not save 1,000 per-fetch durations (11.72 s each); dividing
+by the concurrency is a model with its own errors (stragglers, idle slots at the tail), and the factor between
+duration and wall time is not 8. **LR's page component is therefore the total fetch WALL time divided by the pages
+fetched, measured from the recording itself**, which contains the concurrency, the stragglers and the tail without
+modelling any of them; and it makes the mean-versus-median question moot for pages, because a wall-clock total
+already contains the distribution. The per-fetch table above is **descriptive, not an LR input.** The
+mean-versus-median sensitivity is kept for the **search** component, where searches are serial and the duration
+is the wall time:
 
-| Derived web time per 1,000 pages fewer | Mean (the estimator) | Median (sensitivity) |
+| Search component (serial; duration = wall time) | Mean (the estimator) | Median (sensitivity) |
 |---|---|---|
-| Seconds | 11,720 | 6,590 |
-| Hours | 3.26 | 1.83 |
+| Seconds per search | 3.54 | 3.41 |
+| Per 1,000 searches fewer | 59.0 minutes | 56.8 minutes |
 
-The search part moves by 4% between the two (3.54 against 3.41 s a search), so it does not matter which is used
-there. Every LR figure is stated under both, with these three numbers (median, mean, p90) beside it.
+*The page figure is not yet measured, and why — found while computing it.* The committed lines carry the time a
+request committed and the time of its last live search, not the time its fetching took, so the fetch wall time of
+R01 to R12 was not recorded. The nearest figure they allow is the time from the last search to the commit, and it
+**is not a fetch wall time and must not be used as one**:
+
+| R01 to R12, last search to commit | |
+|---|---|
+| Total | 4,614 s over 2,168 pages fetched live = 2.13 s a page (the trial's ~0.65 s a page, 165 s for ~252 pages, is the same kind of figure as far as the record shows) |
+| Per request | 0.86 to 11.30 s a page; the four requests that reused almost all their pages (32 to 45 fetched) took 339 to 388 s each |
+| Against pages fetched | wall = 370 s + 0.08 s x pages, **R² = 0.01**: it does not scale with the pages fetched |
+
+The reason is that the driver extracts **every distinct page of the request** (about 320), the stored ones as well
+as the new ones, between the last search and the commit. Replaying 150 stored pages through the extractor took 0.41
+s a page on this machine (61 s for 150), so extraction alone is of the order of 130 s a request, which is
+the same whether the request fetched 32 pages or 319; the commit write and the rest are in the same interval. That
+interval is therefore mostly **not web time**, and a count difference times a quotient taken from it would credit
+the Proposed arm with saving extraction time that skipping fetches does not save. The same holds for the trial's
+0.65 s a page (about 165 s for ~252 pages, of which about 100 s would be extraction at 0.41 s a page, if it was
+taken over the same interval; its report does not say): it is an upper bound containing non-web work, not a web cost, and neither it nor 2.13 s is LR's input.
+
+*What was changed to measure it (2026-10-29, before R13 is recorded).* Each committed line now carries
+`fetch_wall_s` (the first live fetch's start to the last one's end in that request: concurrency, stragglers,
+politeness waits and retry backoff in; extraction and the commit write out) and `pages_fetched_live`. **LR's page
+component is the sum of `fetch_wall_s` over the sum of `pages_fetched_live`**, stated with the concurrency (8) and
+the configuration it was measured under: the recorded engine set, the 5 MB cap, the agent string, the per-host
+politeness delay (1 s) and the fetch timeout (10 s). **R01 to R12 predate the instrument and have no such
+figure; it cannot be recovered**, so the figure rests on the requests recorded after it (R13 to R30), and the
+proxy above is reported as a bound, never as the estimate. Because the requests recorded later reuse more
+pages, they fetch fewer new ones, and the figure is a pooled quotient of two sums, not a mean of per-request
+quotients. This measures the fetch pool's wall time with the extraction running on the same machine beside it,
+which is how a live system would run; the interval can still include time spent behind extraction's thread, and
+that is reported, not removed.
 
 *The assumption, and why the recording says it is wrong.* The derivation assumes the pages an arm skips are a
-random draw from the whole population of pages. **They are not, in this recording, and the data say so:** the
-per-request median page time ran from 3.06 s to 21.41 s across the 12 requests, and the requests that reused
-most of their pages (R03, R06, R09 and R12 fetched only 32 to 45 pages each) were left holding the slow and
-failing hosts, with medians of 10.8 to 21.4 s, while R01 (a full set of new pages) came in at 3.66 s. An arm that
-fetches fewer pages may be skipping systematically different pages (the cheap ones, or the dear ones), not a
-sample. **This is a limitation of the derivation and is stated in the write-up beside LR:** the mean times a
-count difference is the right total only if the skipped pages cost what an average page costs, and nothing here
-shows they do. The one-request trial's 2.96 s median per page was the cheapest possible composition (one request
-against an empty store) and is not a unit cost.
+random draw from the whole population of pages. **They are not, in this recording:** the per-request median
+per-fetch time ran from 3.06 s to 21.41 s across the 12 requests, and the requests that reused most of their pages
+(R03, R06, R09 and R12 fetched only 32 to 45 pages each) were left holding the slow and failing hosts (medians of
+10.8 to 21.4 s), while R01, with a full set of new pages, came in at 3.66 s. An arm that fetches fewer pages may
+be skipping systematically different pages, not a sample. **This is a limitation of the derivation, stated in the
+write-up beside LR.** A second one follows from the ruling: the wall time per page is the pooled figure for the
+recorded mix, and a wall-clock total with a fixed tail does not scale linearly with the count, so a count
+difference times that quotient is an approximation whose error grows with how far an arm's counts are from the
+recorded ones.
 
-Two further things a reader of LR must be told. The per-page seconds are per-fetch durations measured with eight
-fetches in flight; whether a derived time divides by that concurrency is part of the derivation and is reported
-with it, not hidden in it. And the unit cost is configuration-dependent (the paragraph above): these are the
-costs under this declared set, this enabled list, the 5 MB cap and this agent string.
+The unit cost is configuration-dependent (the paragraph above): these are the costs under this declared set,
+this enabled list, the 5 MB cap, this agent string and concurrency 8.
 
 *Failure rate, the comparable figure.* **488 of 2,168 pages fetched live failed: 22.5%** (the trial: 21%): HTTP 403
 x215 (9.9%), robots refusal x111 (5.1%), timeout x54, robots.txt unreachable x47, HTTP 404 x18, PDF x14, and the

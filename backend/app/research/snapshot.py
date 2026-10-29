@@ -369,6 +369,21 @@ class CaptureTally:
     degraded_causes: dict[str, int] = field(default_factory=dict)
     search_seconds: list[float] = field(default_factory=list)
     page_seconds: list[float] = field(default_factory=list)
+    # First live fetch started to last live fetch finished (monotonic seconds), the request's
+    # fetching as the clock saw it: concurrency, stragglers, politeness waits and retry backoff
+    # included, extraction and the commit write not (owner, 2026-10-29: LR's page component).
+    fetch_first_s: float | None = None
+    fetch_last_s: float | None = None
+
+    @property
+    def fetch_wall_s(self) -> float | None:
+        if self.fetch_first_s is None or self.fetch_last_s is None:
+            return None
+        return self.fetch_last_s - self.fetch_first_s
+
+    @property
+    def pages_fetched_live(self) -> int:
+        return self.pages_new_ok + self.frozen_failed_permanent + self.frozen_failed_transient
 
     @property
     def searches_rate_refused(self) -> int:
@@ -516,8 +531,18 @@ class RecordingPages:
                 if stored is not None
                 else self._staged_page(known, clean)
             )
+        started = time.monotonic()
+        try:
+            return await self._fetch_live(canon, clean)
+        finally:
+            t = self._tally
+            now = time.monotonic()
+            t.fetch_first_s = started if t.fetch_first_s is None else min(t.fetch_first_s, started)
+            t.fetch_last_s = now if t.fetch_last_s is None else max(t.fetch_last_s, now)
+
+    async def _fetch_live(self, canon: str, clean: str) -> FetchedPage:
         attempts = 0
-        spent = 0.0  # seconds inside the fetcher; the retry backoff is not a cost of the page
+        spent = 0.0
         while True:
             attempts += 1
             began = time.monotonic()
@@ -684,6 +709,10 @@ async def record_request(
             "frozen_failed": frozen_failed,
             "retries_used": tally.retries_used,
             "retries_bound": retries,
+            # the request's fetching on the clock, and the pages it was spread over: LR's page
+            # component is the sum of the first over the sum of the second (owner, 2026-10-29)
+            "fetch_wall_s": None if tally.fetch_wall_s is None else round(tally.fetch_wall_s, 1),
+            "pages_fetched_live": tally.pages_fetched_live,
             "searches_new": tally.searches_new,
             "searches_reused": tally.searches_reused,
             "searches_carried": tally.searches_carried,

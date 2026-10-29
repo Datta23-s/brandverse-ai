@@ -467,3 +467,41 @@ async def test_a_pages_recorded_seconds_exclude_the_retry_backoff(tmp_path):
     )
     entry = store.page_entry("r1-0.example/p")
     assert entry["attempts"] == 2 and entry["elapsed_s"] < 0.15  # two quick attempts, 0.3 s backoff
+
+
+async def test_a_committed_request_records_the_clock_time_of_its_live_fetching(tmp_path):
+    """LR's page component is measured, not modelled (owner, 2026-10-29): the committed line carries
+    the first live fetch's start to the last one's end, and how many pages that spread over."""
+    store = SnapshotStore.create(tmp_path / "evaluation-snapshot")
+    plan = plan_for()
+    report = await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls_for(plan)),
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=0,
+        today=TODAY,
+    )
+    line = store.committed["R01"]
+    assert report.outcome == "committed" and line["pages_fetched_live"] == 16
+    assert line["fetch_wall_s"] is not None and line["fetch_wall_s"] >= 0
+    # a second request whose pages are all stored fetches nothing live: no wall time to report
+    again = await record_request(
+        "R02",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls_for(plan)),
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=0,
+        today=TODAY,
+    )
+    assert again.outcome == "committed"
+    assert store.committed["R02"]["pages_fetched_live"] == 0
+    assert store.committed["R02"]["fetch_wall_s"] is None
