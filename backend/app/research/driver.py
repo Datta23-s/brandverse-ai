@@ -203,7 +203,7 @@ async def research(
             if mode is Mode.RECORD:
                 raise RequestAborted(f"query {q.rank} unavailable: {e}", outcome=outcome) from e
             continue
-        if mode is Mode.RECORD and response.degraded:
+        if mode is Mode.RECORD and not response.complete:
             outcome.queries.append(QueryRun(q, "ok", len(response.results), degraded=True))
             raise RequestAborted(f"query {q.rank} answered degraded", outcome=outcome)
         considered = response.results if cap is None else response.results[:cap]

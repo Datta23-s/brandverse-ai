@@ -64,7 +64,7 @@ class TeeSearch:
         began = asyncio.get_running_loop().time()
         response = await self._inner.search(query, limit=limit)
         self.elapsed.append(asyncio.get_running_loop().time() - began)
-        if not response.degraded:
+        if response.complete:
             self.answers[query] = [
                 {"url": r.url, "title": r.title, "snippet": r.snippet, "engines": list(r.engines)}
                 for r in response.results

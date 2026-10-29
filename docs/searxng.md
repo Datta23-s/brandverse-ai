@@ -199,6 +199,44 @@ other; read the pricing page and the terms yourself before relying on any of it.
   a day including a real call. Its answer would have no `unresponsive_engines`; its failure mode is
   a plain 429, which the provider interface already handles.
 
+## Session 3's 18 unanswered searches, and yahoo (diagnosed 2026-10-29)
+
+Of 81 attempts in recording session 3 (2026-10-29 03:10-05:58 UTC), 63 died on a degraded search (yahoo 63) and 18 on
+"none of the four declared engines answered" (13 at 04:57-05:21, 2 at 05:27-05:29, 3 timeouts at 05:32, 05:34 and
+05:44).
+
+**The 18 were the laptop's network, not the engines and not the container.** The container was up the whole time and
+never restarted (a log line every two minutes; HTTP 200 with `unresponsive_engines`). At 04:57:58 UTC 14 engines
+failed in the same second with `ConnectionError: the server has disconnected` and `DNSError` from inside the
+container (227 DNS errors in the window), which no single-engine fault produces. Every window sits on the host's Wi-Fi
+(Intel AX201, `Airtel_Kundan_5G`): disconnect/reconnect cycles at 04:57:47, 04:58:10, 04:58:50, 05:23:52, 05:27:36,
+05:30:26 (WLAN AutoConfig: "limited connectivity"), 05:31:35 and 05:45:56, and Modern Standby entered 05:03:49 and
+05:32:37 (reason "Idle Timeout") although the AC sleep timer is 0 and the laptop was on AC. The failures outlast the
+Wi-Fi events (04:59-05:23 logged none while every attempt failed, and attempts failed 20 s after a reconnect at
+05:27:39), which fits the container's DNS path staying dead until the next network change. **Not established:**
+whether the stale path is WSL2/Docker NAT or the adapter, and the 05:44 failure precedes the first logged Wi-Fi event
+by about 50 s. Also unexplained: why Modern Standby engages on AC with the sleep timer at 0 (the keep-awake request is
+accepted but does not stop it), though the 03:45-04:58 standby did not break the network.
+
+**Remedy, and the residual risk accepted (owner, 2026-10-29).** One change on the host: switch off "Allow the computer
+to turn off this device to save power" on the AX201 (Device Manager, Power Management tab; reversible), and use
+Ethernet when a cable is available. Modern Standby is **not** touched: it entering on AC with the timers at zero is
+unexplained, and registry changes against a behaviour not understood are disproportionate to the risk. The residual is
+small, for three recorded reasons: (1) the dark-period ceiling is 90 minutes of no clean search, and the longest
+network gap found was 24 minutes (04:57-05:21); (2) the fixed backoff retries about every two minutes, so a session
+resumes by itself when the network returns; (3) the ceiling fired in session 3 because yahoo failed for the whole
+session, not because of the Wi-Fi, and the three-of-four rule removes that cause. A typical Wi-Fi drop now costs
+minutes, not a session. It does not cover a drop longer than 90 minutes, or yahoo failing together with a second
+engine (yandex timed out in a probe on 2026-10-29): three of four then fails to hold. A three-of-four rule does not
+help the network itself: when it drops, all four engines fail.
+
+**Yahoo is a defect in the pinned image, not an outage, and has no config-only fix.** 52 `SearxEngineXPathException`s
+in the window, all at `searx/engines/yahoo.py` line 227: `eval_xpath_getindex(result, './/div[contains(@class,
+"compText")]', 0)` is called with no default, so a single result row without a description block raises and the engine
+returns nothing for that search. It is query-dependent: yahoo answered with rows in a probe on 2026-10-29 and failed
+every attempt at the same query in session 3. The selector is code in the image, not a setting. Patching the file in
+the running container, or bumping the image, would change the recorded engine behaviour mid-recording and was not done.
+
 ## Not verified
 
 - A real response recorded as a fixture (above).

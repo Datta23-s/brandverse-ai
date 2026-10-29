@@ -185,6 +185,8 @@ class SessionReport:
         default_factory=list
     )  # also counting answers from other requests
     degraded_causes: dict[str, int] = field(default_factory=dict)
+    searches_recorded_with_failure: int = 0  # complete (3+ declared engines) with one named failed
+    searches_by_declared_answering: dict[int, int] = field(default_factory=dict)
     pages_new_ok: int = 0
     pages_reused: int = 0
     pages_frozen_failed: int = 0
@@ -265,6 +267,10 @@ class SessionReport:
             "search_span_all_s": _stats(self.spans_all_s),
             "degraded_search_rate": self.degraded_search_rate,
             "degraded_causes": dict(sorted(self.degraded_causes.items())),
+            "searches_recorded_with_failure": self.searches_recorded_with_failure,
+            "searches_by_declared_answering": {
+                str(n): c for n, c in sorted(self.searches_by_declared_answering.items())
+            },
             "achieved_clean_per_hour": self.achieved_clean_per_hour,
             "pages_total": self.pages_total,
             "pages_new_ok": self.pages_new_ok,
@@ -296,6 +302,10 @@ def _add(report: SessionReport, tally: CaptureTally) -> None:
     report.retries_used += tally.retries_used
     for engine, n in tally.degraded_causes.items():
         report.degraded_causes[engine] = report.degraded_causes.get(engine, 0) + n
+    report.searches_recorded_with_failure += tally.searches_recorded_with_failure
+    for answering, n in tally.searches_by_declared_answering.items():
+        by_count = report.searches_by_declared_answering
+        by_count[answering] = by_count.get(answering, 0) + n
 
 
 async def record_session(

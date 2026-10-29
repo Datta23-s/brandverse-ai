@@ -1625,6 +1625,43 @@ down for 90 minutes.** The owner's ruling is that the ceiling is fine once the b
 the case it is still there for. Proof the tests hold the rule: with the old rule restored (every abort doubles)
 three of them fail; with it, they pass.
 
+### A search is complete when three of the four declared engines answer (owner, 2026-10-29)
+
+*Ruled 2026-10-29.* A search is **complete for recording** when at least three of the four declared engines (yep,
+yandex, yahoo, duckduckgo web) answered **with rows**; a declared set smaller than three needs every engine. It was
+"all four, none named as failed". `SearchResponse.complete` carries the rule; `degraded` (any declared engine named
+as failed) is unchanged and still drives production behaviour, so a complete search can be degraded.
+
+*Why.* One chronically failing engine stalled the recording for 2 h 49 m (sessions 2 and 3) with **zero captures**.
+Requiring all four engines on every search was never the right definition of a complete search: it made the whole
+recording as unreliable as its weakest engine.
+
+*It is not simply a relaxation: it replaces a rule that could be satisfied by silence.* The old rule checked that
+**no declared engine was named as failed**. An engine that answers with nothing is not named, so a search where one
+declared engine silently returned no rows passed it as "all four". That is not hypothetical: R01 holds such a search
+(yep, no rows, not named as failed), so the old rule was never enforcing four-of-four. The new rule counts the
+declared engines that **contributed rows**. It is stricter in that dimension (an engine that returns nothing no longer
+counts as answering, named or not) and looser in the other (one engine may be absent). A threshold of three
+contributing engines is not a weaker version of "none failed"; it is a different test.
+
+*What it does not change.* The declared **set** is unchanged, so the cache key is unchanged, R01-R12 stay valid,
+nothing is re-recorded, and the 12-request backup stands. The SearXNG image stays pinned at
+`2026.10.19-81371861f` (digest in `docs/searxng.md`): the image version is a recorded parameter of every search in the
+store, and changing it mid-recording would make R01-R12 and R13-R30 incomparable in a way a lower threshold does not.
+A config-only yahoo fix does not exist (`docs/searxng.md`, "Session 3's 18 unanswered searches").
+
+*The snapshot is inhomogeneous, and says so.* Every new search entry records `declared_contributing` (the declared
+engines that returned rows) and `declared_failed` (the engines SearXNG named, with the reason);
+`SnapshotStore.engine_coverage()`, in the manifest and in each capture report, gives the distribution, derived from
+the stored rows so R01-R12 are counted the same way. **As stored today: 63 searches, 62 with four declared engines
+and 1 with three** (R01, "what college students who commute and work out look for when buying neckband earphones":
+yep returned no rows and was not named as failed). The earlier statement that every captured search had all four
+answering was therefore off by that one search, which meets the new bar. **R13-R30 are captured while yahoo is
+failing** (from 18:40 UTC on 2026-10-28 it has been failing on most searches), so their searches draw on three
+declared engines where R01-R12 drew on four, except where yahoo happened to answer; the per-request count of
+three-engine searches is `searches_below_full_by_request`. This is the same for every arm, so it is not a
+confound, but a reader comparing R01-R12 with R13-R30 should know it.
+
 ### The seven-engine hold (owner order 2026-10-28; registered before it starts)
 
 *Registered 2026-10-28, committed before the first search of the hold; the burst and the single

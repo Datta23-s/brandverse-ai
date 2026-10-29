@@ -76,7 +76,7 @@ class LiveSearch:
             raise self.raise_on[rank]
         return SearchResponse(
             [
-                SearchResult(url=u, title="t", snippet="s", engine="yep", engines=("yep",))
+                SearchResult(url=u, title="t", snippet="s", engine="yep", engines=DECLARED)
                 for u in self.urls.get(rank, [])
             ][:limit],
             declared_engines=DECLARED,

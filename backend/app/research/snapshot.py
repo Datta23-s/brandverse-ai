@@ -32,8 +32,9 @@ any point leaves nothing visible, and the request is simply captured again.
 as an outcome: every arm sees the same refusal, and a cited source returning 404 is a fact about
 that source. A transient failure (timeout, network error, 5xx, 429) is retried at most
 `research.snapshot_page_retries` more times, the attempts recorded, then frozen as failed. The share
-frozen as failed is reported per request. A degraded search is never recorded (the driver aborts the
-request in RECORD mode).
+frozen as failed is reported per request. An incomplete search is never recorded (the driver aborts
+the request in RECORD mode): complete means at least three declared engines answered with rows
+(owner, 2026-10-29), and each entry says which did.
 
 **Unit costs come from the recording itself.** Each search and page entry carries the seconds it
 took live, which is where the derived web time of LR gets its inputs.
@@ -236,6 +237,34 @@ class SnapshotStore:
         shutil.rmtree(staging.root, ignore_errors=True)
         self._load()
 
+    def engine_coverage(self) -> dict[str, Any]:
+        """How many declared engines contributed rows to each captured search, and to which
+        requests the three-engine searches belong (owner, 2026-10-29: the snapshot is
+        inhomogeneous and a reader should see it). Derived from the stored rows, so a search
+        captured before the entry carried `declared_contributing` is counted the same way."""
+        by_count: dict[int, int] = {}
+        per_engine: dict[str, int] = {}
+        below_full: dict[str, int] = {}
+        for entry in self._searches.values():
+            declared = tuple(entry.get("declared") or ())
+            seen = {
+                e.casefold()
+                for r in entry["results"]
+                for e in (*r["engines"], *([r["engine"]] if r["engine"] else []))
+            }
+            answering = sorted(seen & set(declared))
+            by_count[len(answering)] = by_count.get(len(answering), 0) + 1
+            for e in answering:
+                per_engine[e] = per_engine.get(e, 0) + 1
+            if len(answering) < len(declared):
+                below_full[entry["request"]] = below_full.get(entry["request"], 0) + 1
+        return {
+            "searches": len(self._searches),
+            "by_declared_answering": {str(n): c for n, c in sorted(by_count.items(), reverse=True)},
+            "per_engine_searches": dict(sorted(per_engine.items())),
+            "searches_below_full_by_request": dict(sorted(below_full.items())),
+        }
+
     def manifest_summary(self) -> dict[str, Any]:
         """What the repository records about the store: counts, a hash over the three index files,
         and the date range. Never a body."""
@@ -268,6 +297,7 @@ class SnapshotStore:
             "pages": len(self._pages),
             "pages_ok": sum(1 for p in self._pages.values() if p["outcome"] == "ok"),
             "pages_frozen_failed": sum(1 for p in self._pages.values() if p["outcome"] == "failed"),
+            "engine_coverage": self.engine_coverage(),
             "sha256": digest.hexdigest(),
             "first_committed_utc": stamps[0] if stamps else None,
             "last_committed_utc": stamps[-1] if stamps else None,
@@ -367,6 +397,10 @@ class CaptureTally:
     # (owner, 2026-10-28). The rest are service faults from one engine.
     searches_degraded_rate_refused: int = 0
     degraded_causes: dict[str, int] = field(default_factory=dict)
+    # Recorded searches with a declared engine named as failed (complete all the same), and every
+    # new search by how many declared engines contributed rows.
+    searches_recorded_with_failure: int = 0
+    searches_by_declared_answering: dict[int, int] = field(default_factory=dict)
     search_seconds: list[float] = field(default_factory=list)
     page_seconds: list[float] = field(default_factory=list)
     # First live fetch started to last live fetch finished (monotonic seconds), the request's
@@ -460,7 +494,7 @@ class RecordingSearch:
                 self._pace.fault()
             raise
         elapsed = round(time.monotonic() - began, 3)
-        if response.degraded:
+        if not response.complete:
             refusing = rate_refusing_engines(response.failed_engines)
             if self._pace is not None:
                 self._pace.rate_refusal() if refusing else self._pace.fault()
@@ -472,7 +506,16 @@ class RecordingSearch:
                 causes[failure.engine] = causes.get(failure.engine, 0) + 1
             return response  # not staged
         if self._pace is not None:
-            self._pace.clean()
+            # A recorded search a declared engine rate-refused still tells the pacer to slow down.
+            if rate_refusing_engines(response.failed_engines):
+                self._pace.rate_refusal()
+            else:
+                self._pace.clean()
+        if response.degraded:
+            self._tally.searches_recorded_with_failure += 1
+        answering = len(response.declared_answering)
+        by_count = self._tally.searches_by_declared_answering
+        by_count[answering] = by_count.get(answering, 0) + 1
         self._tally.searches_new += 1
         self._tally.search_seconds.append(elapsed)
         self._staging.searches[key] = {
@@ -481,6 +524,10 @@ class RecordingSearch:
             "declared": list(self._declared) if self._declared else None,
             "fetched_utc": _utc(),
             "elapsed_s": elapsed,
+            # Which declared engines contributed rows and which were named as failed (owner,
+            # 2026-10-29: a search is complete with 3 of 4, so the snapshot says which 3).
+            "declared_contributing": list(response.declared_answering),
+            "declared_failed": [[f.engine, f.reason] for f in response.failed_engines],
             "results": [
                 {
                     "url": r.url,

@@ -42,6 +42,9 @@ from app.core.config import Settings
 from app.errors import SearchRateLimited, SearchUnavailable
 
 MAX_LIMIT = 50
+# A search is complete for recording when this many declared engines answered with rows. The
+# declared SET, and so the cache key, is unchanged by it (docs/evaluation-plan.md section 8).
+MIN_DECLARED_ANSWERING = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +104,26 @@ class SearchResponse:
     @property
     def degraded(self) -> bool:
         return bool(self.failed_engines)
+
+    @property
+    def declared_answering(self) -> tuple[str, ...]:
+        """The declared engines that contributed at least one row, sorted. Nothing declared: every
+        engine seen."""
+        if self.declared_engines is None:
+            return self.engines_seen
+        return tuple(sorted({e.casefold() for e in self.engines_seen} & set(self.declared_engines)))
+
+    @property
+    def complete(self) -> bool:
+        """Whether the answer is a complete search FOR RECORDING (owner, 2026-10-29): at least
+        `MIN_DECLARED_ANSWERING` of the declared engines answered with rows (a declared set smaller
+        than that needs all of them). Nothing declared: no engine failed. `degraded` is unchanged
+        and still names any declared failure; a complete answer may be degraded."""
+        if self.declared_engines is None:
+            return not self.degraded
+        return len(self.declared_answering) >= min(
+            MIN_DECLARED_ANSWERING, len(self.declared_engines)
+        )
 
 
 class SearchProvider(Protocol):

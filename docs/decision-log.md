@@ -186,6 +186,17 @@ session if one declared engine stays down for 90 minutes. The session report's f
 pages fetched live (`frozen_failed_share_of_fetched`, 22.5%), not by all pages in the requests (12.9%, the wrong
 figure, whose key is removed). (`docs/evaluation-plan.md` section 8.)
 
+#### 1.4c A search is complete with three of four declared engines — **BUILT** (disclosed 2026-10-29)
+**Ruled 2026-10-29 (owner).** Complete for recording = at least three of the four declared engines answered with
+rows (was: all four, none named failed). *Not simply a relaxation:* the old test passed a search where an engine
+silently returned nothing without being named as failed (R01 holds one), so it never enforced four-of-four; the new
+test counts engines that contributed rows. Reason: one chronically failing engine (yahoo) stalled the recording for
+2 h 49 m with zero captures. The declared set, the cache key, the pinned SearXNG image and R01-R12 are untouched;
+the entry now records which declared engines contributed and which failed, and the manifest and capture report give
+the distribution (stored today: 62 searches with four, 1 with three). R13-R30 are captured during the yahoo
+failure, so the snapshot is inhomogeneous, constant across arms. Disclosed with the date it was made, before any
+R13-R30 data exists. (`docs/evaluation-plan.md` section 8.)
+
 ### 1.5 The authority prior is reported twice — **DESIGNED**
 **Ruled 2026-10-25.**
 

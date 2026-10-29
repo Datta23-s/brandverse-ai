@@ -17,6 +17,7 @@ from app.research.search import (
     EngineFailure,
     OfflineSearch,
     SearchProvider,
+    SearchResponse,
     SearchResult,
     SearxngSearch,
     declare,
@@ -440,3 +441,42 @@ async def test_the_offline_provider_applies_the_same_rule() -> None:
         await OfflineSearch(
             {"x": []}, failed_engines=failures, declared_engines=["duckduckgo"]
         ).search("x")
+
+
+# ── A search is complete for recording when at least three declared engines answered ──────────
+
+
+def _rows(*engines: str) -> list[SearchResult]:
+    return [SearchResult(f"https://{e}.example/p", "t", "s", e, None, (e,)) for e in engines]
+
+
+DECLARED_FOUR = ("duckduckgo web", "yahoo", "yandex", "yep")
+
+
+def test_three_of_four_declared_engines_answering_is_complete_and_still_degraded():
+    got = SearchResponse(
+        _rows("yandex", "yep", "duckduckgo web"),
+        failed_engines=(EngineFailure("yahoo", "parsing error"),),
+        declared_engines=DECLARED_FOUR,
+    )
+    assert got.complete and got.degraded
+    assert got.declared_answering == ("duckduckgo web", "yandex", "yep")
+
+
+def test_two_of_four_declared_engines_answering_is_not_complete():
+    got = SearchResponse(_rows("yandex", "yep"), declared_engines=DECLARED_FOUR)
+    assert not got.complete and not got.degraded  # nothing named failed; two did not answer
+
+
+def test_an_engine_outside_the_declared_set_does_not_count_toward_complete():
+    got = SearchResponse(_rows("yandex", "yep", "bing", "brave"), declared_engines=DECLARED_FOUR)
+    assert got.declared_answering == ("yandex", "yep") and not got.complete
+
+
+def test_a_declared_set_smaller_than_three_needs_every_engine_and_nothing_declared_means_clean():
+    pair = ("yandex", "yep")
+    assert not SearchResponse(_rows("yep"), declared_engines=pair).complete
+    assert SearchResponse(_rows("yep", "yandex"), declared_engines=pair).complete
+    assert SearchResponse(_rows("brave")).complete
+    failed = (EngineFailure("brave", "x"),)
+    assert not SearchResponse(_rows("brave"), failed_engines=failed).complete

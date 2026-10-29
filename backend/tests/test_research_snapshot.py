@@ -4,18 +4,19 @@ What must hold: a replay returns the recorded bytes whatever the live page does 
 never reaches the network and a miss is an error; a request is captured whole or not at all; entries
 are write-once and shared across requests; a permanent failure is frozen as an outcome, a transient
 one is retried a bounded number of times and then frozen; the frozen-failed share is reported; a
-degraded search is never recorded; the store refuses to live anywhere but an evaluation namespace
-outside the repository.
+search that is not complete (3 of 4 declared engines answering) is never recorded; the store
+refuses to live anywhere but an evaluation namespace outside the repository.
 """
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from app.errors import FetchFailed, FetchRefused, FetchUnsupported, SearchRateLimited
 from app.research.driver import Mode, research
-from app.research.search import EngineFailure, SearchResponse
+from app.research.search import EngineFailure, SearchResponse, SearchResult
 from app.research.snapshot import (
     REPO_ROOT,
     NotAnEvaluationNamespace,
@@ -170,6 +171,93 @@ async def test_a_degraded_search_is_never_recorded(tmp_path):
     report = await capture(store, "R01", Degraded(plan, urls_for(plan)), LivePages())
     assert report.outcome == "aborted" and "degraded" in (report.abort_reason or "")
     assert store.manifest_summary()["searches"] == 0
+
+
+def answering(*engines, failed=()):
+    """A live search whose rows come from `engines` only, with `failed` named as not answering."""
+
+    class Partial(LiveSearch):
+        async def search(self, query, *, limit=10):
+            r = await super().search(query, limit=limit)
+            rows = [
+                SearchResult(x.url, x.title, x.snippet, engines[0], None, tuple(engines))
+                for x in r.results
+            ]
+            return SearchResponse(
+                rows, tuple(EngineFailure(e, why) for e, why in failed), (), DECLARED
+            )
+
+    return Partial
+
+
+async def test_a_search_with_three_of_four_declared_engines_is_recorded_and_says_which(tmp_path):
+    store, plan = new_store(tmp_path), plan_for()
+    three = ("duckduckgo web", "yandex", "yep")
+    live = answering(*three, failed=[("yahoo", "parsing error")])(plan, urls_for(plan))
+    report = await capture(store, "R01", live, LivePages())
+    assert report.outcome == "committed"
+    assert report.tally.searches_recorded_with_failure == report.tally.searches_new > 0
+    assert report.tally.searches_by_declared_answering == {3: report.tally.searches_new}
+    entry = next(iter(store._searches.values()))
+    assert entry["declared_contributing"] == list(three)
+    assert entry["declared_failed"] == [["yahoo", "parsing error"]]
+    assert entry["declared"] == list(
+        DECLARED
+    )  # the declared SET, and so the cache key, is as before
+
+
+async def test_a_search_with_two_of_four_declared_engines_is_not_recorded(tmp_path):
+    store, plan = new_store(tmp_path), plan_for()
+    live = answering("yandex", "yep", failed=[("yahoo", "x"), ("duckduckgo web", "y")])
+    report = await capture(store, "R01", live(plan, urls_for(plan)), LivePages())
+    assert report.outcome == "aborted" and store.manifest_summary()["searches"] == 0
+
+
+async def test_a_recorded_search_a_declared_engine_rate_refused_still_slows_the_pacer(tmp_path):
+    calls = []
+
+    class Pace:
+        async def wait(self) -> None: ...
+
+        def clean(self) -> None:
+            calls.append("clean")
+
+        def rate_refusal(self) -> None:
+            calls.append("rate_refusal")
+
+        def fault(self) -> None:
+            calls.append("fault")
+
+    store, plan = new_store(tmp_path), plan_for()
+    live = answering("duckduckgo web", "yandex", "yep", failed=[("yahoo", "too many requests")])
+    report = await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=live(plan, urls_for(plan)),
+        pages=LivePages(),
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=no_sleep,
+        pace=Pace(),
+    )
+    assert report.outcome == "committed" and set(calls) == {"rate_refusal"}
+
+
+async def test_engine_coverage_counts_searches_by_declared_engines_answering(tmp_path):
+    store, plan = new_store(tmp_path), plan_for()
+    await capture(store, "R01", LiveSearch(plan, urls_for(plan)), LivePages())
+    plan2 = plan_for("running shoes")
+    three = answering("duckduckgo web", "yandex", "yep", failed=[("yahoo", "parsing error")])
+    await capture(store, "R02", three(plan2, urls_for(plan2)), LivePages(), plan=plan2)
+    coverage = store.manifest_summary()["engine_coverage"]
+    full, short = coverage["by_declared_answering"]["4"], coverage["by_declared_answering"]["3"]
+    assert full > 0 and short > 0 and full + short == coverage["searches"]
+    assert set(coverage["searches_below_full_by_request"]) == {"R02"}
+    assert coverage["per_engine_searches"]["yahoo"] == full  # yahoo contributed to R01 only
 
 
 async def test_a_crash_before_the_committed_line_leaves_nothing_visible(tmp_path):
@@ -368,7 +456,7 @@ async def test_the_committed_line_carries_the_span_including_a_carried_searchs_o
         LivePages(),
     )
     # the carried searches were fetched hours ago, as in a long session with many refusals
-    old = "2026-10-28T06:00:00+00:00"
+    old = (datetime.now(UTC) - timedelta(hours=6)).isoformat()
     carry = {k: {**v, "fetched_utc": old} for k, v in first.carry.items()}
     report = await record_request(
         "R01",
@@ -385,7 +473,7 @@ async def test_the_committed_line_carries_the_span_including_a_carried_searchs_o
         carry=carry,
     )
     line = store.committed["R01"]
-    # the old searches were fetched at 06:00 UTC today; the new ones just now: a span of hours
+    # the old searches were fetched six hours ago; the new ones just now: a span of hours
     assert report.span_s is not None and 3600 < report.span_s < 24 * 3600
     assert line["search_span_s"] == report.span_s and line["first_search_utc"] == old
     assert line["searches_carried"] == 2
