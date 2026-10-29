@@ -741,10 +741,18 @@ hand. The platform's side was read from the live project instead, in the rolled-
 changed nothing: a column added to `public.runs` (0035) came back granted `INSERT`, `UPDATE`, `SELECT` and
 `REFERENCES` to `anon`, `authenticated` and `service_role`, and a new table in `public` (0036) kept
 `SELECT`, `REFERENCES` and `TRIGGER` for `anon`, `authenticated` and `service_role` after four privileges
-had been revoked, so the defaults were at least that. Remaining unproven: that this project exposes
-`public` through PostgREST (its row-level security policies on `public` tables assume it does) and that
-`setup()` itself, run there, would add nothing to that. So: the schema, the missing RLS and the default
-grants are demonstrated; the read through the REST API is still the inference those three support.
+had been revoked, so the defaults were at least that. What was still inference, and the project's own evidence for it (owner, 2026-10-29): that this project
+serves `public` through PostgREST to `anon` and `authenticated`. The design itself rests on it. The
+whole row-level-security posture, 0003 to 0030, exists because those roles can reach `public`: thirteen
+migrations create policies, 0010 and 0011 revoke delete and truncate from `anon` and `authenticated`,
+0013 revokes their writes on `llm_calls`, and 0029 and 0030 revoke `anon`'s and `authenticated`'s
+table-level `INSERT` on `memory_items`, stating that since 0006 they "held table-level INSERT and
+UPDATE", blocked "only by row-level security … not by the grant". That is the project recording, from
+its own tables, both that default grants arrive on a new `public` table and that row-level security is
+the only barrier. If `public` were not exposed, that work would be unnecessary. This is evidence from
+the project, not proof (nothing here sent a request through the REST API), and it supports the same
+conclusion as the three demonstrated facts: a table the library created in `public` with RLS off would
+have been readable by `anon` and `authenticated`.
 
 *Fix.* Migration 0034 creates the library's own DDL (versions 0 to 9, compared with it column by column by
 a test, so a library upgrade fails a test instead of writing to tables that differ) in a private schema,
@@ -832,7 +840,7 @@ is present in the first commit of that code.
 |---|---|---|
 | V1 | Strong-tier asymmetry between arms | Stated |
 | V2 | Paraphrase gap: whether a generator's paraphrase of a restricted claim is mislabelled | Deferred to Phase 6, where the generator exists and the threat is end-to-end |
-| V3 | Anti-patterns are checked only by the human approver; the miss rate is unmeasured | Stated; T5 recorded unmet |
+| V3 | Anti-patterns are checked by the human approver, **assisted since 2026-10-29 by a model advisory (A7's risk read) whose accuracy is unmeasured**; the approver's miss rate is still unmeasured | Stated; T5 recorded unmet. The advisory does not change either: it is an opinion, not a detector, and having it measures nothing |
 | V4 | Citation does not imply entailment | Open; partial numeric mitigation |
 | V5 | The source authority prior is the developer's untuned judgement | Mitigated by reporting results with the prior flattened |
 | V6 | The source model conflates authority with independence | Ruled; fix requires a brand domain field in Phase 6 |

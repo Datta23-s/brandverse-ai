@@ -240,7 +240,9 @@ output that passes the gates.
 > consent is a property of a UI flow, not of text — and keyword lists for the rest would be shallow
 > detectors with an unmeasured miss rate, another claim the code could not back. Until a detector
 > exists the approver checks them (`docs/approval-rubric.md` S2.1; threat V3). Where detectors are
-> built (the natural home is A7's risk assessment, Phase 6) is not yet scheduled; whichever phase
+> built (the natural home is A7's risk assessment, Phase 6) is not yet scheduled. *Update 2026-10-29: A7's
+> risk read exists as a model advisory only (flags, never blocks, reported apart from the gate findings,
+> accuracy unmeasured): it is not a detector and T5 stays unmet.* whichever phase
 > builds one adds its finding kind to the outcome table mapped to `block`, in the same change. Paraphrase of a restricted claim is not caught by deterministic matching —
 threat V2 in `docs/evaluation-plan.md`.
 
@@ -520,7 +522,12 @@ the registry's required disclaimers are appended verbatim as the `footer` by cod
 the finding's message or the draft's text (a restricted phrase the model wrote cannot be handed back). Step
 11 extracts the statements with the classifier (a model call, strong tier for a regulated sector: T4, so
 it fails closed outside the tuning organisation), stores them, and step 15 re-judges them
-deterministically with no second model call. A1, A2, A3 and A7's risk read are still mocks.
+deterministically with no second model call. **A3** (`app/agents/personas.py`, `a3_personas@v1`) proposes up
+to three persona HYPOTHESES (one-line summaries: the contract chunk C encodes), shown only claims it may
+use and told to add no product fact. **A7's risk read** (`app/agents/risk.py`, `a7_risk@v1`) is a model
+OPINION, not a detector: it flags and never blocks, is stored apart from the gate findings
+(`validation["advisory"]`), drops flags whose quote is not in the copy, and does not change `Rules.md` T5
+(unmet) or threat V3 (amended in `docs/evaluation-plan.md`). A1 and A2 are still mocks.
 
 ---
 

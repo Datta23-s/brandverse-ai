@@ -383,11 +383,12 @@ class Nodes:
             )
         try:
             risk = await self.d.agents["A7"].run(state, ctx)
-            validation["a7"] = risk.model_dump(mode="json")
+            # A model opinion, stored apart from `findings` and never counted in `outcome`.
+            validation["advisory"] = risk.model_dump(mode="json")
         except BudgetExceeded:
             raise
         except Exception as e:
-            validation["a7"] = None
+            validation["advisory"] = None
             errors.append(_agent_error(VALIDATION_STEP, "A7", e))
         update: dict[str, Any] = {
             "validation": validation,

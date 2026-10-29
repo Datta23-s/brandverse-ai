@@ -541,6 +541,21 @@ proof* is blocked only in that last way, when extracted as a factual statement t
 and how often a real model extracts it is not measured. Approver rejections on S2.1 are counted per
 arm (`approvals.failed_gate`).
 
+*Amended 2026-10-29 (owner), when A7's risk read was built (Phase 6 chunk B).* The approver is now
+assisted by a model advisory: A7 reads the copy and flags passages that may show any of the eight
+anti-patterns, quoting the copy (`app/agents/risk.py`, prompt `a7_risk@v1`). **It is an opinion, not a
+detector, and it changes none of the above.** It never blocks and never changes a gate result or the
+outcome; it is stored and shown in its own category (`validation["advisory"]`, `source:
+model_opinion`), never inside the deterministic findings, so a reader can always tell a gate result
+from a model's opinion; a flag whose quote is not in the copy is dropped and counted. **Its accuracy is
+unmeasured**, and so is the approver's miss rate: the advisory does not measure the miss rate and does
+not reduce it by any known amount (it may reduce it, or may make an approver more trusting of a copy
+with no flags). `Rules.md` T5 (block the eight, not warn) **stays unmet**: a model's opinion is not the
+detector T5 asks for, and the dissertation still must not claim the system blocks anti-patterns
+(A6). Open, to be fixed before the first approval that counts: whether the approver sees the advisory
+during calibration and during the evaluation's approvals. Showing it in one and not the other would make
+the calibration agreement not transfer.
+
 **V4 — Citation does not imply entailment (recorded 2026-10-18).** The claim gate's citation check
 confirms that a cited claim **exists, belongs to the product, is active and is verified**. It does
 not confirm that the claim **entails the statement citing it**. A statement can cite a genuine,

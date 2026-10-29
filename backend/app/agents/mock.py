@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.agents.base import Agent, AgentContext
-from app.agents.outputs import CreativeOutput
+from app.agents.outputs import CreativeOutput, CustomerOutput, Persona, RiskAdvisory
 from app.core.gates import Statement
 
 
@@ -26,19 +26,6 @@ class MarketOutput(BaseModel):
     category_conventions: list[str] = Field(default_factory=list)
     whitespace: list[str] = Field(default_factory=list)
     sources: int = 0
-
-
-class Persona(BaseModel):
-    id: str
-    summary: str
-
-
-class CustomerOutput(BaseModel):
-    personas: list[Persona]
-
-
-class RiskOutput(BaseModel):
-    flags: list[str] = Field(default_factory=list)
 
 
 class MockA1:
@@ -87,8 +74,8 @@ async def lexical_extractor(ctx: AgentContext, copy: Mapping[str, str]) -> list[
 class MockA7:
     id = "A7"
 
-    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> RiskOutput:
-        return RiskOutput()
+    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> RiskAdvisory:
+        return RiskAdvisory()
 
 
 def mock_agents() -> dict[str, Agent]:
