@@ -195,10 +195,39 @@ async def test_an_acknowledged_same_disk_copy_is_made_logged_and_marked_as_not_o
     waivers = [json.loads(x) for x in (store.root / WAIVERS).read_text().splitlines()]
     assert len(waivers) == 1 and waivers[0]["acknowledged"] == SAME_DISK_SENTENCE
     assert waivers[0]["destination"] == str(dest.resolve())
-    backup_snapshot(  # each use is on the record
+    second = backup_snapshot(  # each use is on the record
         store.root, dest, disk_of=two_disks, same_disk_acknowledgement=SAME_DISK_SENTENCE
     )
     assert len((store.root / WAIVERS).read_text().splitlines()) == 2
+    # the log grew between the two backups: that is growth, not divergence, and the second backup
+    # is as good as the first (2026-10-29: it came back not-ok, and its certificate stayed stale)
+    assert second.ok and verify_backup(store.root, dest) == []
+    assert (dest / WAIVERS).read_bytes() == (store.root / WAIVERS).read_bytes()
+    assert json.loads((dest / VERIFIED).read_text())["files"] == second.verified
+
+
+async def test_the_waiver_log_may_grow_but_not_shrink_or_change_in_the_backup(tmp_path):
+    store = await make_store(tmp_path)
+    dest = tmp_path / "laptop" / "copy"
+    ack = SAME_DISK_SENTENCE
+    for _ in range(3):
+        assert backup_snapshot(
+            store.root, dest, disk_of=two_disks, same_disk_acknowledgement=ack
+        ).ok
+    kept = (dest / WAIVERS).read_bytes()
+    assert kept == (store.root / WAIVERS).read_bytes() and kept.count(b"\n") == 3
+
+    # a backup holding MORE than the store has: the store's log was truncated or replaced
+    extra = b'{"utc": "2099-01-01"}\n'
+    (dest / WAIVERS).write_bytes(kept + extra)
+    report = backup_snapshot(store.root, dest, disk_of=two_disks, same_disk_acknowledgement=ack)
+    assert not report.ok and any(WAIVERS in p and "diverged" in p for p in report.problems)
+    assert (dest / WAIVERS).read_bytes().endswith(extra)  # left as found
+
+    # a backup whose earlier line was rewritten: same length or longer, but not a prefix
+    (dest / WAIVERS).write_bytes(kept.replace(b"utc", b"UTC", 1))
+    report = backup_snapshot(store.root, dest, disk_of=two_disks, same_disk_acknowledgement=ack)
+    assert not report.ok and any(WAIVERS in p and "diverged" in p for p in report.problems)
 
 
 async def test_the_override_opens_the_same_disk_refusal_and_no_other(tmp_path):

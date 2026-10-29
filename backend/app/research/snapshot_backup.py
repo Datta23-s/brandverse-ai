@@ -54,6 +54,10 @@ CLOUD_FOLDER_NAMES = (
 INDEX_FILES = ("committed.jsonl", "searches.jsonl", "pages.jsonl")
 VERIFIED = "BACKUP-VERIFIED.json"
 WAIVERS = "backup-waivers.jsonl"
+# Files that only ever grow: the backup's copy must be a byte prefix of the store's (truncation or
+# divergence is refused, growth is allowed). The waiver log is one: a line is added at every launch
+# that uses the same-disk override (owner, 2026-10-29: a session's backup ended ok=False for it).
+APPEND_ONLY = (*INDEX_FILES, WAIVERS)
 NEWLINE = chr(10)
 SAME_DISK_SENTENCE = (
     "A same-disk copy protects against accidental deletion of the store and not against disk "
@@ -180,7 +184,7 @@ def backup_snapshot(
         src, dst = store.root / rel, dest / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if dst.exists():
-            if rel.name in INDEX_FILES:
+            if rel.name in APPEND_ONLY:
                 old, new = dst.read_bytes(), src.read_bytes()
                 if not new.startswith(old):
                     report.problems.append(
