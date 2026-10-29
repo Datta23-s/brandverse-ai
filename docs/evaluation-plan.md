@@ -174,6 +174,26 @@ parts, an observed model-time reduction and a derived web-time reduction, and an
 derived. The reason is written here so that a panel asking "did you measure the speedup or compute it?"
 finds the answer already on record: **the web part was computed.**
 
+**LR has three components, reported separately and then added (owner, 2026-10-29).** Replay removes the web and
+nothing else, so what replay removed is derived and what it left is observed:
+
+| Component | Status | How |
+|---|---|---|
+| **Search** | **derived** (replay removes it) | count difference x seconds per search (serial; the duration is the wall time) |
+| **Fetch** | **derived** (replay removes it) | count difference x `fetch_wall_s` per live page fetched, at concurrency 8 under the recorded configuration (sum of `fetch_wall_s` over sum of `pages_fetched_live` in the committed lines) |
+| **Extraction** | **observed** in each arm's run | local compute, so it runs in every arm's real run even under replay; timed, not modelled |
+| **Model time** | **observed** in each arm's run | LLM calls; rate-limit waits recorded separately |
+
+The report gives the three parts and the total side by side, so a reader can see which part of any claimed saving
+was measured and which was computed; the total is labelled partly derived. Extraction is not negligible beside
+the fetch: replaying stored pages cost 0.41 s a page on this machine, about 130 s a request at the 320 pages a
+request holds, and it varies with depth (D1 runs four queries, so fewer distinct URLs and fewer extractions than
+D2), which is a real difference between arms and is why it is observed. Two things a reader is told: the
+harness must **time** extraction in each run (nothing in the application records it yet, so that is built before
+the evaluation and not assumed), and the parts are not strictly additive to a live system's latency, because
+in a live run extraction overlaps the fetching of other pages while under replay it does not; the total is a sum of
+components, not a prediction of a live stopwatch.
+
 Reported additionally, broken down by campaign position (1st / 2nd / 3rd per brand), since
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
 coverage, reuse depth (`Memory.md` §8). Strong-tier calls per arm are reported as a result
