@@ -51,10 +51,11 @@ near-duplicates; Memory.md §6.1), is app/memory/writeback.py's business, not th
 """
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from psycopg import AsyncConnection
@@ -85,10 +86,32 @@ class RunOutcome:
     reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class RunFacts:
+    """What the run record says about HOW the run went, written with its terminal status, by the
+    backend, from the run's own state (never supplied by a caller: 0016, 0035). `declared_gaps` is
+    what tells a completed run that had an agent fail from a complete one (migration 0035); a budget
+    stop is already told apart by its status and `budget_exhausted`. A field left None keeps the
+    column as it was."""
+
+    depth: str | None = None
+    research_score: float | None = None
+    selected_agents: tuple[str, ...] | None = None
+    memory_hit_count: int | None = None
+    search_count: int | None = None
+    declared_gaps: tuple[dict[str, Any], ...] = ()
+
+
 _END_RUN_SQL = """
 update public.runs r
 set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
-    llm_call_count = u.calls, total_cost_usd = u.cost
+    llm_call_count = u.calls, total_cost_usd = u.cost,
+    depth = coalesce(%(depth)s, r.depth),
+    research_score = coalesce(%(research_score)s, r.research_score),
+    selected_agents = coalesce(%(agents)s, r.selected_agents),
+    memory_hit_count = coalesce(%(hits)s, r.memory_hit_count),
+    search_count = coalesce(%(searches)s, r.search_count),
+    declared_gaps = %(gaps)s::jsonb
 from (select count(*) filter (where outcome <> 'refused')::int as calls,
              coalesce(sum(cost_usd), 0) as cost
       from public.llm_calls where run_id = %(run)s) u
@@ -103,6 +126,7 @@ async def end_run(
     *,
     budget_exhausted: bool,
     memory: StagedMemory | None = None,
+    facts: RunFacts | None = None,
 ) -> Committed | None:
     """Write the run's terminal status and its staged memory in one transaction: both land or
     neither does. Additions only with `completed`; corrections with any status the caller passes
@@ -110,8 +134,20 @@ async def end_run(
     if memory and memory.adds_trust and status != "completed":
         raise ValueError("memory that adds trust is committed only for a completed run")
     async with pool.connection() as conn, conn.transaction():
+        f = facts or RunFacts()
         cur = await conn.execute(
-            _END_RUN_SQL, {"status": status, "exhausted": budget_exhausted, "run": run_id}
+            _END_RUN_SQL,
+            {
+                "status": status,
+                "exhausted": budget_exhausted,
+                "run": run_id,
+                "depth": f.depth,
+                "research_score": f.research_score,
+                "agents": list(f.selected_agents) if f.selected_agents is not None else None,
+                "hits": f.memory_hit_count,
+                "searches": f.search_count,
+                "gaps": json.dumps(list(f.declared_gaps)),
+            },
         )
         if cur.rowcount != 1:
             raise RuntimeError(f"run {run_id} not found")
@@ -194,26 +230,34 @@ async def run_steps(
 
 
 async def _end_failed(
-    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID, corrections: StagedMemory | None
+    pool: AsyncConnectionPool[AsyncConnection],
+    run_id: UUID,
+    corrections: StagedMemory | None,
+    facts: RunFacts | None = None,
 ) -> None:
     """End the run `failed`, with its corrections if it has any. If committing them fails too, the
     run still ends `failed` — without them, and logged: an unterminated run would be worse."""
     if corrections:
         try:
-            await end_run(pool, run_id, "failed", budget_exhausted=False, memory=corrections)
+            await end_run(
+                pool, run_id, "failed", budget_exhausted=False, memory=corrections, facts=facts
+            )
             return
         except Exception:
             log.exception(
                 "run failed; its corrections could not be committed",
                 extra={"run_id": str(run_id), "corrections": len(corrections.corrections)},
             )
-    await end_run(pool, run_id, "failed", budget_exhausted=False)
+    await end_run(pool, run_id, "failed", budget_exhausted=False, facts=facts)
 
 
 async def fail_run(
-    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID, corrections: StagedMemory | None
+    pool: AsyncConnectionPool[AsyncConnection],
+    run_id: UUID,
+    corrections: StagedMemory | None,
+    facts: RunFacts | None = None,
 ) -> None:
     """End a run `failed` outside `run_steps` (the LangGraph runner), shielded from cancellation,
     with the same rules: corrections commit if there are any, and the run ends `failed` either
     way."""
-    await asyncio.shield(_end_failed(pool, run_id, corrections))
+    await asyncio.shield(_end_failed(pool, run_id, corrections, facts))

@@ -11,6 +11,7 @@ finding IS (url, title, score, engines, queries, date). How an agent reads the t
 findings it reasons over is a decision for chunk B, where the first agent that needs it exists.
 """
 
+import asyncio
 from collections.abc import Callable
 from datetime import date
 from typing import Any
@@ -21,6 +22,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from app.core.gates import GateReport
 from app.core.truth import ProductTruth, load_product_truth
+from app.errors import ExtractionFailed, FetchError
 from app.memory.scoring import SourceScoring
 from app.memory.writeback import MemoryStage, WritebackEncoder, write_memory
 from app.orchestrator.deps import LoadContext, ProductContext, Research, ResearchResult, WriteMemory
@@ -30,6 +32,34 @@ from app.research.extraction import Extractor
 from app.research.fetch import PageSource
 from app.research.planner import PlanRequest, plan_queries
 from app.research.search import SearchProvider
+
+
+class PageEvidence:
+    """How an agent reads the text of a finding (`app.agents.base.EvidenceReader`): fetch the page
+    from the run's page source and extract it, in memory, every time it is asked for. Nothing is
+    kept: state holds the finding's url, and the text comes from here.
+
+    Under REPLAY the page source is `SnapshotPages`: the bytes recorded for the request, the same
+    for every arm, and a page that was never recorded raises `SnapshotMiss` (not a FetchError, so
+    it is not swallowed here): a replay that went live would silently end the held-constant
+    guarantee.
+    A page the snapshot froze as a failure, or that extracts to nothing, reads as None, as it did
+    for the run that recorded it."""
+
+    def __init__(self, pages: PageSource, extractor: Extractor) -> None:
+        self._pages, self._extractor = pages, extractor
+
+    async def text(self, url: str) -> str | None:
+        try:
+            page = await self._pages.fetch(url)
+        except FetchError:
+            return None
+        try:
+            return (
+                await asyncio.to_thread(self._extractor.extract, page.html, page.final_url)
+            ).text
+        except ExtractionFailed:
+            return None
 
 
 def pool_context_loader(pool: AsyncConnectionPool[AsyncConnection]) -> LoadContext:

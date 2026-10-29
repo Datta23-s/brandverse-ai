@@ -51,9 +51,23 @@ Outcome = Literal["ok", "invalid_output", "error", "rate_limited"]
 
 @dataclass(frozen=True, slots=True)
 class CallContext:
+    """Who is asking. A call made by a graph step also says WHICH EXECUTION of it (migration 0035):
+    a step re-run from a checkpoint after its worker died is a second `execution_id` under the same
+    (run, step, agent, revision_round), so the log can tell a re-execution from a revision round or
+    the gateway's repair call. All three are set together, or none (a call outside the graph)."""
+
     org_id: UUID
     run_id: UUID
     agent_id: str | None = None
+    step: int | None = None
+    revision_round: int | None = None
+    execution_id: UUID | None = None
+
+    def __post_init__(self) -> None:
+        if (self.step is None) != (self.execution_id is None) or (self.step is None) != (
+            self.revision_round is None
+        ):
+            raise ValueError("step, revision_round and execution_id are set together or not at all")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,8 +133,9 @@ from counted
 
 _INSERT_SQL = """
 insert into public.llm_calls
-  (org_id, run_id, agent_id, model, tier, prompt_id, prompt_version, route_reason, outcome)
-values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+  (org_id, run_id, agent_id, model, tier, prompt_id, prompt_version, route_reason, outcome,
+   step, revision_round, execution_id)
+values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 returning id
 """
 
@@ -138,6 +153,9 @@ def _row(
         prompt.prompt_version,
         reason,
         outcome,
+        ctx.step,
+        ctx.revision_round,
+        ctx.execution_id,
     )
 
 

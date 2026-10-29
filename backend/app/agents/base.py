@@ -15,6 +15,17 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.core.truth import ProductTruth
+from app.llm.ledger import CallContext
+
+
+class EvidenceReader(Protocol):
+    """How an agent reads the TEXT of a finding. State carries only what a finding is (url, title,
+    score); the text is read here, from the page source the run was given: the evaluation
+    snapshot under replay (the same bytes for every arm, and a miss is an error, never a live
+    fetch), the page cache or the live fetcher otherwise. None when the page cannot be read or
+    extracted."""
+
+    async def text(self, url: str) -> str | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +34,20 @@ class AgentContext:
     org_id: UUID
     truth: ProductTruth
     on: date
+    # The graph step this execution belongs to, the revision round, and an id for THIS execution of
+    # the step's body (new each time the body starts, so a re-run from a checkpoint gets another).
+    step: int = 0
+    revision_round: int = 0
+    execution_id: UUID | None = None
+    evidence: EvidenceReader | None = None
+
+    def call_context(self, agent_id: str) -> CallContext:
+        """The ledger context for a model call made by `agent_id` in this execution."""
+        if self.execution_id is None or not 1 <= self.step <= 15:
+            raise ValueError("an agent's calls need the graph step and execution it runs in")
+        return CallContext(
+            self.org_id, self.run_id, agent_id, self.step, self.revision_round, self.execution_id
+        )
 
 
 class Agent(Protocol):

@@ -18,6 +18,9 @@ import app.orchestrator  # noqa: F401  (sets the strict-msgpack switch before La
 from app.agents.base import Agent, AgentContext
 from app.agents.mock import mock_agents
 from app.core.gates import load_superlatives
+from app.llm.ledger import CallLedger
+from app.llm.prompts import PromptRef
+from app.llm.registry import Tier
 from app.memory.embeddings import HashingEncoder
 from app.models.runs import RunEvent
 from app.orchestrator.adapters import pool_context_loader, writeback_step
@@ -25,6 +28,7 @@ from app.orchestrator.deps import GraphDeps, ResearchResult, no_memory
 from app.orchestrator.graph import build_graph
 from app.orchestrator.runner import Pipeline, PoolRunLedger
 from app.orchestrator.state import RunState
+from tests.llm_fakes import judge, make_registry
 
 ON = date(2026, 10, 29)
 
@@ -36,6 +40,16 @@ class ListSink:
     async def append(self, event: RunEvent) -> str:
         self.events.append(event)
         return f"{len(self.events)}-0"
+
+
+class Failing:
+    """An agent that raises (a budget refusal or any other error) instead of answering."""
+
+    def __init__(self, agent_id: str, error: Exception) -> None:
+        self.id, self.error = agent_id, error
+
+    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
+        raise self.error
 
 
 def note(path: Path | None, line: str) -> None:
@@ -57,12 +71,23 @@ class Logged:
         *,
         hang_after: tuple[str, ...] | None = None,
         ready: Path | None = None,
+        ledger: CallLedger | None = None,
+        prompt: PromptRef | None = None,
     ) -> None:
         self.inner, self.id, self.log = inner, inner.id, log
         self.hang_after, self.ready = hang_after, ready
+        self.ledger, self.prompt = ledger, prompt
 
     async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
         note(self.log, self.id)
+        call_id: int | None = None
+        if self.ledger is not None and self.prompt is not None:
+            # A real ledger reservation, as the gateway makes before a model call: pending until
+            # `finish`. A worker killed past this point leaves the pending row behind.
+            admission = await self.ledger.admit(
+                ctx.call_context(self.id), Tier.CHEAP, self.prompt, "test", 0.0001
+            )
+            call_id = admission.call_id
         if self.hang_after is not None and self.log is not None and self.ready is not None:
             while not all(  # noqa: ASYNC110 - polls a file that another process writes
                 a in self.log.read_text(encoding="utf-8").split() for a in self.hang_after
@@ -71,7 +96,18 @@ class Logged:
             await asyncio.sleep(1.0)  # let the finished agents' results reach the checkpoint
             self.ready.write_text("hanging")
             await asyncio.Event().wait()  # until the test kills this process
-        return await self.inner.run(state, ctx)
+        out = await self.inner.run(state, ctx)
+        if self.ledger is not None and call_id is not None:
+            await self.ledger.finish(
+                call_id,
+                outcome="ok",
+                input_tokens=100,
+                output_tokens=20,
+                cost_usd=0.001,
+                latency_ms=10,
+                rate_limit_wait_ms=0,
+            )
+        return out
 
 
 def build_pipeline(
@@ -81,16 +117,33 @@ def build_pipeline(
     *,
     log: Path | None = None,
     hang: Path | None = None,
+    calls: bool = False,
+    failing: Mapping[str, Exception] | None = None,
 ) -> Pipeline:
+    ledger = (
+        CallLedger(
+            pool,
+            make_registry(rpm=1000),
+            max_calls_per_run=20,
+            max_cost_per_run_usd=2.50,
+            pending_expiry_s=900,
+        )
+        if calls
+        else None
+    )
     agents: dict[str, Agent] = {
         a: Logged(
             impl,
             log,
             hang_after=("A1", "A2") if a == "A3" and hang is not None else None,
             ready=hang if a == "A3" else None,
+            ledger=ledger if a in ("A1", "A2", "A3") else None,
+            prompt=judge("x").ref,
         )
         for a, impl in mock_agents().items()
     }
+    for agent_id, error in (failing or {}).items():
+        agents[agent_id] = Failing(agent_id, error)
 
     async def retrieve(state: RunState) -> Any:
         note(log, "retrieve")

@@ -11,7 +11,7 @@ from datetime import date
 from typing import Any, Protocol
 from uuid import UUID
 
-from app.agents.base import Agent
+from app.agents.base import Agent, EvidenceReader
 from app.core.gates import GateReport, Superlatives
 from app.core.truth import ProductTruth
 from app.memory.writeback import MemoryStage
@@ -60,6 +60,8 @@ class GraphDeps:
     today: Callable[[], date]
     # Regeneration rounds after the first draft (Phases.md Phase 6 chunk B: bounded at 2).
     max_revisions: int = 2
+    # How an agent reads a finding's text (agents/base.py). None: no text available to agents.
+    evidence: EvidenceReader | None = None
 
 
 async def no_memory(state: RunState) -> MemoryResult:

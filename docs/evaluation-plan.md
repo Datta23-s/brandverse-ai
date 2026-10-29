@@ -115,6 +115,73 @@ rejected campaign whose refused commit ends the run `failed` (the decrement is p
 `memory_items`). Once a pair
 has its primary attempt, the harness disables write-back for any later attempt of that pair.
 
+### Re-executed steps: a resumed run spends twice and works once — RULED 2026-10-29 (owner), before any real run
+
+*Found while building the graph (Phase 6 chunk A).* The checkpointer is at-least-once: a worker killed
+inside a step resumes from the last checkpoint and runs that step again. If the step made a model call,
+the call log holds a row for the interrupted attempt (a `pending` reservation that never finished, or a
+finished call whose result never reached the checkpoint) and a row for the retry.
+
+**Does a re-executed step double count? Yes, in every total derived from `llm_calls` rows.** Measured by
+killing a worker (SIGKILL) inside agent A3 after its ledger reservation, in a run where A1, A2 and A3 each
+make one call (`tests/db/test_graph_checkpoints.py`): the log holds 4 rows for 3 logical calls (A3's
+abandoned `pending` row and its retry's `ok` row); `runs.llm_call_count` is 4; the per-run cap of 20 calls
+(`Rules.md` C3) counts the abandoned reservation until it expires (`pending_expiry_s`, after which the ledger stops counting it, so
+a crash cannot tighten a cap for ever). When the interrupted call had finished, the duplicate is a
+finished row and counts for good, against the cap, the model's daily quota and its per-minute rate, and
+the cost is doubled as well: two `ok` rows, two sets of tokens (`tests/db/test_reexecution.py`, $0.003 spent for $0.002 of work). Before
+migration 0035 nothing on a row said which graph step, revision round or execution made it, so a doubled
+call could not be told from a revision round (step 10 legitimately runs up to three times in a run) or from
+the gateway's repair call, and, as the owner put it, after the fact nobody can tell a doubled call from a
+genuine retry.
+
+**The ruling: the graph stays at-least-once; the evaluation reads de-duplicated per step and attempt.**
+Making steps exactly-once would mean a transaction around a model call, which does not exist. So:
+- Every call made by a graph step records `step`, `revision_round` and `execution_id` (0035). A new
+  `execution_id` is minted each time a step body starts. The *attempt* is derived from the log, never kept
+  as a counter (`Rules.md` A1): within one (run, step, revision_round, agent), executions ranked by first
+  call time. A revision round is a different `revision_round`; the gateway's repair call is the same
+  execution as the call it repairs. Neither is a duplicate.
+- **SPEND** (quota, tokens, cost, calls against a cap) counts every row: the provider was asked twice.
+- **WORK** (calls, tokens, cost and latency per campaign, per arm) counts the rows of the last attempt of
+  each (run, step, revision_round, agent), the execution whose result the run used.
+- The difference is reported beside the work figure as `resume_duplicates` (calls and cost), never
+  silently dropped and never silently kept. `app/evaluation/llm_attempts.py` is the one read of this.
+- `runs.llm_call_count` and `runs.total_cost_usd` are SPEND. They are not per-campaign work figures, and no
+  per-campaign comparison may be made from them.
+
+**What else a re-executed node does outside the process, audited 2026-10-29:**
+
+| Effect | Re-executed safely? |
+|---|---|
+| Memory staging (`MemoryStage`) | Yes: it lives in the process, so a killed worker's stage is discarded and the resumed process builds a new one. Nothing is staged before the interrupt (`app/orchestrator/nodes.py`). |
+| `llm_calls` rows | **No: this section.** Fixed by recording the execution; counted by spend and by work. |
+| `audit_log` row for refused write-back candidates (`record_refusals`, step 15) | **Was not; fixed.** It now inserts nothing if the run already has one (one per run, as step 15 runs once per run); audit rows cannot be deleted, so a duplicate could never have been removed. |
+| `audit_log` row for an admission block | The API writes it before a run exists (one request, one row). The graph's block path writes it once per drive; `recover` does NOT write it again after a crash, because it may already exist (a missing row there is logged, not silent). |
+| Run status writes (`suspend_run`, `end_run`) | Yes: setting a status is idempotent; `end_run` is called once per drive, and `recover` refuses a run that has already ended. |
+| A graph that finished in a process that died before the ending was written | **Was stuck `queued` for ever; fixed.** `recover` now ends it from its checkpointed state, without committing the dead process's staged memory (an addition lost this way adds no trust, the safe direction). |
+| Step events on the stream | Repeated (`started` twice). The stepper keys on step number, so it is harmless; a consumer that counts events must not. |
+| Live search and page fetches (step 6) | Repeated only if the search cache and page cache have expired (`research.search_cache_ttl_s`); under replay they are reads. |
+| `approvals` rows (chunk E) | **A requirement on chunk E, not yet built:** the decision must be keyed so that approving twice (a double click, a retried request after a worker died) writes one row; approvals cannot be updated or deleted. |
+
+**Is a partial run told from a complete one by the run record?** A budget stop was (status `partial` with
+`budget_exhausted`, `app/core/budgeted_run.py`). A run that completed with a failed agent was NOT: it was
+a `completed` row, the same as a whole campaign. Migration 0035 adds `runs.declared_gaps` (the agents that
+failed, written by the backend with the terminal status, forced to empty for API roles like every outcome
+column), and `run_outcomes_by_arm` reports `with_gaps` beside the status counts. The run record also now
+carries what the graph knew and the columns never held: `depth`, `research_score`, `selected_agents`,
+`memory_hit_count`, `search_count`. `latency_ms` is still not written: a run parked for approval waits
+days, so wall time from creation is not a latency, and N1/N2 are measured in chunk F with the approval
+wait removed.
+
+**How an agent reads page text under replay.** Run state carries only what a finding is (URL, title,
+score), because a checkpoint is a Postgres row written at every step and page text is third-party prose.
+An agent reads the text through `AgentContext.evidence` (`PageEvidence`): the page is fetched from the
+run's page source and extracted, in memory, each time. Under replay that source is `SnapshotPages`, so the
+text is the recorded bytes' extraction, identical for every arm, unchanged by the live page, and a page
+that was never recorded raises `SnapshotMiss` rather than going to the network
+(`tests/test_orchestrator_graph.py`). This path exists before chunk B assumes it.
+
 ## 3. Seed exclusion
 
 Seed memory (`Memory.md` §7.1) is excluded from every evaluation run by a filter in the harness

@@ -22,7 +22,7 @@ the matching TypeScript contract (chunk E).
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 from uuid import UUID
@@ -32,7 +32,7 @@ from langgraph.graph.state import CompiledStateGraph
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from app.core.budgeted_run import end_run, fail_run, suspend_run
+from app.core.budgeted_run import RunFacts, end_run, fail_run, suspend_run
 from app.core.infrastructure import classify_infrastructure_failure
 from app.core.pipeline import PIPELINE_STEPS
 from app.errors import BrandverseError, BudgetExceeded
@@ -59,6 +59,8 @@ class NotRecoverable(BrandverseError):
 class RunLedger(Protocol):
     """How a run's status is written: the executor's functions, behind a seam a test can fake."""
 
+    async def status(self, run_id: UUID) -> str | None: ...
+
     async def suspend(self, run_id: UUID) -> None: ...
 
     async def end(
@@ -68,14 +70,23 @@ class RunLedger(Protocol):
         *,
         budget_exhausted: bool,
         memory: StagedMemory | None,
+        facts: RunFacts | None,
     ) -> None: ...
 
-    async def fail(self, run_id: UUID, corrections: StagedMemory | None) -> None: ...
+    async def fail(
+        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+    ) -> None: ...
 
 
 class PoolRunLedger:
     def __init__(self, pool: AsyncConnectionPool[AsyncConnection]) -> None:
         self._pool = pool
+
+    async def status(self, run_id: UUID) -> str | None:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("select status from public.runs where id = %s", (run_id,))
+            row = await cur.fetchone()
+        return None if row is None else str(row[0])
 
     async def suspend(self, run_id: UUID) -> None:
         await suspend_run(self._pool, run_id)
@@ -87,11 +98,21 @@ class PoolRunLedger:
         *,
         budget_exhausted: bool,
         memory: StagedMemory | None,
+        facts: RunFacts | None,
     ) -> None:
-        await end_run(self._pool, run_id, status, budget_exhausted=budget_exhausted, memory=memory)
+        await end_run(
+            self._pool,
+            run_id,
+            status,
+            budget_exhausted=budget_exhausted,
+            memory=memory,
+            facts=facts,
+        )
 
-    async def fail(self, run_id: UUID, corrections: StagedMemory | None) -> None:
-        await fail_run(self._pool, run_id, corrections)
+    async def fail(
+        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+    ) -> None:
+        await fail_run(self._pool, run_id, corrections, facts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,10 +185,18 @@ class Pipeline:
         """Continue a run whose worker died mid-run, from its last checkpoint and not from the
         start. Steps that finished are not run again (a finished agent of a parallel step keeps its
         saved result); the step that was running when the worker died is (at-least-once, nodes.py).
-        A run parked at the interrupt is waiting for a person, not for a worker: use `resume`."""
-        snapshot = await self._graph.aget_state(self._config(run_id, MemoryStage()))
+        A run parked at the interrupt is waiting for a person, not for a worker: use `resume`.
+
+        A worker can also die AFTER the last node and BEFORE the run's ending is written: the graph
+        is finished, the run still `queued`. That run is ended here from its checkpointed state."""
+        config = self._config(run_id, MemoryStage())
+        snapshot = await self._graph.aget_state(config)
         if not snapshot.next:
-            raise NotRecoverable(f"run {run_id} has no checkpoint to continue, or has finished")
+            if not snapshot.values:
+                raise NotRecoverable(f"run {run_id} has no checkpoint to continue")
+            if await self._ledger.status(run_id) not in ("queued", "awaiting_approval"):
+                raise NotRecoverable(f"run {run_id} has already ended")
+            return await self._finalize(run_id, dict(snapshot.values))
         if tuple(snapshot.next) == (APPROVAL_NODE,):
             raise NotRecoverable(f"run {run_id} is waiting for approval: use resume")
         return await self._drive(run_id, None)
@@ -177,6 +206,14 @@ class Pipeline:
     def _config(run_id: UUID, stage: MemoryStage) -> RunnableConfig:
         # A fresh stage per invocation: it lives in this process only (nodes.py).
         return {"configurable": {"thread_id": str(run_id), "stage": stage}}
+
+    async def _saved_facts(self, config: RunnableConfig) -> RunFacts | None:
+        """The run's facts from its last checkpoint, for an ending the graph did not return from."""
+        try:
+            return facts_from_state((await self._graph.aget_state(config)).values)
+        except Exception:
+            log.exception("the run's facts could not be read from its checkpoint")
+            return None
 
     async def _drive(self, run_id: UUID, graph_input: RunState | None) -> PipelineOutcome:
         stage = MemoryStage()
@@ -188,12 +225,22 @@ class Pipeline:
                 return await self._park(run_id, values)
             if values.get("blocked"):
                 return await self._blocked(run_id, values)
-            await self._ledger.end(run_id, "completed", budget_exhausted=False, memory=stage.all())
+            await self._ledger.end(
+                run_id,
+                "completed",
+                budget_exhausted=False,
+                memory=stage.all(),
+                facts=facts_from_state(values),
+            )
             await self._events.append(RunCompleted(run_id=run_id))
             return PipelineOutcome("completed", values)
         except BudgetExceeded as e:
             await self._ledger.end(
-                run_id, "partial", budget_exhausted=True, memory=stage.corrections_only()
+                run_id,
+                "partial",
+                budget_exhausted=True,
+                memory=stage.corrections_only(),
+                facts=await self._saved_facts(config),
             )
             await self._events.append(RunCompleted(run_id=run_id))
             return PipelineOutcome("partial", {}, str(e))
@@ -203,7 +250,7 @@ class Pipeline:
             infrastructure = classify_infrastructure_failure(e)
             corrections = stage.corrections_only() if infrastructure is None else None
             log.warning("run failed", extra={"infrastructure_failure": infrastructure})
-            await self._ledger.fail(run_id, corrections)
+            await self._ledger.fail(run_id, corrections, await self._saved_facts(config))
             try:
                 await self._events.append(
                     RunFailed(run_id=run_id, error=f"internal error: {type(e).__name__}")
@@ -211,6 +258,30 @@ class Pipeline:
             except Exception:
                 log.exception("the failure could not be reported on the stream")
             raise
+
+    async def _finalize(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
+        """End a run whose graph finished in a process that died before the ending was written.
+        What that process staged for memory went with it, so nothing is committed: an addition lost
+        this way adds no trust, which is the safe direction (a correction would be lost too; none
+        is staged yet, and the day one is, it must travel in the checkpointed state: nodes.py).
+        The block audit is NOT written again: it may already exist, and a duplicate cannot be
+        removed."""
+        reason = "finished by recover: the dead process's staged memory was lost"
+        log.warning("run finalized after a crash", extra={"reason": reason})
+        facts = facts_from_state(values)
+        if values.get("blocked"):
+            log.warning("run block not audited again: the dead process may already have written it")
+            message = "blocked: " + "; ".join(r["code"] for r in values["blocked"])
+            await self._ledger.end(
+                run_id, "blocked", budget_exhausted=False, memory=None, facts=facts
+            )
+            await self._events.append(RunFailed(run_id=run_id, step=TRUTH_STEP, error=message))
+            return PipelineOutcome("blocked", values, message)
+        await self._ledger.end(
+            run_id, "completed", budget_exhausted=False, memory=None, facts=facts
+        )
+        await self._events.append(RunCompleted(run_id=run_id))
+        return PipelineOutcome("completed", values, reason)
 
     async def _park(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
         await self._events.append(
@@ -233,7 +304,29 @@ class Pipeline:
             except Exception:
                 # The run stays blocked; a lost audit row is an error to see, not a reason to admit.
                 log.exception("run block could not be audited")
-        await self._ledger.end(run_id, "blocked", budget_exhausted=False, memory=None)
+        await self._ledger.end(
+            run_id, "blocked", budget_exhausted=False, memory=None, facts=facts_from_state(values)
+        )
         message = "blocked: " + "; ".join(r["code"] for r in reasons)
         await self._events.append(RunFailed(run_id=run_id, step=TRUTH_STEP, error=message))
         return PipelineOutcome("blocked", values, message)
+
+
+def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
+    """The run record's facts, from the run's state. A failed agent is one gap however many times
+    its body ran (a re-execution, a revision round): keyed by (agent, step)."""
+    gaps: dict[tuple[str, int], dict[str, Any]] = {}
+    for e in values.get("errors", []):
+        gaps.setdefault(
+            (e["agent"], e["step"]),
+            {"agent": e["agent"], "step": e["step"], "error": e["error"]},
+        )
+    agents = values.get("selected_agents")
+    return RunFacts(
+        depth=values.get("depth"),
+        research_score=values.get("research_score"),
+        selected_agents=tuple(agents) if agents else None,
+        memory_hit_count=len(values["memory_hits"]) if "memory_hits" in values else None,
+        search_count=(values.get("research") or {}).get("searches"),
+        declared_gaps=tuple(gaps.values()),
+    )

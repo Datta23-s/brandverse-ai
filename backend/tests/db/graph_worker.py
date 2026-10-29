@@ -29,7 +29,7 @@ async def main(mode: str, db_url: str, run, org, product, user, log: Path, ready
         async with open_checkpointer(db_url) as saver:
             sink = ListSink()
             pipeline = build_pipeline(
-                pool, saver, sink, log=log, hang=ready if mode == "run" else None
+                pool, saver, sink, log=log, hang=ready if mode == "run" else None, calls=True
             )
             if mode == "run":
                 await pipeline.start(run_id=run, org_id=org, user_id=user, product_id=product)

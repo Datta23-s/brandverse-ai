@@ -21,6 +21,7 @@ from psycopg import AsyncConnection, errors, sql
 from psycopg_pool import AsyncConnectionPool
 
 import app.orchestrator.checkpoint as checkpoint
+from app.evaluation.llm_attempts import LLM_CALLS_BY_ATTEMPT_SQL, CallRow, totals
 from app.models.runs import RunCompleted, StepEvent
 from app.orchestrator.checkpoint import (
     LIBRARY_VERSION,
@@ -258,3 +259,31 @@ def test_a_killed_worker_mid_run_is_continued_from_its_checkpoint_by_another_pro
 
     assert "outcome completed" in finished(worker("approve", db_url, run_id, seed, log, ready))
     assert run_row(db_url, run_id) == ("completed", True)
+
+    # What the re-execution did to the call log, MEASURED. A3 was killed after its ledger
+    # reservation and before it finished: its pending row is still there, and the retry wrote
+    # another.
+    with psycopg.connect(db_url, autocommit=True) as c:
+        calls = c.execute(
+            "select agent_id, step, revision_round, outcome, execution_id from llm_calls "
+            "where run_id = %s order by id",
+            (run_id,),
+        ).fetchall()
+        recorded = c.execute(
+            "select llm_call_count, total_cost_usd from runs where id = %s", (run_id,)
+        ).fetchone()
+    a3 = [r for r in calls if r[0] == "A3"]
+    assert [r[3] for r in a3] == ["pending", "ok"] and a3[0][4] != a3[1][4]
+    assert {(r[1], r[2]) for r in calls if r[0] in ("A1", "A2", "A3")} == {(7, 0)}
+    assert len([r for r in calls if r[0] in ("A1", "A2")]) == 2  # finished agents were not re-run
+    # The run record is SPEND: it counts the abandoned reservation. A1, A2, A3 (killed), A3 (retry).
+    assert recorded is not None and recorded[0] == 4
+    with psycopg.connect(db_url, autocommit=True) as c, c.cursor() as cur:
+        cur.execute(LLM_CALLS_BY_ATTEMPT_SQL, {"org_ids": [seed.org_a]})
+        mine = [CallRow(*r) for r in cur.fetchall() if r[1] == run_id]
+    t = totals(mine)
+    assert (t.spend_calls, t.work_calls, t.resume_duplicate_calls) == (4, 3, 1)
+    assert [(r.attempt, r.last_attempt) for r in mine if r.agent_id == "A3"] == [
+        (1, False),
+        (2, True),
+    ]

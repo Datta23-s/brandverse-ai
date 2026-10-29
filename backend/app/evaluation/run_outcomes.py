@@ -16,7 +16,7 @@ bound the period by run creation time.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from psycopg import AsyncConnection
@@ -34,7 +34,8 @@ RUN_STATUSES: tuple[RunStatus, ...] = (
 ARMS = ("baseline_a", "baseline_b", "proposed")
 
 RUN_OUTCOMES_BY_ARM_SQL = """
-select r.arm, r.status, count(*)::int
+select r.arm, r.status, count(*)::int,
+       (count(*) filter (where jsonb_array_length(r.declared_gaps) > 0))::int
 from public.runs r
 join public.organisations o on o.id = r.org_id
 where r.org_id = any(%(org_ids)s)
@@ -50,6 +51,9 @@ group by r.arm, r.status
 class ArmOutcomes:
     arm: str
     by_status: dict[RunStatus, int]
+    # Runs of any status that declared at least one gap (an agent failed and the run went on):
+    # `completed` alone does not say whether the campaign was whole (migration 0035).
+    with_gaps: int = 0
 
     @property
     def total(self) -> int:
@@ -60,14 +64,17 @@ class ArmOutcomes:
         return self.by_status["blocked"]
 
 
-def summarise(rows: list[tuple[str, str, int]]) -> list[ArmOutcomes]:
-    """Every arm, every status, zeros included."""
+def summarise(rows: list[tuple[Any, ...]]) -> list[ArmOutcomes]:
+    """Every arm, every status, zeros included. A row is (arm, status, runs) or
+    (arm, status, runs, runs_with_gaps)."""
     counts: dict[str, dict[RunStatus, int]] = {a: dict.fromkeys(RUN_STATUSES, 0) for a in ARMS}
-    for arm, status, n in rows:
+    gaps = dict.fromkeys(ARMS, 0)
+    for arm, status, n, *rest in rows:
         if arm not in counts or status not in counts[arm]:
             raise ValueError(f"unknown arm or run status in runs: {arm!r}, {status!r}")
         counts[arm][status] = n
-    return [ArmOutcomes(a, counts[a]) for a in ARMS]
+        gaps[arm] += rest[0] if rest else 0
+    return [ArmOutcomes(a, counts[a], gaps[a]) for a in ARMS]
 
 
 async def run_outcomes_by_arm(
@@ -80,4 +87,4 @@ async def run_outcomes_by_arm(
     cur = await conn.execute(
         RUN_OUTCOMES_BY_ARM_SQL, {"org_ids": org_ids, "since": since, "until": until}
     )
-    return summarise([(arm, status, n) for arm, status, n in await cur.fetchall()])
+    return summarise(list(await cur.fetchall()))

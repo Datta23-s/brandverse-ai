@@ -405,17 +405,26 @@ async def stage_writeback(
 async def record_refusals(conn: AsyncConnection, run_id: UUID, refused: Sequence[Refusal]) -> None:
     """One `audit_log` row naming the run and each refused candidate with its reasons, so a fact
     that should have been remembered and was not can be found. Not memory: written when the
-    step-15 node runs, whatever the run's ending, and not subject to the attempt rule."""
+    step-15 node runs, whatever the run's ending, and not subject to the attempt rule.
+
+    IDEMPOTENT PER RUN: step 15 is run again from its checkpoint if its worker dies after this
+    insert and before the checkpoint (at-least-once, app/orchestrator/nodes.py), and audit rows
+    cannot be deleted, so a second execution must find the first one's row and write nothing.
+    Step 15 runs once per run, so one such row per run is the key."""
     if not refused:
         return
     cur = await conn.execute(
         "insert into public.audit_log (org_id, actor_type, actor_id, action, entity_type, "
         "entity_id, details) select org_id, 'service', 'write_memory', "
-        "'memory.candidates_refused', 'run', %s, %s from public.runs where id = %s",
-        (str(run_id), json.dumps({"refused": [r.record() for r in refused]}), run_id),
+        "'memory.candidates_refused', 'run', %s, %s from public.runs where id = %s "
+        "and not exists (select 1 from public.audit_log a where a.entity_type = 'run' "
+        "and a.entity_id = %s and a.action = 'memory.candidates_refused')",
+        (str(run_id), json.dumps({"refused": [r.record() for r in refused]}), run_id, str(run_id)),
     )
-    if cur.rowcount != 1:
-        raise RuntimeError(f"run {run_id} not found: its refused candidates were not recorded")
+    if cur.rowcount == 0:
+        found = await conn.execute("select 1 from public.runs where id = %s", (run_id,))
+        if await found.fetchone() is None:
+            raise RuntimeError(f"run {run_id} not found: its refused candidates were not recorded")
 
 
 # ── Commit ────────────────────────────────────────────────────────────────────────────────────

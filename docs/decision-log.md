@@ -715,8 +715,81 @@ have arrived; every M-score would have remained four-component while appearing c
 *Fix.* Migration 0031 returns the column. A test ties the returned column names to the receiving
 dataclass's fields, verified by renaming each side in turn, so the two cannot drift apart again.
 
-### 7.4 Other closed defects
+### 7.4 The checkpointer's own setup would have put a run's state where the REST API reads — **FIXED IN CODE, NOT APPLIED**
+**Found 2026-10-29, by reading what `AsyncPostgresSaver.setup()` does before running it; the migration (0034) is approved and waits for the apply procedure.**
+
+LangGraph's Postgres checkpointer creates its own tables (`checkpoints`, `checkpoint_blobs`,
+`checkpoint_writes`, `checkpoint_migrations`) when `setup()` is called, at run time, in the connection's
+default schema. On Supabase that schema is `public`, which PostgREST exposes. A checkpoint is the run's
+whole state at a step: the product, the brief, the claims in play, the generated copy.
+
+*What it would have produced.* Four tables the migrations never mentioned, created by whichever process
+called `setup()` first, in `public`, with row-level security off (the library's DDL does not enable it).
+This repository's own record shows what a new `public` table carries on this platform: 0029 and 0030 had
+to revoke `anon` and `authenticated` writes that Supabase's defaults had granted on `memory_items`. So the
+expectation, not a demonstrated read, is that another organisation's saved campaign state could have been
+read through the REST API. `setup()` was never run against the project, so the exposure was found by
+reading the library's DDL against the platform's documented behaviour, and not observed.
+
+*Fix.* Migration 0034 creates the library's own DDL (versions 0 to 9, compared with it column by column by
+a test, so a library upgrade fails a test instead of writing to tables that differ) in a private schema,
+`graph_checkpoints`, with row-level security on and every API role revoked. The backend connects as the
+owning role, sets its `search_path` to the schema and never calls `setup()`; `assert_checkpoint_schema`
+refuses to start if the installed library expects a newer version than the migration made. Tests: the
+API roles get `InsufficientPrivilege` on all four tables, and row-level security is on for each
+(`tests/db/test_graph_checkpoints.py`).
+
+### 7.5 A session's backup ended not-ok every time, and its certificate went stale — **CLOSED**
+**Found 2026-10-29 in recording session 4's report; fixed the same day.**
+
+The backup tool treated every file other than the three index files as write-once. The same-disk waiver
+log (`backup-waivers.jsonl`) is append-only by design: a line is added at every launch that uses the
+override. So the second launch made the store's copy longer than the backup's, the tool called that a
+difference, refused to copy, and reported `ok: False`; `BACKUP-VERIFIED.json` was never rewritten.
+
+*What it would have produced.* A store of 25 requests certified as a store of 12. The data files were
+byte-identical throughout, so nothing was at risk, but the certificate was the record that said so, and a
+reader of it would have believed the backup was 13 requests behind.
+
+*Fix.* The waiver log is held to the index files' rule (owner, 2026-10-29): the backup's copy must be a
+byte prefix of the store's, which allows growth and catches truncation and divergence. Tests: the log
+grows across three backups and each is ok; a backup longer than the store's, and one with an earlier line
+rewritten, are each refused and left as found. The real backup was re-run and certified (25 requests, 129
+searches, 4,352 pages, 3,377 files).
+
+### 7.6 A re-executed step double counted, and nothing could tell a doubled call from a retry — **FIXED IN CODE, NOT APPLIED**
+**Found 2026-10-29 while building the graph; the migration (0035) is written and dry-run, and waits for the apply procedure.**
+
+The checkpointer is at-least-once, so a step whose worker died is run again, and a model call made by it
+is made again. `llm_calls` had no column saying which step, revision round or execution made a row.
+
+*What it would have produced.* Every per-campaign effort figure (calls, tokens, cost) inflated for exactly
+the runs that were resumed, with no way to correct it afterwards: a re-execution, a revision round and the
+gateway's repair call looked alike. The arms are compared on cost and calls, so a worker restart during an
+arm's run would have moved a result. Measured: a worker killed inside one of three single-call agents left
+4 rows for 3 calls, and `runs.llm_call_count` read 4.
+
+*Fix.* The graph stays at-least-once. Migration 0035 records `step`, `revision_round` and `execution_id`
+on every graph call; the attempt is derived, and the evaluation reads spend (every row) and work (the last
+attempt) separately, with the difference reported (`docs/evaluation-plan.md`, "Re-executed steps").
+Recorded before any real run, because afterwards it cannot be reconstructed.
+
+### 7.7 A run that completed with a failed agent was the same row as a whole one — **FIXED IN CODE, NOT APPLIED**
+**Found 2026-10-29 by asking whether the run record, not only the event stream, tells a partial run from a
+complete one.** A budget stop was told apart (`partial`, `budget_exhausted`); a declared gap was not. 0035
+adds `runs.declared_gaps`, written with the terminal status, and the per-arm report counts them.
+
+### 7.8 A finished graph whose run was never ended stayed `queued` for ever — **CLOSED**
+**Found 2026-10-29 while auditing re-execution.** A worker killed after the last node and before the
+status write left a finished checkpoint and a `queued` run; `recover` refused it. `recover` now ends it from
+the checkpointed state (completed or blocked), without committing the dead process's staged memory.
+
+### 7.9 Other closed defects
 - A password leaking into a settings validation error.
+- Step 15's refused-candidates audit row was written once per execution, so a re-run step would have
+  written it twice (audit rows cannot be deleted). Now one per run. Found 2026-10-29 in the re-execution audit.
+- `Architecture.md` §4.4 said `runs.status` had no database CHECK; it had one since 0015. Found 2026-10-29
+  while writing 0033 against what was actually there; the sentence was corrected first, then the migration written.
 - `service_role` able to hard-delete `memory_items`, `runs` and `llm_calls` — revoked in 0010–0011.
 - Signed-out users able to execute `app.create_organisation` — caught only by a rolled-back dry run
   against the live project, which the CI stub could not model (fixed in 0012).

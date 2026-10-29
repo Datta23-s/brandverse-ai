@@ -465,6 +465,7 @@ class RunState(TypedDict):
 
 ### 5.3 Durability and human-in-the-loop
 
+- **At-least-once.** A worker killed inside a node resumes from the last checkpoint and runs that node again; nodes must be safe to repeat, and the model calls a repeated node makes are told apart in the log by `(step, revision_round, execution_id)` (migration 0035). What the evaluation does with them, and the audit of every other effect of a re-run, is `docs/evaluation-plan.md` "Re-executed steps".
 - Compile with a Postgres checkpointer: `graph = builder.compile(checkpointer=saver, interrupt_before=["await_human_approval"])`
 - Every run carries `config={"configurable": {"thread_id": run_id}}`
 - The approval interrupt suspends the graph. The frontend polls run status; approval resumes from the checkpoint with `graph.invoke(None, config)`. No state is held in memory between the two.

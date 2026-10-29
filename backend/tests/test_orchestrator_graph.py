@@ -20,13 +20,15 @@ from pydantic import BaseModel
 
 from app.agents.base import Agent, AgentContext
 from app.agents.mock import CopyStatement, CreativeOutput, mock_agents
+from app.core.budgeted_run import RunFacts
 from app.core.gates import GateReport, load_superlatives
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
 from app.errors import BudgetExceeded
+from app.llm.ledger import CallContext
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunEvent, RunFailed, RunStarted, StepEvent
-from app.orchestrator.adapters import driver_research
+from app.orchestrator.adapters import PageEvidence, driver_research
 from app.orchestrator.deps import (
     GraphDeps,
     MemoryResult,
@@ -35,11 +37,17 @@ from app.orchestrator.deps import (
     no_memory,
 )
 from app.orchestrator.graph import build_graph
-from app.orchestrator.runner import NotAwaitingApproval, Pipeline, PipelineOutcome
+from app.orchestrator.runner import (
+    NotAwaitingApproval,
+    NotRecoverable,
+    Pipeline,
+    PipelineOutcome,
+    facts_from_state,
+)
 from app.orchestrator.state import RunState
 from app.research.planner import PlanRequest, plan_queries
 from app.research.search import OfflineSearch, SearchResult
-from tests.snapshot_support import CFG, EXTRACTOR, GOOD, LivePages
+from tests.snapshot_support import CFG, EXTRACTOR, GOOD, LivePages, LiveSearch, plan_for, urls_for
 
 pytestmark = pytest.mark.anyio
 
@@ -64,17 +72,34 @@ class Sink:
 class Ledger:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, ...]] = []
+        self.facts: list[RunFacts | None] = []
+        self.current = "queued"
+
+    async def status(self, run_id: UUID) -> str | None:
+        return self.current
 
     async def suspend(self, run_id: UUID) -> None:
         self.calls.append(("suspend",))
 
     async def end(
-        self, run_id: UUID, status: str, *, budget_exhausted: bool, memory: StagedMemory | None
+        self,
+        run_id: UUID,
+        status: str,
+        *,
+        budget_exhausted: bool,
+        memory: StagedMemory | None,
+        facts: RunFacts | None,
     ) -> None:
         self.calls.append(("end", status, budget_exhausted, memory))
+        self.facts.append(facts)
+        self.current = status
 
-    async def fail(self, run_id: UUID, corrections: StagedMemory | None) -> None:
+    async def fail(
+        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+    ) -> None:
         self.calls.append(("fail", corrections))
+        self.facts.append(facts)
+        self.current = "failed"
 
 
 def truth_with(*claims: Claim, sector: Sector | None = None) -> ProductTruth:
@@ -435,3 +460,163 @@ async def test_the_research_adapter_returns_attributed_findings_and_no_page_text
     for f in result.findings:
         assert set(f) == {"url", "title", "score", "published", "queries", "engines", "first_party"}
     assert "text" not in repr(result.findings) and GOOD[:30] not in repr(result.findings)
+
+
+# ── The run record says how the run went, not only that it ended ─────────────────────────────
+
+
+async def test_a_completed_run_with_a_failed_agent_is_told_from_a_whole_one_in_the_run_record() -> (
+    None
+):
+    whole = Harness()
+    await whole.start()
+    await whole.decide("approve")
+    assert whole.ledger.facts[-1] is not None and whole.ledger.facts[-1].declared_gaps == ()
+
+    agents = {**mock_agents(), "A2": Failing("A2", RuntimeError("engine down"))}
+    gappy = Harness(agents=agents)
+    await gappy.start()
+    await gappy.decide("approve")
+    facts = gappy.ledger.facts[-1]
+    assert gappy.ledger.calls[-1][:2] == ("end", "completed")
+    assert facts is not None
+    assert facts.declared_gaps == ({"agent": "A2", "step": 7, "error": "RuntimeError"},)
+    assert (facts.depth, facts.selected_agents) == ("D1", ("A1", "A2", "A3", "A6", "A7"))
+    assert facts.memory_hit_count == 0 and facts.research_score == 1.0
+
+
+async def test_a_partial_run_records_its_facts_from_the_checkpoint() -> None:
+    agents = {**mock_agents(), "A1": Failing("A1", BudgetExceeded("run call cap"))}
+    h = Harness(agents=agents)
+    await h.start()
+    facts = h.ledger.facts[-1]
+    assert h.ledger.calls[-1][:3] == ("end", "partial", True)
+    assert facts is not None and facts.depth == "D1" and facts.selected_agents is not None
+
+
+def test_a_gap_is_one_however_many_times_its_agent_failed() -> None:
+    error = {"step": 10, "agent": "A6", "error": "RuntimeError", "message": "x"}
+    facts = facts_from_state({"errors": [error, error, {**error, "step": 11, "agent": "A7"}]})
+    assert [(g["agent"], g["step"]) for g in facts.declared_gaps] == [("A6", 10), ("A7", 11)]
+
+
+async def test_recover_ends_a_run_whose_graph_finished_in_a_process_that_died_before_ending() -> (
+    None
+):
+    h = Harness()
+    await h.start()
+    real_end = h.ledger.end
+
+    async def dies(*args: Any, **kwargs: Any) -> None:
+        raise asyncio.CancelledError  # the worker is gone before the status is written
+
+    h.ledger.end = dies  # type: ignore[method-assign]
+    with pytest.raises(asyncio.CancelledError):
+        await h.decide("approve")
+    assert h.ledger.current == "queued" and not any(c[0] == "end" for c in h.ledger.calls)
+    h.ledger.end = real_end  # type: ignore[method-assign]
+
+    out = await h.pipeline.recover(h.run_id)
+    assert out.status == "completed" and "staged memory was lost" in (out.reason or "")
+    assert h.ledger.calls[-1][:2] == ("end", "completed") and h.ledger.calls[-1][3] is None
+    with pytest.raises(NotRecoverable, match="already ended"):
+        await h.pipeline.recover(h.run_id)
+
+
+async def test_recover_refuses_a_parked_run_and_a_run_that_never_started() -> None:
+    h = Harness()
+    with pytest.raises(NotRecoverable, match="no checkpoint"):
+        await h.pipeline.recover(h.run_id)
+    await h.start()
+    with pytest.raises(NotRecoverable, match="use resume"):
+        await h.pipeline.recover(h.run_id)
+
+
+# ── Every model call says which execution made it (migration 0035) ───────────────────────────
+
+
+def test_a_call_context_sets_step_round_and_execution_together_or_not_at_all() -> None:
+    CallContext(ORG, uuid4())  # a call outside the graph
+    CallContext(ORG, uuid4(), "A3", 7, 0, uuid4())
+    for partial in ({"step": 7}, {"execution_id": uuid4()}, {"revision_round": 0}):
+        with pytest.raises(ValueError, match="set together"):
+            CallContext(ORG, uuid4(), **partial)  # type: ignore[arg-type]
+
+
+async def test_each_agent_execution_gets_its_own_execution_id_and_its_step_and_round() -> None:
+    seen: list[CallContext] = []
+
+    class Records:
+        def __init__(self, agent_id: str) -> None:
+            self.id = agent_id
+
+        async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
+            seen.append(ctx.call_context(self.id))
+            return await mock_agents()[self.id].run(state, ctx)
+
+    agents = {**mock_agents(), **{a: Records(a) for a in ("A1", "A3", "A6", "A7")}}
+    h = Harness(agents=agents)
+    await h.start()
+    await h.decide("revise", "again")
+    by_agent = {a: [c for c in seen if c.agent_id == a] for a in ("A1", "A3", "A6", "A7")}
+    assert [(c.step, c.revision_round) for c in by_agent["A1"]] == [(7, 0)]
+    assert [(c.step, c.revision_round) for c in by_agent["A6"]] == [(10, 0), (10, 1)]
+    assert [(c.step, c.revision_round) for c in by_agent["A7"]] == [(11, 0), (11, 1)]
+    ids = [c.execution_id for c in seen]
+    assert len(set(ids)) == len(ids), "every execution of a body is its own execution"
+    with pytest.raises(ValueError, match="need the graph step"):
+        AgentContext(uuid4(), ORG, truth_with(VERIFIED), ON).call_context("A1")
+
+
+# ── An agent can read a finding's text under replay ──────────────────────────────────────────
+
+
+async def test_an_agent_reads_a_findings_text_from_the_snapshot_never_from_the_network(
+    tmp_path,
+) -> None:
+    from app.research.snapshot import SnapshotMiss, SnapshotPages, SnapshotStore, record_request
+    from tests.snapshot_support import DECLARED, TODAY, no_sleep
+
+    store = SnapshotStore.create(tmp_path / "evaluation-snapshot")
+    plan = plan_for()
+    pages = LivePages()
+    await record_request(
+        "R01",
+        plan,
+        store=store,
+        search=LiveSearch(plan, urls_for(plan)),
+        pages=pages,
+        extractor=EXTRACTOR,
+        source_cfg=CFG.source,
+        declared=DECLARED,
+        retries=2,
+        today=TODAY,
+        sleep=no_sleep,
+    )
+    url = "https://r1-0.example/p"
+    reader = PageEvidence(SnapshotPages(store), EXTRACTOR)
+    recorded = await reader.text(url)
+    assert recorded is not None and "neckband earphones" in recorded
+    pages.bodies[url] = "the live page has since changed"  # a live fetch would now differ
+    assert await reader.text(url) == recorded
+    with pytest.raises(SnapshotMiss):  # never answered from the network
+        await reader.text("https://never-recorded.example/p")
+
+    class Reads:
+        id = "A2"
+
+        async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
+            assert ctx.evidence is not None
+            text = await ctx.evidence.text(state["findings"][0]["url"])
+            return CreativeOutput(copy={"headline": text or ""}, statements=[])
+
+    h = Harness(agents={**mock_agents(), "A2": Reads()})
+    h.deps.evidence = reader
+
+    async def research(state: RunState, depth: Any) -> ResearchResult:
+        return ResearchResult([{"url": url, "title": "t", "score": 0.7}], {})
+
+    h.deps.research = research
+    out = await h.start()
+    assert out.state["agent_outputs"]["A2"]["copy"]["headline"] == recorded
+    assert recorded not in repr(out.state["findings"])  # the text stayed out of the state

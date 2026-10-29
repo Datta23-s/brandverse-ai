@@ -237,6 +237,8 @@ LLM_CALLS_COLUMNS = {
     "rate_limit_wait_ms", "outcome", "finished_at",
     # 0014
     "prompt_id", "prompt_version",
+    # 0035: which graph execution made the call
+    "step", "revision_round", "execution_id",
 }  # fmt: skip
 
 

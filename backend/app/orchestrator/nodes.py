@@ -19,7 +19,7 @@ declared gap. `BudgetExceeded` is not an agent failure and is never swallowed: t
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Send
@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 # Step 7b. A6 runs in step 10 and A7 in step 11: they need the strategy and the draft, which do not
 # exist at step 7.
 FAN_OUT_AGENTS = ("A1", "A2", "A3")
-RESEARCH_STEP, AGENTS_STEP, MEMORY_STEP = 6, 7, 15
+RESEARCH_STEP, AGENTS_STEP, CREATIVE_STEP, VALIDATION_STEP, MEMORY_STEP = 6, 7, 10, 11, 15
 
 
 class NodeFn(Protocol):
@@ -127,12 +127,26 @@ class Nodes:
         return node
 
     # ── context ───────────────────────────────────────────────────────────────────────────────
-    async def context(self, state: RunState) -> AgentContext:
+    async def context(
+        self, state: RunState, step: int = 0, revision_round: int = 0
+    ) -> AgentContext:
+        """The truth as it is now, and, for a body that makes agent calls (`step` > 0), a NEW
+        execution id: each time a body starts it is a different execution, so a body re-run from a
+        checkpoint after its worker died is told apart from the first (migration 0035)."""
         run_id, org_id, product_id = _ids(state)
         loaded = await self.d.load_context(org_id, product_id)
         if loaded is None:
             raise PipelineInputError(f"no product {product_id} in organisation {org_id}")
-        return AgentContext(run_id, org_id, loaded.truth, self.d.today())
+        return AgentContext(
+            run_id,
+            org_id,
+            loaded.truth,
+            self.d.today(),
+            step=step,
+            revision_round=revision_round,
+            execution_id=uuid4() if step else None,
+            evidence=self.d.evidence,
+        )
 
     # ── steps 1 to 5 ──────────────────────────────────────────────────────────────────────────
     async def normalise_request(self, state: RunState) -> dict[str, Any]:
@@ -237,7 +251,7 @@ class Nodes:
     async def run_agent(self, state: AgentTask) -> dict[str, Any]:
         agent_id, run = state["agent_id"], state["run"]
         try:
-            ctx = await self.context(run)
+            ctx = await self.context(run, AGENTS_STEP)
             out = await self.d.agents[agent_id].run(run, ctx)
         except BudgetExceeded:
             raise
@@ -278,7 +292,7 @@ class Nodes:
         regenerating = state.get("creative") is not None
         round_ = state.get("revision_round", 0) + (1 if regenerating else 0)
         try:
-            ctx = await self.context(state)
+            ctx = await self.context(state, CREATIVE_STEP, round_)
             out = await self.d.agents["A6"].run(state, ctx)
         except BudgetExceeded:
             raise
@@ -286,7 +300,7 @@ class Nodes:
             return {
                 "creative": None,
                 "revision_round": round_,
-                "errors": [_agent_error(10, "A6", e)],
+                "errors": [_agent_error(CREATIVE_STEP, "A6", e)],
                 "_detail": "A6 failed: no creative",
             }
         return {
@@ -324,14 +338,14 @@ class Nodes:
             validation = report_dict(report)
         errors: list[dict[str, Any]] = []
         try:
-            ctx = await self.context(state)
+            ctx = await self.context(state, VALIDATION_STEP, state.get("revision_round", 0))
             risk = await self.d.agents["A7"].run(state, ctx)
             validation["a7"] = risk.model_dump(mode="json")
         except BudgetExceeded:
             raise
         except Exception as e:
             validation["a7"] = None
-            errors.append(_agent_error(11, "A7", e))
+            errors.append(_agent_error(VALIDATION_STEP, "A7", e))
         update: dict[str, Any] = {
             "validation": validation,
             "_detail": f"gates: {validation['outcome']}",

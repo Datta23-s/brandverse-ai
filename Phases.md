@@ -500,6 +500,18 @@ in the frontend, auth, the workspace, claim CRUD, the fake-run form, `RunView` w
 client, zod contracts compared against `api-contracts.json`, and 3 e2e specs. Not built: LangGraph, any agent, a
 campaign or copy view, gate findings, the `ApprovalBar`, and approve/reject endpoints.
 
+**Chunk A progress (2026-10-29).** Built: the 15-node graph with a parallel agent fan-out, a revision loop
+bounded at 2 rounds, an interrupt before step 12 and the Postgres checkpointer (0034, a private schema:
+`setup()` would have created the tables in `public`); runs end through the executor's own functions;
+mocked agents and no network. Exit criteria shown with mocks: a killed worker is continued from its
+checkpoint by another process (finished steps and finished agents of the same step are not re-run); a
+forced agent failure leaves a declared gap. Migrations 0033, 0034 and 0035 are written and dry-run, **none
+applied**. Requirements this creates for later chunks: **B** reads finding text through
+`AgentContext.evidence` (a replay path exists and is tested) and makes every model call with
+`ctx.call_context(agent_id)`; **E** must key the approval decision so approving twice writes one row; **F**
+removes the approval wait from the latency figures. The re-execution ruling is in
+`docs/evaluation-plan.md`, "Re-executed steps".
+
 ---
 
 ## Phase 7 — Adaptive Intelligence
