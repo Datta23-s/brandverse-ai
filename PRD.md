@@ -191,6 +191,15 @@ Step 15 feeds step 4 on the next run. **That loop is the product.**
 | N9 | Accessibility | WCAG 2.2 AA on all non-3D content |
 | N10 | Reduced motion | `prefers-reduced-motion` halts all animation |
 
+**N2 is contradicted by the free-tier search infrastructure — measured 2026-10-29.** A live D2 run issues the
+planner's 8 searches (`Phases.md` Phase 5). The shortest gap shown sustainable for the declared engine set is 2
+minutes, so the searches alone take about 16 minutes, against a 5-minute target for the whole run, and the target
+cannot be met live whatever its search share was meant to be (shorter gaps are untested; a burst of about ten
+searches in minutes got this IP throttled for over twenty minutes). Unit search latency is not the problem: 129
+recorded searches took a median 3.53 s. Under replay, the evaluation's mode, search cost is near zero and N2 is
+achievable. The requirement fails for live production, which does not exist yet. (`Phases.md` Phase 5 exit
+criterion, `docs/searxng.md`.)
+
 ---
 
 ## 7. Evaluation metrics

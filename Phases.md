@@ -360,7 +360,20 @@ Supabase project runs 0.8.2 (`Architecture.md` §11). Once `memory_items` holds 
 | Query planner | One ranked query list per request from fixed templates over 4 facets (design approved 2026-10-28: `backend/app/research/planner.py`); D1 = first pass, D2 = all; generation is not adaptive; q = 8 confirmed by the within-facet overlap measurement (0.10; cross-facet 0.01) |
 
 **Exit criteria**
-- [ ] 20 searches complete within the latency budget
+- [x] **(a) Unit search latency**, satisfied from the recording, not a standalone test (owner, 2026-10-29):
+  129 accepted searches (R01-R25, committed 2026-10-28 and 29) against the declared set yep, yandex, yahoo and
+  duckduckgo web, with 16 engines enabled (bing, brave, crowdview, duckduckgo, duckduckgo web, gmx, mojeek, mwmbl,
+  privacywall, seznam, swisscows, wiby, wikipedia, yahoo, yandex, yep; avalw off), the pinned SearXNG image
+  `2026.10.19-81371861f` and a 5 s per-engine timeout: median 3.53 s, mean 3.74, p90 5.02, max 5.19 (R01-R12,
+  n = 63: median 3.41, mean 3.54, max 5.05). The pacing wait is outside the timer. Only accepted searches are stored.
+- [ ] **(b) 20 searches in a live run within the latency budget: NOT MET, and not achievable on this
+  infrastructure** (owner, 2026-10-29). The planner issues 8 searches; at the 120 s gap the recorder keeps, that is
+  16 minutes of pacing against `PRD.md` N2's 5 minutes for a whole D2 run (20 would be 40 minutes). 2-minute gaps
+  are the shortest shown sustainable for the declared set (45 searches over 91 minutes, no refusal); shorter gaps are
+  untested on it, and a burst of about ten searches in minutes throttled this IP's brave, wikipedia and duckduckgo
+  for over twenty minutes (`docs/searxng.md`). Recorded against N2 in `PRD.md`. Under replay, which is how the
+  evaluation runs, search cost is near zero and N2 is achievable; the requirement fails for live production, which
+  does not exist yet.
 - [ ] Low-scored sources are discarded before reaching an agent
 - [ ] No raw page body exists in Postgres after a run
 - [ ] Rate-limit failures degrade to partial results, not a crash
@@ -465,6 +478,27 @@ in favour of the original design diagram's five-agent MVP: **A1, A2, A3, A6, A7*
   for a factual property of the brand's own product and not as the sole evidence for a comparative
   (superlative list) or efficacy (regulated sector) claim; add an independence factor separate from
   authority. Until then a verified claim whose `evidence_url` is the brand's own domain is unmarked and indistinguishable from independent evidence
+
+**Phase 6 plan (approved 2026-10-29, owner).** Order: A, then B/C/D in parallel, then E, F, G. Development builds
+against `OfflineSearch`; any live run (the real campaign, the D2 latency run, the measurement of s) holds until the
+recording is finished or deliberately paused, and the owner rules on the pause. No strong tier outside the tuning
+organisation.
+
+| Chunk | Covers | Rulings |
+|---|---|---|
+| **A. Graph skeleton** | LangGraph with all 15 nodes, reducers, Postgres checkpointer, approval interrupt, run under `budgeted_run`; real step events to the existing stepper | `langgraph` and `langgraph-checkpoint-postgres` approved (the checkpointer is not optional: resume is an exit criterion). The `runs.status` CHECK lands now, with `awaiting_approval`, under the usual migration procedure; the status is added to `Architecture.md` §4.4 first |
+| **B. Agents A1, A2, A3, A6, A7** | Prompts, structured outputs, gates in `validate_evidence`, revision rounds | Mocked first, then a few Standard-tier calls; revision bounded at 2 rounds |
+| **C. Persona vectors, six-component M** | `C` and `E` wired through the `retrieve_memory` caller; a test that a real retrieval returns six components | An item's persona context is the persona of the campaign that produced it, encoded by the local encoder from A3's persona output and stored on the item at write-back. `C` is the similarity between the request's persona and the item's. An item reinforced by several campaigns carries several personas: **the maximum** (monotone, as for `E`), and the set is stored, not only the aggregate |
+| **D. V6 first-party** | Brand-domain field, `first_party` populated, host check on verified claims' `evidence_url`, an independence factor separate from authority | The independence factor is designed in this chunk. The sole-evidence rule **blocks**, it does not flag: the triggers are mechanical (comparative = trips the superlative list; efficacy = a regulated sector), so a block cannot fire on a misclassification |
+| **E. Approval API and UI** | Campaign view with copy and gate findings, edit-out, approve, reject; `ApprovalBar` per `Design.md`; demo grade | Edit-out **removes** a statement and re-runs the gates; the approver does not rewrite text (a human rewriting copy would make the arm comparison measure the human). "Revise" is a regeneration round, inside the 2-round bound |
+| **F. Real runs and measurements** | First real campaign, killed-worker run, forced-failure run, per-step latency (N1, N2) with and without rate-limit waits, s on the tuning organisation | Live runs wait for the recording |
+| **G. Reuse-band calibration** | Calibrate the 0.90 / 0.80 / 0.65 bands and the write-back gate on the six-component `M` | Stays in Phase 6, after F, and is **not** blocked by the missing relevance labels: those measure retrieval relevance (Precision@10); the bands are reuse thresholds on `M`, calibrated against approver judgement on the real campaigns that E and F produce |
+
+*What already exists (nothing is rebuilt):* the 15 steps as data (`core/pipeline.py`), the budgeted executor, the
+gates, `authorize_approval`, the `approvals` table, the research driver, write-back and `score()` (no caller yet);
+in the frontend, auth, the workspace, claim CRUD, the fake-run form, `RunView` with the 15-step stepper and SSE
+client, zod contracts compared against `api-contracts.json`, and 3 e2e specs. Not built: LangGraph, any agent, a
+campaign or copy view, gate findings, the `ApprovalBar`, and approve/reject endpoints.
 
 ---
 
