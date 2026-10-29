@@ -2115,6 +2115,27 @@ search is retried, never recorded), so a high rate costs time and not correctnes
 measurement: the first recording session tracks the degraded-search rate (degraded searches over searches
 issued, and which declared engine caused each) and reports it; 45 searches is a bound, not the answer.**
 
+**The declared set was chosen from an unrepresentative window (owner, 2026-10-29; a limitation, stated beside the
+declaration).** The four engines were declared from one 91-minute stretch in which they all answered every search.
+Later sessions show that stretch was a clean sample, not the engines' behaviour. Yahoo carries a code defect in the
+pinned image (`yahoo.py:227`, `docs/searxng.md`): it fails every time a query's results include a row without a
+description block, so a given query fails again on every retry. Yep returns HTTP 503 from `api.yep.com` in spells: in
+session 4, 24 consecutive attempts at R26 from 13:32 UTC, with yahoo failing on the same searches. Yandex timed out
+once in session 3 and once in a probe. In practice the set is **two engines that have carried the recording
+(duckduckgo web and yandex, causes of one degraded search between them in sessions 2 to 4) and two that have not
+(yahoo and yep)**. The three-of-four rule works because it needs only one of the unreliable pair. It stops working
+when both fail together, which is what stalled R26, or when a reliable engine drops as well. The finding is about
+selecting infrastructure from a short clean sample: a window that long shows no failure, and says almost nothing
+about whether one will come. Declaring the set after a longer, repeated sample on different days would have shown
+yahoo's defect and yep's outages before they cost sessions. The set was not changed, because it is the cache key and
+changing it would re-record everything.
+
+**What the store can and cannot show about this.** Only complete searches are stored, so the per-engine counts in
+`engine_coverage` are conditioned on success and understate every engine's failures (after 25 requests: 129 searches,
+114 with four declared engines and 15 with three; yahoo contributed to 126 and yep to 120, yet yahoo failed every
+attempt on some queries). The failure rates are in the session logs (`degraded_causes`, `searches_degraded`), not
+in the snapshot.
+
 *Not established.* Which contributing engines share an upstream index (URL containment in one search is the
 only evidence; the image documents a backend for two engines); anything about 4 hours or 120 searches; a
 rate for any day but 2026-10-28. *Recording arithmetic under this set:* 153 distinct searches (240 query
