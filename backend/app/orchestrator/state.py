@@ -28,6 +28,9 @@ class RunState(TypedDict, total=False):
     user_id: str
     product_id: str
     brief: str | None
+    # The audience the request states (the evaluation's `audience_hint`). Research is planned from
+    # it, not from A3's personas, which come after research (a design limit, Phases.md Phase 6).
+    audience: str | None
     request: dict[str, Any]
     product: dict[str, Any] | None
     truth: dict[str, Any] | None  # a summary: sector, counts. Not the claims.

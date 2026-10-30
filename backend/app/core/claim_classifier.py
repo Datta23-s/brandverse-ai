@@ -1,7 +1,8 @@
 """The claim classifier (Phases.md Phase 3 chunk C): statements out of free copy, then the gates.
 
 A model **extracts** the factual statements in generated copy — exact quotes — and names the
-listed claim each rests on, or none (prompt `claim_extract@v1`). It never labels anything: the
+listed claim each rests on, or none (prompt `claim_extract@v2`; v2 also reports property
+assertions inside noun phrases, threat V11). It never labels anything: the
 claim gate computes verified / deduced / blocked from the cited claim's stored type
 (app/core/gates.py). Every quote is checked against the copy, so an invented quote is a block,
 not a pass.
@@ -48,7 +49,7 @@ from app.llm.registry import Tier
 
 log = logging.getLogger(__name__)
 
-CLAIM_EXTRACT = ("claim_extract", "v1")
+CLAIM_EXTRACT = ("claim_extract", "v2")
 
 
 class ExtractedStatement(BaseModel):

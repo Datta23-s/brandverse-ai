@@ -44,7 +44,7 @@ from app.agents.product_brand import ProductBrandAnalyst
 from app.agents.risk import RiskReader
 from app.core.config import get_settings
 from app.core.gates import load_superlatives
-from app.evaluation.test_set import TEST_SET, plan_requests
+from app.evaluation.test_set import TEST_SET
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
@@ -101,6 +101,7 @@ def request_inputs() -> dict[str, object]:
         "claims": list(product["verified"]),
         "evidence_url": product["evidence_url"],
         "brief": f"{request['objective']}. Audience: {request['audience_hint']}.",
+        "audience": request["audience_hint"],
     }
 
 
@@ -189,8 +190,6 @@ async def main(args: argparse.Namespace) -> int:
         locale=research_cfg.planner_locale,
         max_pages_per_query=research_cfg.max_pages_per_query,
         today=lambda: date.today(),
-        # the evaluation's recorded queries carry the request's audience; production's do not
-        request_for=lambda state: plan_requests()[REQUEST_ID],
     )
     inp = request_inputs()
 
@@ -198,6 +197,7 @@ async def main(args: argparse.Namespace) -> int:
     probe = RunState(
         product={"category": inp["category"]},
         truth={"sector": inp["sector"], "regulated": False},
+        audience=str(inp["audience"]),
     )
     try:
         pre = await research(probe, "D1")
@@ -282,6 +282,7 @@ async def main(args: argparse.Namespace) -> int:
                     product_id=product,
                     brief=str(inp["brief"]),
                     depth="D1",
+                    audience=str(inp["audience"]),
                 )
                 outcome_state = {"status": out.status, "state": out.state}
                 print(f"run status: {out.status}")

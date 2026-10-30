@@ -157,6 +157,22 @@ def pool_context_loader(pool: AsyncConnectionPool[AsyncConnection]) -> LoadConte
     return load
 
 
+def plan_request_from_state(state: RunState) -> PlanRequest:
+    """The research plan's request, from the run: the product's category, its sector in words, and
+    the AUDIENCE the request states. The evaluation's recorded queries carry the audience hint, so
+    production must plan from the same fields or it asks other queries than the ones replayed.
+    A sector id may use hyphens or underscores; both read as spaces, as in the test set."""
+    product = state.get("product") or {}
+    truth = state.get("truth") or {}
+    sector = str(truth.get("sector") or "general").replace("_", " ").replace("-", " ")
+    return PlanRequest(
+        sector=sector,
+        regulated=bool(truth.get("regulated")),
+        category=product.get("category") or "product",
+        audience=state.get("audience"),
+    )
+
+
 def driver_research(
     search: SearchProvider,
     pages: PageSource,
@@ -167,28 +183,15 @@ def driver_research(
     locale: str,
     max_pages_per_query: int | None,
     today: Callable[[], date],
-    request_for: Callable[[RunState], PlanRequest] | None = None,
 ) -> Research:
     """Step 6 over the Phase 5 research driver, in PRODUCTION mode (a degraded run is partial and
     declares its gap; only the evaluation's recording aborts a request).
 
-    The plan's request is the product's category and sector, WITHOUT an audience: the run request
-    carries none, and A3's personas come after this step. The evaluation's recorded queries do carry
-    the request's audience hint, so a replay that must find them passes `request_for` to supply the
-    recorded request; production does not (a gap, recorded in Phases.md Phase 6)."""
+    The plan comes from `plan_request_from_state`: category, sector and the request's stated
+    audience. A3's personas cannot inform it: they come after this step (a design limit)."""
 
     async def run(state: RunState, depth: Depth) -> ResearchResult:
-        product = state.get("product") or {}
-        truth = state.get("truth") or {}
-        request = (
-            request_for(state)
-            if request_for is not None
-            else PlanRequest(
-                sector=(truth.get("sector") or "general").replace("_", " "),
-                regulated=bool(truth.get("regulated")),
-                category=product.get("category") or "product",
-            )
-        )
+        request = plan_request_from_state(state)
         plan = plan_queries(
             request,
             queries_per_facet=queries_per_facet,

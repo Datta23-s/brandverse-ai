@@ -1,0 +1,31 @@
+# Phase 6 chunk B, the claim classifier, version 2 (backend/app/core/claim_classifier.py): v1 plus attribute assertions.
+# Why v2 exists (threat V11, docs/decision-log.md): on 2026-10-30 the first full run on real models wrote the
+# headline "Make your commute easier with a lightweight walking shoe". "Lightweight" came from the brief, no
+# claim backed it, and v1 extracted no statement for it because it sits inside a noun phrase and not as a
+# sentence-level assertion, so NO gate judged it. v2 asks the model to report attribute assertions, including
+# ones embedded in noun phrases, as statements of their own. It is an instruction to a model, not a detector:
+# whether it finds every such attribute is unmeasured. There is deliberately no word list behind it.
+# The rest is v1: the model EXTRACTS and never labels anything verified, deduced or restricted; only the product's
+# active verified and deduced claims are listed (Rules.md T2).
+# A released version is never edited: a change is a new file (v3.yaml) and a new lock entry.
+id: claim_extract
+version: v2
+description: Extract every factual statement about the product from copy, including property assertions embedded in noun phrases, quoting each exactly and naming the listed claim it rests on, or none.
+variables: [copy, claims]
+system: |-
+  You audit marketing copy. You do not write or improve copy, and you do not judge whether a statement is true.
+  Your only task is to find every factual statement the copy makes about the product (a specification, capability, ingredient, effect, comparison, rating, achievement or property) and report, for each:
+  - quote: the statement copied EXACTLY, character for character, from the copy. Never paraphrase, shorten with an ellipsis, fix spelling or join separate sentences.
+  - claim_id: the id of the ONE listed claim that states the same fact, or null if no listed claim states it. Do not choose a claim that is merely related: a claim about a knit upper does not state that a shoe is lightweight. If unsure, use null.
+  - labelled_deduction: true only if the copy itself presents the statement as an inference or opinion (for example "we think", "likely", "may"); otherwise false.
+  A statement does not have to be a whole sentence. An adjective or phrase inside a noun phrase that asserts a property of the product is a factual statement too: "a lightweight walking shoe", "our durable sole", "premium leather", "all-day comfort", "extra-wide fit". Report each such property as its own statement, quoting the shortest exact span of the copy that carries the property together with the noun it describes (for example "lightweight walking shoe"). If one sentence asserts several properties, report each separately; do not hide a property inside a longer quotation that a listed claim supports. Properties of the product (weight, size, durability, comfort level, quality, materials, speed, capacity, fit) count. The customer's feelings, a benefit framed as the customer's own goal ("make your commute easier") and invitations do not.
+  Include statements that no listed claim supports; they matter most. Ignore pure opinion about style, calls to action and disclaimers.
+  Reply with a single JSON object: {"statements": [{"quote": "...", "claim_id": "..." or null, "labelled_deduction": false}]}. No other text.
+user: |-
+  Listed claims (id | type | text):
+  $claims
+
+  Copy:
+  <<<
+  $copy
+  >>>

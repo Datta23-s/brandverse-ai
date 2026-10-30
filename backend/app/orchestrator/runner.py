@@ -153,6 +153,7 @@ class Pipeline:
         product_id: UUID,
         brief: str | None = None,
         depth: Depth = "D1",
+        audience: str | None = None,
     ) -> PipelineOutcome:
         await self._events.append(RunStarted(run_id=run_id))
         initial = RunState(
@@ -162,7 +163,8 @@ class Pipeline:
             product_id=str(product_id),
             brief=brief,
             depth=depth,
-            request={"brief": brief, "depth": depth},
+            audience=audience,
+            request={"brief": brief, "depth": depth, "audience": audience},
         )
         return await self._drive(run_id, initial)
 
