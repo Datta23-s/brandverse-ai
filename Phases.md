@@ -539,7 +539,8 @@ competitor research of Phase 6: it reads up to six accepted pages (2,500 charact
 own pages skipped), is not shown the product's claims, and reports category conventions, competitor
 messages (each with a quote checked against the excerpt the model saw, dropped and counted otherwise, the
 URL set by code) and whitespace (an inference, naming its basis pages). The pages are untrusted text:
-threat V10 (`docs/decision-log.md`). `MarketOutput` is not shown to A6. Not built: A1's brand-voice
+threat V10 (`docs/decision-log.md`). A6 is shown A2's DERIVED summaries only (`for_copy`, code-checked,
+prompt `a6_copy@v2`), never a quote, competitor message or excerpt. Not built: A1's brand-voice
 vector (Architecture.md section 7 lists it; the brand-voice gate's similarity score is unscheduled).
 Chunk B remains open until A1, A2 have had their few Standard-tier calls (1 of the 6 approved remains;
 more needs the owner).

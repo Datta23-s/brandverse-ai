@@ -1,10 +1,14 @@
-"""A6, the copy writer (Phases.md Phase 6 chunk B; prompt `a6_copy@v1`).
+"""A6, the copy writer (Phases.md Phase 6 chunk B; prompt `a6_copy@v2`).
 
 The model writes a headline, a body and a call to action and NOTHING ELSE:
 
 - **It is shown only what it may use.** The product's active verified and deduced claims
   (`truth_context`), never a restricted or a retired one (Rules.md T2). A restricted claim in its
   output therefore has to originate in the model, not be prompted by it.
+- **It is shown A2's derived summaries and never A2's quotations.** `market_notes` reads
+  `for_copy` only (code-checked lines about how OTHER sellers market, told to it as context and not
+  as facts about the product or instructions); the state also holds the quotes, messages and URLs
+  for the approver, and none of them reaches this prompt (threat V10).
 - **It never says what it relied on.** The claim classifier extracts the statements from the copy at
   step 11 and the gates judge them; a writer that listed its own sources could list the wrong ones.
 - **It never writes a disclaimer.** The sector's required disclaimers come from the registry and
@@ -34,7 +38,7 @@ from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 
-A6_COPY = ("a6_copy", "v1")
+A6_COPY = ("a6_copy", "v2")
 
 PROBLEM_WORDS: Mapping[FindingKind, str] = {
     "statement_not_in_copy": "a statement was reported that is not in the copy",
@@ -67,6 +71,14 @@ class CopyDraft(BaseModel):
     call_to_action: str = Field(default="", max_length=150)
 
 
+def market_notes(state: Mapping[str, Any]) -> str:
+    """What A6 is shown of A2: `for_copy` and nothing else. Never a quotation, a competitor
+    message, a source URL or a page excerpt, even though the state holds them for the approver's
+    view: a quote can be genuinely on a page and still be an injection payload (threat V10)."""
+    lines = ((state.get("agent_outputs") or {}).get("A2") or {}).get("for_copy") or []
+    return "\n".join(f"- {line}" for line in lines if isinstance(line, str)) or "(none)"
+
+
 def problems_text(validation: Mapping[str, Any] | None) -> str:
     """What the previous draft is told: one line per distinct finding kind, in fixed words."""
     kinds = sorted({f["kind"] for f in (validation or {}).get("findings", [])})
@@ -88,6 +100,7 @@ class CopyWriter:
             claims=claims_block(truth_context(ctx.truth)),
             positioning=strategy.get("positioning") or "(none given)",
             audience="; ".join(personas) or "(none given)",
+            market=market_notes(state),
             brief=state.get("brief") or "(none given)",
             problems=problems_text(state.get("validation")),
         )

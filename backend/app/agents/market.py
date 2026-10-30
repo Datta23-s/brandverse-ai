@@ -12,8 +12,13 @@ did not write and cannot trust:
   never instruction. That reduces the risk; it does not remove it, so the rest below does not rely
   on it.
 - **The output cannot carry an injected instruction anywhere that acts.** It is a closed schema of
-  short strings, nothing in it is executed or fetched, and `MarketOutput` is not shown to A6 (a
-  later decision, not this one). It is context for the strategy view.
+  short strings and nothing in it is executed or fetched. A6 is shown only its DERIVED part,
+  `for_copy` (owner, 2026-10-30): the conventions' and whitespace's own summaries, each checked by
+  code (`safe_derived`: one line, no markup or URL, no run of five words copied from a page). A6
+  never receives a quotation, a competitor message or an excerpt: a quote can be genuinely on a
+  page and still be a payload, so verifying it proves where it came from, not that it is safe.
+  A derived line is still written by a model that read hostile text; an injection that survives
+  summarisation survives this (threat V10).
 - **What can be checked is checked.** A convention or a message must quote the excerpt the model
   was shown, character for character after whitespace is collapsed; one that does not is dropped
   and counted (`dropped_unverifiable`), because an invented quotation shown to a person reads as
@@ -43,6 +48,10 @@ MAX_PAGES = 6
 MAX_PAGE_CHARS = 2500
 MIN_QUOTE_CHARS = 12
 _TAGLIKE = re.compile(r"</?\s*page\b", re.IGNORECASE)
+_MARKUP = re.compile(r"[<>{}`\[\]\\]|https?:|www\.|://", re.IGNORECASE)
+_WORD = re.compile(r"[a-z0-9']+")
+COPIED_RUN_WORDS = 5  # an untuned judgement: five words in a row copied from a page
+MAX_FOR_COPY = 8
 
 
 class _RawItem(BaseModel):
@@ -72,6 +81,26 @@ def excerpt(text: str) -> str:
     """What the model is shown of a page: whitespace collapsed, wrapper-like text neutralised,
     capped. The quote check runs against exactly this."""
     return _TAGLIKE.sub("[page", " ".join(text.split()))[:MAX_PAGE_CHARS]
+
+
+def _shingles(text: str) -> set[tuple[str, ...]]:
+    words = _WORD.findall(text.casefold())
+    n = COPIED_RUN_WORDS
+    return {tuple(words[i : i + n]) for i in range(len(words) - n + 1)}
+
+
+def safe_derived(text: str, pages: Mapping[str, str]) -> str | None:
+    """A summary line A6 may be shown, or None. Checked by code, not by the model: one line, no
+    markup or URL, and no run of COPIED_RUN_WORDS words that appears in a page the model read, so
+    what reaches the copy writer is the model's own wording and not a page's. This bounds a pasted
+    payload; it does NOT bound a short or reworded one (threat V10)."""
+    line = " ".join(text.split())
+    if not line or len(line) > 200 or _MARKUP.search(line):
+        return None
+    mine = _shingles(line)
+    if any(mine & _shingles(page) for page in pages.values()):
+        return None
+    return line
 
 
 def pages_block(pages: Mapping[str, str]) -> str:
@@ -144,10 +173,21 @@ class MarketAnalyst:
                 whitespace.append(Whitespace(text=w.text, basis_urls=basis))
             else:
                 dropped += 1
+        conventions = verified(raw.category_conventions)
+        unsafe = 0
+        for_copy: list[str] = []
+        for candidate in [*(c.text for c in conventions), *(w.text for w in whitespace)]:
+            line = safe_derived(candidate, texts)
+            if line is None:
+                unsafe += 1
+            elif line not in for_copy:
+                for_copy.append(line)
         return MarketOutput(
-            category_conventions=verified(raw.category_conventions),
+            category_conventions=conventions,
             competitor_messages=verified(raw.competitor_messages),
             whitespace=whitespace,
             pages_read=len(texts),
             dropped_unverifiable=dropped,
+            for_copy=for_copy[:MAX_FOR_COPY],
+            dropped_unsafe=unsafe,
         )

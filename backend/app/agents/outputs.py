@@ -123,3 +123,7 @@ class MarketOutput(BaseModel):
     whitespace: list[Whitespace] = Field(default_factory=list)
     pages_read: int = 0
     dropped_unverifiable: int = 0
+    # The ONLY part of this output A6 may be shown: short summaries (conventions and whitespace)
+    # that code checked for markup, URLs and words copied from a page. Never a quote.
+    for_copy: list[str] = Field(default_factory=list)
+    dropped_unsafe: int = 0

@@ -6,6 +6,15 @@ SIX components arrive (the failure 0031 fixed was exactly that: a value stored a
 so every M would have been four-component while looking complete). Also: C is the maximum over the
 persona pairs, an item with no persona context leaves C OUT (never zero), vectors from another
 encoder are not compared, and write-back records the run's personas for every item it touched.
+
+WHAT A PASS HERE MEANS, AND DOES NOT. These tests use `HashingEncoder`, a deterministic stand-in
+whose vectors are a function of the text's tokens, not of its meaning. They prove the WIRING: that
+a stored source score and a stored persona vector reach `score()` as values (C = 1.0 for identical
+text, E = source score x confidence), that cutting either wire fails the guard (checked by
+mutation, 2026-10-30), and that absence is reported as absence. They do NOT show that C separates
+a relevant persona from an irrelevant one, or that the six components mean anything for reuse:
+that is the local encoder's quality on real text and the bands' calibration (chunk G). A passing
+test is not evidence of either.
 """
 
 import json
