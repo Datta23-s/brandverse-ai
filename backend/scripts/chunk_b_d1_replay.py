@@ -32,7 +32,6 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import psycopg
-import yaml
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
@@ -44,7 +43,7 @@ from app.agents.product_brand import ProductBrandAnalyst
 from app.agents.risk import RiskReader
 from app.core.config import get_settings
 from app.core.gates import load_superlatives
-from app.evaluation.test_set import TEST_SET
+from app.evaluation.test_set import request_inputs as evaluation_inputs
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
@@ -89,19 +88,16 @@ class Sink:
 
 def request_inputs() -> dict[str, object]:
     """R10's brand, product, claims and brief, read from the evaluation set (pseudonyms only)."""
-    data = yaml.safe_load(TEST_SET.read_text(encoding="utf-8"))
-    request = next(r for r in data["requests"] if r["id"] == REQUEST_ID)
-    brand = next(b for b in data["brands"] if b["id"] == request["brand"])
-    product = brand["products"][request["product"]]
+    r = evaluation_inputs()[REQUEST_ID]
     return {
-        "brand": brand["pseudonym"],
-        "sector": str(brand["sector"]),
-        "product": product["pseudonym"],
-        "category": product["category"],
-        "claims": list(product["verified"]),
-        "evidence_url": product["evidence_url"],
-        "brief": f"{request['objective']}. Audience: {request['audience_hint']}.",
-        "audience": request["audience_hint"],
+        "brand": r.brand,
+        "sector": r.sector,
+        "product": r.product,
+        "category": r.category,
+        "claims": list(r.claims),
+        "evidence_url": r.evidence_url,
+        "brief": r.brief,
+        "audience": r.audience,
     }
 
 

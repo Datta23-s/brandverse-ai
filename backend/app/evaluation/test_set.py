@@ -11,6 +11,7 @@ hash must be changed deliberately and the change recorded.
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,46 @@ def plan_requests(path: Path = TEST_SET) -> dict[str, PlanRequest]:
             category=brand["products"][r["product"]]["category"],
             audience=r.get("audience_hint"),
             objective=r.get("objective"),
+        )
+    return out
+
+
+@dataclass(frozen=True, slots=True)
+class RequestInputs:
+    """What a run is given for one request, as the evaluation freezes it. The BRIEF is the objective
+    and the audience hint in one string (the audience also goes to the planner on its own, so the
+    searches carry it); the claims are the product's verified ones, the only ones entered."""
+
+    id: str
+    brand: str
+    product: str
+    sector: str
+    category: str
+    brief: str
+    audience: str
+    claims: tuple[str, ...]
+    evidence_url: str
+
+
+def request_inputs(path: Path = TEST_SET) -> dict[str, RequestInputs]:
+    """{"R01": RequestInputs, ...}: the one place the evaluation's brief is built, so a run, the
+    brief check and its frozen record cannot disagree about what the brief is."""
+    data = _load(path)
+    brands = {b["id"]: b for b in data["brands"]}
+    out: dict[str, RequestInputs] = {}
+    for r in data["requests"]:
+        brand = brands[r["brand"]]
+        product = brand["products"][r["product"]]
+        out[r["id"]] = RequestInputs(
+            id=r["id"],
+            brand=brand["pseudonym"],
+            product=product["pseudonym"],
+            sector=str(brand["sector"]),
+            category=product["category"],
+            brief=f"{r['objective']}. Audience: {r['audience_hint']}.",
+            audience=r["audience_hint"],
+            claims=tuple(product["verified"]),
+            evidence_url=product["evidence_url"],
         )
     return out
 

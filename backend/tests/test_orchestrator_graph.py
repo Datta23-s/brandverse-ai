@@ -166,7 +166,13 @@ class Harness:
         )
         self.run_id = uuid4()
 
-    async def start(self, *, brief: str | None = None, depth: str = "D1") -> PipelineOutcome:
+    async def start(
+        self,
+        *,
+        brief: str | None = None,
+        depth: str = "D1",
+        brief_check: dict[str, Any] | None = None,
+    ) -> PipelineOutcome:
         return await self.pipeline.start(
             run_id=self.run_id,
             org_id=ORG,
@@ -174,6 +180,7 @@ class Harness:
             product_id=PRODUCT,
             brief=brief,
             depth=depth,  # type: ignore[arg-type]
+            brief_check=brief_check,
         )
 
     async def decide(self, decision: str, reason: str | None = None) -> PipelineOutcome:

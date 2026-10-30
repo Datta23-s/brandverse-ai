@@ -31,7 +31,7 @@ from app.errors import BudgetExceeded
 from app.orchestrator.adapters import brief_checker
 from tests.llm_fakes import FakeCompletion, prompt_library
 from tests.test_claim_classifier import check, model_says
-from tests.test_copywriter import V1, agent_ctx, draft, gateway, sent
+from tests.test_copywriter import D1, V1, agent_ctx, draft, gateway, sent
 from tests.test_orchestrator_graph import Harness, truth_with
 from tests.test_product_and_market_agents import positioning
 from tests.test_v11_audience_and_run_columns import R10_COPY, R10_TRUTH, WHAT_V1_EXTRACTED
@@ -104,12 +104,15 @@ async def test_the_unbacked_property_is_listed_and_the_run_is_not_blocked() -> N
     )
     out = await h.start(brief=BRIEF)
     assert out.status == "suspended"  # parked at approval: nothing blocked
-    assert out.state["brief_check"] == {
-        "status": "checked",
-        "unbacked": ["lightweight earphones"],
-        "backed": 1,
-        "prompt": "claim_extract@v2",
-    }
+    check = out.state["brief_check"]
+    assert (check["status"], check["unbacked"], check["backed"]) == (
+        "checked",
+        ["lightweight earphones"],
+        1,
+    )
+    assert (
+        check["prompt"] == "claim_extract@v2" and check["brief_sha256"] and check["claims_sha256"]
+    )
     assert [(c.step, c.run_id) for c in seen] == [(3, h.run_id)]
 
 
@@ -263,3 +266,51 @@ async def test_a6_is_shown_the_span_on_a_revision_and_not_the_rest_of_the_draft(
     assert '"lightweight walking shoe"' in prompt
     assert "a prohibited phrase" not in prompt
     assert "Transition smoothly" not in prompt and "Discover more today" not in prompt
+
+
+# ── The per-request precomputation: every arm reads the same record ──────────────────────────
+
+
+async def test_a_precomputed_record_is_used_and_the_model_is_not_called() -> None:
+    from app.core.brief_check import assess
+
+    truth = truth_with(V1)
+    record = assess(BRIEF, truth, [Statement("lightweight earphones", None)])
+    h = Harness(truth=truth)
+    seen = with_check(h, [Statement("this must not be asked", None)])
+    out = await h.start(brief=BRIEF, brief_check=record)
+    assert seen == []  # not recomputed
+    got = out.state["brief_check"]
+    assert got["source"] == "precomputed" and got["unbacked"] == ["lightweight earphones"]
+
+
+async def test_a_record_made_from_another_brief_or_other_claims_is_stale_and_carries_nothing() -> (
+    None
+):
+    from app.core.brief_check import assess, reconcile
+
+    truth = truth_with(V1)
+    record = assess(BRIEF, truth, [Statement("lightweight earphones", None)])
+    other_brief = reconcile(record, BRIEF + " Now with a case.", truth)
+    other_claims = reconcile(record, BRIEF, truth_with(V1, D1))
+    for stale in (other_brief, other_claims):
+        assert stale["status"] == "stale" and stale["unbacked"] == []
+        assert stale["source"] == "precomputed"
+    assert reconcile(record, BRIEF, truth)["status"] == "checked"
+    # whitespace in the brief is not a different brief
+    assert reconcile(record, "  " + BRIEF.replace(" ", "  "), truth)["status"] == "checked"
+
+
+def test_the_hash_of_the_claims_is_over_their_texts_not_their_ids() -> None:
+    from app.core.brief_check import claims_sha256
+
+    assert claims_sha256(["a  b", "c"]) == claims_sha256(["c", "a b"])
+    assert claims_sha256(["a"]) != claims_sha256(["a", "b"])
+
+
+def test_the_run_record_takes_the_brief_check_from_the_runs_state() -> None:
+    from app.orchestrator.runner import facts_from_state
+
+    check = {"status": "checked", "unbacked": ["x"], "backed": 0}
+    assert facts_from_state({"brief_check": check}).brief_check == check
+    assert facts_from_state({}).brief_check is None

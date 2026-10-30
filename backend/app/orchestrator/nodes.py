@@ -26,10 +26,9 @@ from langgraph.types import Send
 
 from app.agents.base import AgentContext
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
-from app.core.claim_classifier import truth_context
+from app.core.brief_check import assess, reconcile
 from app.core.gates import Finding, GateReport, Statement, evaluate
 from app.core.pipeline import PIPELINE_STEPS
-from app.core.sector_registry import verbatim_form
 from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded
 from app.memory.writeback import MemoryStage
@@ -190,7 +189,7 @@ class Nodes:
         )
         decision = decide_admission(inputs, state.get("brief"), ctx.on)
         if not decision.blocked:
-            check = await self.check_brief(state, ctx)
+            check = await self.brief_check(state, ctx)
             n = len(check["unbacked"])
             detail = f"brief: {check['status']}" + (
                 f", {n} property assertion(s) no claim backs" if n else ""
@@ -203,6 +202,16 @@ class Nodes:
             ],
             "_detail": "blocked: " + "; ".join(r.code for r in decision.reasons),
         }
+
+    async def brief_check(self, state: RunState, ctx: AgentContext) -> dict[str, Any]:
+        """The run's brief check: the request's PRECOMPUTED record when it carries one (the
+        evaluation: every arm of a request reads the same record, app/core/brief_check.py), else
+        computed here. A precomputed record is never recomputed, even when stale."""
+        brief = state.get("brief")
+        record = state.get("brief_check")
+        if record is not None and brief:
+            return reconcile(record, brief, ctx.truth)
+        return await self.check_brief(state, ctx)
 
     async def check_brief(self, state: RunState, ctx: AgentContext) -> dict[str, Any]:
         """FLAG AND RECORD (owner, 2026-10-30), never block: which property assertions in the
@@ -220,18 +229,7 @@ class Nodes:
         except Exception as e:
             log.warning("the brief check failed; recorded as unavailable", exc_info=True)
             return {"status": "unavailable", "unbacked": [], "backed": 0, "error": type(e).__name__}
-        listed = {c.id for c in truth_context(ctx.truth)}
-        form = verbatim_form(brief)
-        said = [s for s in statements if s.text.strip() and verbatim_form(s.text) in form]
-        unbacked = list(
-            dict.fromkeys(" ".join(s.text.split()) for s in said if s.claim_id not in listed)
-        )
-        return {
-            "status": "checked",
-            "unbacked": unbacked,
-            "backed": len(said) - sum(1 for s in said if s.claim_id not in listed),
-            "prompt": "claim_extract@v2",
-        }
+        return assess(brief, ctx.truth, statements)
 
     def route_after_truth(self, state: RunState) -> str:
         return "blocked" if state.get("blocked") else "ok"

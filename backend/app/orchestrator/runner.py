@@ -154,6 +154,7 @@ class Pipeline:
         brief: str | None = None,
         depth: Depth = "D1",
         audience: str | None = None,
+        brief_check: dict[str, Any] | None = None,
     ) -> PipelineOutcome:
         await self._events.append(RunStarted(run_id=run_id))
         initial = RunState(
@@ -164,6 +165,7 @@ class Pipeline:
             brief=brief,
             depth=depth,
             audience=audience,
+            brief_check=brief_check,
             request={"brief": brief, "depth": depth, "audience": audience},
         )
         return await self._drive(run_id, initial)
@@ -337,4 +339,5 @@ def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
         memory_hit_count=len(values["memory_hits"]) if "memory_hits" in values else None,
         search_count=(values.get("research") or {}).get("searches"),
         declared_gaps=tuple(gaps.values()),
+        brief_check=values.get("brief_check"),
     )

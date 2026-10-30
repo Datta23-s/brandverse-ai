@@ -100,6 +100,7 @@ class RunFacts:
     memory_hit_count: int | None = None
     search_count: int | None = None
     declared_gaps: tuple[dict[str, Any], ...] = ()
+    brief_check: dict[str, Any] | None = None  # migration 0038; None keeps the column as it was
 
 
 _CLOSE_WAITS_SQL = """
@@ -116,6 +117,7 @@ set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
     memory_hit_count = coalesce(%(hits)s, r.memory_hit_count),
     search_count = coalesce(%(searches)s, r.search_count),
     declared_gaps = %(gaps)s::jsonb,
+    brief_check = coalesce(%(brief_check)s::jsonb, r.brief_check),
     -- active latency: wall time minus the time spent waiting for a person (migration 0036)
     latency_ms = greatest(0, (extract(epoch from (now() - r.created_at)) * 1000
         - coalesce((select sum(extract(epoch from (w.resumed_at - w.parked_at)) * 1000)
@@ -157,6 +159,7 @@ async def end_run(
                 "hits": f.memory_hit_count,
                 "searches": f.search_count,
                 "gaps": json.dumps(list(f.declared_gaps)),
+                "brief_check": None if f.brief_check is None else json.dumps(f.brief_check),
             },
         )
         if cur.rowcount != 1:
