@@ -31,8 +31,10 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from app.agents.copywriter import CopyWriter
+from app.agents.market import MarketAnalyst
 from app.agents.mock import mock_agents
 from app.agents.personas import PersonaAnalyst
+from app.agents.product_brand import ProductBrandAnalyst
 from app.agents.risk import RiskReader
 from app.core.config import get_settings
 from app.core.gates import load_superlatives
@@ -170,6 +172,8 @@ async def main(args: argparse.Namespace) -> int:
 
         agents = {
             **mock_agents(),
+            "A1": ProductBrandAnalyst(gateway, prompts),
+            "A2": MarketAnalyst(gateway, prompts),
             "A3": PersonaAnalyst(gateway, prompts),
             "A6": CopyWriter(gateway, prompts),
             "A7": RiskReader(gateway, prompts),

@@ -528,7 +528,21 @@ to three persona HYPOTHESES (one-line summaries: the contract chunk C encodes), 
 use and told to add no product fact. **A7's risk read** (`app/agents/risk.py`, `a7_risk@v1`) is a model
 OPINION, not a detector: it flags and never blocks, is stored apart from the gate findings
 (`validation["advisory"]`), drops flags whose quote is not in the copy, and does not change `Rules.md` T5
-(unmet) or threat V3 (amended in `docs/evaluation-plan.md`). A1 and A2 are still mocks.
+(unmet) or threat V3 (amended in `docs/evaluation-plan.md`).
+
+**A1 and A2 (2026-10-30), mocked model only; no live call yet.** `app/agents/product_brand.py`
+(`a1_positioning@v1`) proposes a positioning and up to five differentiators from the claims it may use
+(verified and deduced, never restricted or retired); a differentiator naming a claim it was not shown is
+dropped and counted, and the claim inventory is the truth's active verified ids taken by code, not the
+model's. With no claims it may use it makes no call. `app/agents/market.py` (`a2_market@v1`) is the live
+competitor research of Phase 6: it reads up to six accepted pages (2,500 characters each, the product's
+own pages skipped), is not shown the product's claims, and reports category conventions, competitor
+messages (each with a quote checked against the excerpt the model saw, dropped and counted otherwise, the
+URL set by code) and whitespace (an inference, naming its basis pages). The pages are untrusted text:
+threat V10 (`docs/decision-log.md`). `MarketOutput` is not shown to A6. Not built: A1's brand-voice
+vector (Architecture.md section 7 lists it; the brand-voice gate's similarity score is unscheduled).
+Chunk B remains open until A1, A2 have had their few Standard-tier calls (1 of the 6 approved remains;
+more needs the owner).
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

@@ -65,3 +65,61 @@ class RiskAdvisory(BaseModel):
     advisory_only: Literal[True] = True
     flags: list[RiskFlag] = Field(default_factory=list)
     dropped_unverifiable: int = 0
+
+
+class Differentiator(BaseModel):
+    """One way the product differs, tied to the claims that support it. `claim_ids` are checked
+    against the claims the model was shown; a differentiator resting on none is dropped."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=160)
+    claim_ids: list[str] = Field(min_length=1)
+
+
+class ProductBrandOutput(BaseModel):
+    """What A1 returns. `claim_inventory` is never the model's: it is the product's active verified
+    claim ids, taken from the truth by code."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    positioning: str = Field(default="", max_length=200)
+    differentiators: list[Differentiator] = Field(default_factory=list)
+    claim_inventory: list[str] = Field(default_factory=list)
+    dropped_unattributed: int = 0
+
+
+class MarketItem(BaseModel):
+    """Something found on a page: a category convention or a competitor's message. `source_url` is
+    set by code from the page the model named, never written by the model; `quote` was found in
+    the text the model was shown, or the item was dropped."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=200)
+    source_url: str
+    quote: str = Field(min_length=1, max_length=300)
+
+
+class Whitespace(BaseModel):
+    """A gap the pages suggest: an INFERENCE, so it carries the pages it rests on, not a quote."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=200)
+    basis_urls: list[str] = Field(min_length=1)
+
+
+class MarketOutput(BaseModel):
+    """What A2 returns, from third-party pages read through the research layer. It is context for
+    strategy about OTHER people's claims: it is never a source for a claim about the product
+    (Rules.md T2), and nothing here is shown to A6."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["third_party_pages"] = "third_party_pages"
+    category_conventions: list[MarketItem] = Field(default_factory=list)
+    competitor_messages: list[MarketItem] = Field(default_factory=list)
+    whitespace: list[Whitespace] = Field(default_factory=list)
+    pages_read: int = 0
+    dropped_unverifiable: int = 0

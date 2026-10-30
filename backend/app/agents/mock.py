@@ -9,23 +9,18 @@ the real gates have something true to check), A7 reports no risk flags. Chunk B 
 from collections.abc import Mapping
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from app.agents.base import Agent, AgentContext
-from app.agents.outputs import CreativeOutput, CustomerOutput, Persona, RiskAdvisory
+from app.agents.outputs import (
+    CreativeOutput,
+    CustomerOutput,
+    Differentiator,
+    MarketItem,
+    MarketOutput,
+    Persona,
+    ProductBrandOutput,
+    RiskAdvisory,
+)
 from app.core.gates import Statement
-
-
-class ProductBrandOutput(BaseModel):
-    positioning: str
-    differentiators: list[str] = Field(default_factory=list)
-    claim_inventory: list[str] = Field(default_factory=list)  # active verified claim ids
-
-
-class MarketOutput(BaseModel):
-    category_conventions: list[str] = Field(default_factory=list)
-    whitespace: list[str] = Field(default_factory=list)
-    sources: int = 0
 
 
 class MockA1:
@@ -35,7 +30,7 @@ class MockA1:
         claims = ctx.truth.active("verified")
         return ProductBrandOutput(
             positioning="mock positioning",
-            differentiators=[c.text for c in claims],
+            differentiators=[Differentiator(text=c.text, claim_ids=[c.id]) for c in claims],
             claim_inventory=[c.id for c in claims],
         )
 
@@ -45,7 +40,12 @@ class MockA2:
 
     async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> MarketOutput:
         return MarketOutput(
-            category_conventions=["mock convention"], sources=len(state.get("findings", []))
+            category_conventions=[
+                MarketItem(
+                    text="mock convention", source_url="https://example.invalid/", quote="mock"
+                )
+            ],
+            pages_read=len(state.get("findings", [])),
         )
 
 
