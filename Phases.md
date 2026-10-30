@@ -542,8 +542,26 @@ URL set by code) and whitespace (an inference, naming its basis pages). The page
 threat V10 (`docs/decision-log.md`). A6 is shown A2's DERIVED summaries only (`for_copy`, code-checked,
 prompt `a6_copy@v2`), never a quote, competitor message or excerpt. Not built: A1's brand-voice
 vector (Architecture.md section 7 lists it; the brand-voice gate's similarity score is unscheduled).
-Chunk B remains open until A1, A2 have had their few Standard-tier calls (1 of the 6 approved remains;
-more needs the owner).
+**First full D1 run on real models and replayed evidence (2026-10-30), 7 of 10 approved Standard calls**
+(`scripts/chunk_b_d1_replay.py`; tally in `Architecture.md` section 4). Request R10 through A1, A2, A3, A6, the
+classifier and A7, research replayed from the snapshot (98 findings, no live search). It parked at the approval
+step with no error and no declared gap; the copy passed every gate on the first draft, so **no revision round ran
+and none was forced: that path is still untested on real models.** Observed, not concluded from, one run:
+- A2 read six pages; all quotations verified, but 3 of its 7 derived lines were dropped for copying a run of five
+  words from a page, so the code check bites; its two "whitespace" lines read as conventions, not gaps.
+- A3's first reply was invalid and its one repair succeeded; both personas came back with no channels.
+- **The headline says "lightweight" and no claim backs it.** The word came from the brief (the evaluation's own
+  objective text) through A1's positioning; the classifier extracted four statements, none for it, so no gate
+  judged it. An attribute that enters through the brief is not a claim and is not checked: owner decision needed
+  (Rules.md T2 says every factual statement restates a listed claim).
+- **Production research plans without an audience; the evaluation's recorded queries carry one.** Found by the
+  free pre-flight (a `SnapshotMiss`); the replay supplies the recorded request through `driver_research`'s
+  `request_for`. A production run therefore asks different queries than the evaluation replays; where the audience
+  comes from (the run request; A3 runs after research) is undecided.
+- A `suspended` run's row shows `llm_call_count` 0 and cost 0 while its ledger holds seven calls (the row is
+  written at the end); the approval view must not read it.
+- A6 took 33.2 s for 94 output tokens with no rate-limit wait; the other calls took 1.7 to 3.1 s. Unexplained.
+Chunk B stays open on the revision round and on those decisions; 3 of the 10 approved calls are unused.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each
