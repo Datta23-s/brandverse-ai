@@ -1593,6 +1593,9 @@ npm run test:e2e -w frontend            # Playwright against the live project (E
 - **`127.0.0.1`, not `localhost`.** On this laptop `localhost` tries `::1` first and takes about
   2 s to fall back (measured 2026-10-16: 2.08 s against 0.02 s), longer than ARQ's 1 s connect
   timeout. Redis defaults to `redis://127.0.0.1:6379/0`.
+  Enforced for the database tooling, not only documented: `tests/db/target_guard.py` refuses a DSN whose
+  host is `localhost` (about 10 s per connection to the Postgres container, 2026-10-30: a suite of a few hundred
+  connections looked hung for fourteen minutes).
 - **Jobs are JSON, not pickle.** ARQ's serializer is replaced; every payload is a Pydantic model
   dumped to JSON and validated again by the job.
 - **Run progress** is a Redis Stream per run (`run:{id}:events`, TTL 7 days, MAXLEN ~1000). The

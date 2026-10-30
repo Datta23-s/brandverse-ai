@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.db.target_guard import (
+    LocalhostByName,
     ManagedSupabaseTarget,
     check_not_managed_supabase,
     managed_supabase_hosts,
@@ -44,9 +45,9 @@ def test_managed_supabase_hosts_are_refused(conninfo: str) -> None:
 @pytest.mark.parametrize(
     "conninfo",
     [
-        "postgresql://postgres:postgres@localhost:5432/postgres",  # CI service container
+        "postgresql://postgres:postgres@127.0.0.1:5432/postgres",  # CI service container
         "postgresql://postgres:@127.0.0.1:54824/postgres",  # embedded / local Docker
-        "host=localhost dbname=postgres",
+        "host=127.0.0.1 dbname=postgres",
         "postgresql://postgres@notsupabase.com/postgres",  # lookalike, not a subdomain
     ],
 )
@@ -100,3 +101,33 @@ def test_measurement_script_exits_before_connecting() -> None:
     assert result.returncode != 0
     assert "Refusing to run" in output
     assert "OperationalError" not in output
+
+
+@pytest.mark.parametrize(
+    "conninfo",
+    [
+        "postgresql://postgres:postgres@localhost:5432/postgres",
+        "postgresql://postgres:postgres@LOCALHOST./postgres",
+        "host=localhost port=55432 user=postgres",
+        "postgresql://u:p@localhost,127.0.0.1:5432/postgres",
+    ],
+)
+def test_a_host_spelled_localhost_is_refused_naming_the_cause(conninfo: str) -> None:
+    with pytest.raises(LocalhostByName, match=r"::1.*10 seconds.*127\.0\.0\.1"):
+        check_not_managed_supabase(conninfo)
+
+
+def test_localhost_is_caught_by_handlers_written_for_the_managed_host() -> None:
+    assert issubclass(LocalhostByName, ManagedSupabaseTarget)
+
+
+@pytest.mark.parametrize(
+    "conninfo",
+    [
+        "postgresql://u:p@127.0.0.1:55432/postgres",
+        "postgresql://u:p@db:5432/x",
+        "host=::1 port=5432",
+    ],
+)
+def test_other_hosts_pass(conninfo: str) -> None:
+    check_not_managed_supabase(conninfo)

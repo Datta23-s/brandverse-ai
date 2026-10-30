@@ -84,7 +84,7 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
-      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       REQUIRE_DB_TESTS: "1"
       REDIS_TEST_URL: redis://127.0.0.1:6379/15
       REQUIRE_REDIS_TESTS: "1"
