@@ -135,6 +135,13 @@ When summarising work, state what was built, what was stubbed, and what was not 
   backend that already had pgvector loaded, where the CLI push got a fresh backend and was denied
   a setting. Live dry runs use `backend/scripts/live_migration_dry_run.py`, which refuses to run
   until it holds a fresh backend acting as the URL's own role, and prints both facts.
+  A third time (2026-10-30) the check again ran somewhere friendlier than what it checked: its
+  catalog snapshot covered `public` and `app` only, so 0034, which creates tables in a private schema,
+  produced an empty diff. The snapshot's scope is now read from each migration's own text (every
+  schema it names or creates), with three reads over all schemas as a net for what the text does not
+  name (`backend/tests/db/test_dry_run_harness_db.py` replays 0034 and asserts the schema shows). Each
+  dry run's raw output is kept beside the migrations (`supabase/dry-runs/`), and the next run of the
+  same migration is compared with it: a difference exits non-zero until it is read and accepted.
 
 ---
 
