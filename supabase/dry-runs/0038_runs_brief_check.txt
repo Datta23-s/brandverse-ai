@@ -1,0 +1,27 @@
+# dry run, rolled back, 2026-10-30 17:35 UTC; commit 94f0c2e; target aws-0-ap-south-1.pooler.supabase.com
+# 0038_runs_brief_check.sql sha256 fa4f6f27b3455a8a
+recorded migrations (last 3): [('0035',), ('0036',), ('0037',)]
+attempt 1: backend 1636171, started 0.8s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1636173, started 0.0s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0038_runs_brief_check.sql
+-- scope: app, public
+-- catalog changes inside the transaction
+  functions - ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, '0d1eab5269ecf6dde9e156a0c4ef48ea')
+  functions + ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, '657de005271ef061c3da9648e3beb5b9')
+  constraints + ('runs', 'runs_brief_check_check', "CHECK (((brief_check IS NULL) OR (jsonb_typeof(brief_check) = 'object'::text)))")
+  columns + ('public', 'runs', 'brief_check', 'jsonb', 'YES', None)
+  column grants + ('public', 'runs', 'brief_check', 'anon', 'INSERT')
+  column grants + ('public', 'runs', 'brief_check', 'anon', 'REFERENCES')
+  column grants + ('public', 'runs', 'brief_check', 'anon', 'SELECT')
+  column grants + ('public', 'runs', 'brief_check', 'anon', 'UPDATE')
+  column grants + ('public', 'runs', 'brief_check', 'authenticated', 'INSERT')
+  column grants + ('public', 'runs', 'brief_check', 'authenticated', 'REFERENCES')
+  column grants + ('public', 'runs', 'brief_check', 'authenticated', 'SELECT')
+  column grants + ('public', 'runs', 'brief_check', 'authenticated', 'UPDATE')
+  column grants + ('public', 'runs', 'brief_check', 'service_role', 'INSERT')
+  column grants + ('public', 'runs', 'brief_check', 'service_role', 'REFERENCES')
+  column grants + ('public', 'runs', 'brief_check', 'service_role', 'SELECT')
+  column grants + ('public', 'runs', 'brief_check', 'service_role', 'UPDATE')
+-- after rollback: catalog identical to before
