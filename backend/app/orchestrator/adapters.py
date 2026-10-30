@@ -167,17 +167,27 @@ def driver_research(
     locale: str,
     max_pages_per_query: int | None,
     today: Callable[[], date],
+    request_for: Callable[[RunState], PlanRequest] | None = None,
 ) -> Research:
     """Step 6 over the Phase 5 research driver, in PRODUCTION mode (a degraded run is partial and
-    declares its gap; only the evaluation's recording aborts a request)."""
+    declares its gap; only the evaluation's recording aborts a request).
+
+    The plan's request is the product's category and sector, WITHOUT an audience: the run request
+    carries none, and A3's personas come after this step. The evaluation's recorded queries do carry
+    the request's audience hint, so a replay that must find them passes `request_for` to supply the
+    recorded request; production does not (a gap, recorded in Phases.md Phase 6)."""
 
     async def run(state: RunState, depth: Depth) -> ResearchResult:
         product = state.get("product") or {}
         truth = state.get("truth") or {}
-        request = PlanRequest(
-            sector=(truth.get("sector") or "general").replace("_", " "),
-            regulated=bool(truth.get("regulated")),
-            category=product.get("category") or "product",
+        request = (
+            request_for(state)
+            if request_for is not None
+            else PlanRequest(
+                sector=(truth.get("sector") or "general").replace("_", " "),
+                regulated=bool(truth.get("regulated")),
+                category=product.get("category") or "product",
+            )
         )
         plan = plan_queries(
             request,
