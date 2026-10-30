@@ -250,13 +250,22 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-18 02:58–11:07 | `scripts/schema_confirm.py` (cap 3 across runs; approved: 3 cheap) | local `brandverse_v2_probe` | 3 | 0 | 0 |
 | 2026-10-29 17:33 | `scripts/chunk_b_live.py` (cap 6; approved: 6 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 4 | 0 |
 | 2026-10-29 17:35 | `scripts/chunk_b_a7_probe.py` (cap 1, within the same 6) | local `brandverse_chunk_b` | 0 | 1 | 0 |
-| **Total** | | | **4** | **5** | **10** |
+| 2026-10-30 16:22 | `scripts/chunk_b_d1_replay.py` (cap 10; approved: 10 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 7 | 0 |
+| **Total** | | | **4** | **12** | **10** |
 
 2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
 rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227
 out, A6 505 / 83, the claim classifier 418 / 124, A7 445 / 5 (copy clean: no flags), $0.0016 list price in all; then one A7
 call on a PLANTED copy, 443 / 238. The run parked at the approval step as designed. Outputs:
 `evaluation/probes/chunk_b_live_20261029T173345Z.json`, `chunk_b_a7_planted_20261029T173528Z.json`. One call of the six remains.
+
+2026-10-30, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 7 of the 10 approved calls, none refused, no rate-limit
+wait: ONE FULL D1 RUN of the graph on request R10 (footwear, non-regulated) with the research step REPLAYING the evaluation
+snapshot (98 findings from 4 replayed searches, zero live searches or fetches). A1 492 in / 167 out, A3 711 / 290 (`invalid_output`)
+then its one repair 1,064 / 226, A2 3,919 / 750, A6 745 / 94 (33.2 s), the claim classifier 529 / 274, A7 465 / 5; $0.0069 list
+price in all. The copy passed every gate on the first draft, so no revision round ran and none was forced. The run parked at
+the approval step. Report (holds A2's quotations, so outside the repository):
+`C:\BrandverseData\evaluation-runs\d1_replay_R10_20261030T162218Z.json`. Three of the ten calls were not used.
 
 2026-10-18, V2 probe: all ten strong-tier calls ended `error` and produced no result — eight
 `400 INVALID_ARGUMENT`, one client timeout at 90 s, one `503 UNAVAILABLE`. Whether Google counted
