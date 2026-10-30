@@ -554,14 +554,39 @@ and none was forced: that path is still untested on real models.** Observed, not
   objective text) through A1's positioning; the classifier extracted four statements, none for it, so no gate
   judged it. An attribute that enters through the brief is not a claim and is not checked: owner decision needed
   (Rules.md T2 says every factual statement restates a listed claim).
-- **Production research plans without an audience; the evaluation's recorded queries carry one.** Found by the
-  free pre-flight (a `SnapshotMiss`); the replay supplies the recorded request through `driver_research`'s
-  `request_for`. A production run therefore asks different queries than the evaluation replays; where the audience
-  comes from (the run request; A3 runs after research) is undecided.
-- A `suspended` run's row shows `llm_call_count` 0 and cost 0 while its ledger holds seven calls (the row is
-  written at the end); the approval view must not read it.
+- **Production research planned without an audience; the evaluation's recorded queries carry one.** Found by the
+  free pre-flight (a `SnapshotMiss`). **Decided (owner, 2026-10-30): research is planned from the request's STATED
+  audience (the evaluation's `audience_hint`), not from A3's personas.** Built: `RunState.audience`,
+  `Pipeline.start(audience=)`, `plan_request_from_state`; a test plans R01 to R30 both ways and finds the same
+  queries. **Design limit, recorded: research is planned from the stated audience, so persona discovery cannot
+  improve the evidence gathered.** Moving A3 before research would change the graph and invalidate the recorded
+  queries, so it is out of scope. The real run-creation API (chunk E) must carry `audience`; the fake-run
+  contract does not.
+- A `suspended` run's row shows `llm_call_count` 0 and cost 0 while its ledger holds seven calls. **Not a bug:
+  `end_run` writes both columns from the ledger when the run ends** (`budgeted_run.py`; confirmed by the
+  forced-revision run below, whose row read 3 and $0.0036 once it ended). A test fails if any other module in
+  `app/` reads them, so the approval view (chunk E) and the evaluation must query `llm_calls`.
 - A6 took 33.2 s for 94 output tokens with no rate-limit wait; the other calls took 1.7 to 3.1 s. Unexplained.
-Chunk B stays open on the revision round and on those decisions; 3 of the 10 approved calls are unused.
+**Forced revision round (2026-10-30), the other 3 of the 10 approved calls**
+(`scripts/chunk_b_revision_run.py`). The run replays the first run's A1/A2/A3 outputs and its first draft (free) and
+makes three live calls: the classifier on that draft, A6's revision, the classifier on the second draft. Result:
+- **V11's mitigation works on the exact copy.** `claim_extract@v2` extracted "lightweight walking shoe" with no claim
+  and the gate blocked the draft (step 11, `gates: block`). It also reported finer statements than v1 ("lace-up",
+  "low top", ... each cited to the one spec claim).
+- **The revision did not fix it.** The second draft opens "Step into your day with a lightweight walking shoe".
+  The model was told only the KIND of problem ("a factual statement was not backed by any listed claim"), never
+  which statement, and "lightweight" is in two of its other inputs: A1's positioning ("this lightweight walking
+  shoe") and the brief. v2 blocked it again. A revision of A6 alone cannot remove an attribute its inputs carry.
+- The loop ran as designed: draft, block, round 1, block, round 2 started and was REFUSED by this run's cap of
+  three, so the run ended `partial` (budget exhausted, corrections only, no campaign, no declared gap, 3 calls,
+  $0.0036). The cap is the approval's, not production's (20 calls per run covers a first pass and two rounds).
+  So "the second draft passed" did not happen; this is evidence about what revision can and cannot repair.
+- **Options for the owner, not built:** (1) A1's positioning to come from the claims only (`a1_positioning@v1` says
+  "built only from the listed claims and the brief", which let the brief's attribute in: a defect in my prompt);
+  (2) the brief itself classified at admission, so an unbacked property in it is raised before any agent sees it;
+  (3) on an `unsourced_claim` finding only, name the offending span to the reviser (today the loop never repeats
+  the draft's words, a rule made for restricted phrases).
+Chunk B stays open on those decisions. All 10 approved calls are used.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

@@ -251,7 +251,8 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-29 17:33 | `scripts/chunk_b_live.py` (cap 6; approved: 6 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 4 | 0 |
 | 2026-10-29 17:35 | `scripts/chunk_b_a7_probe.py` (cap 1, within the same 6) | local `brandverse_chunk_b` | 0 | 1 | 0 |
 | 2026-10-30 16:22 | `scripts/chunk_b_d1_replay.py` (cap 10; approved: 10 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 7 | 0 |
-| **Total** | | | **4** | **12** | **10** |
+| 2026-10-30 17:03 | `scripts/chunk_b_revision_run.py` (cap 3; the remaining 3 of the 10) | local `brandverse_chunk_b` | 0 | 3 | 0 |
+| **Total** | | | **4** | **15** | **10** |
 
 2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
 rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227
@@ -265,7 +266,10 @@ snapshot (98 findings from 4 replayed searches, zero live searches or fetches). 
 then its one repair 1,064 / 226, A2 3,919 / 750, A6 745 / 94 (33.2 s), the claim classifier 529 / 274, A7 465 / 5; $0.0069 list
 price in all. The copy passed every gate on the first draft, so no revision round ran and none was forced. The run parked at
 the approval step. Report (holds A2's quotations, so outside the repository):
-`C:\BrandverseData\evaluation-runs\d1_replay_R10_20261030T162218Z.json`. Three of the ten calls were not used.
+`C:\BrandverseData\evaluation-runs\d1_replay_R10_20261030T162218Z.json`. The other three of the ten calls were used the
+same evening, forcing a revision round: the claim classifier (`claim_extract@v2`) 720 in / 483 out, A6's revision
+752 / 102, the classifier again 718 / 587, $0.0036 list price; a fourth call (A6, round 2) was refused by the run's cap of
+three. Report: `C:\BrandverseData\evaluation-runs\revision_R10_20261030T170333Z.json`.
 
 2026-10-18, V2 probe: all ten strong-tier calls ended `error` and produced no result — eight
 `400 INVALID_ARGUMENT`, one client timeout at 90 s, one `503 UNAVAILABLE`. Whether Google counted
