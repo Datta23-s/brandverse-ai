@@ -198,6 +198,10 @@ class Finding:
     kind: FindingKind
     message: str
     refs: tuple[str, ...] = ()
+    # The offending statement alone, for the one kind the reviser is told the location of
+    # (copywriter.REVEALS_SPAN). Set only where a finding names a statement that is not a
+    # restricted phrase; every other kind leaves it None.
+    span: str | None = None
 
     @property
     def gate(self) -> GateName:
@@ -264,7 +268,11 @@ def _claim_gate(
             continue
         if s.claim_id is None:
             findings.append(
-                Finding("unsourced_claim", f"factual statement cites no claim: {quote!r}")
+                Finding(
+                    "unsourced_claim",
+                    f"factual statement cites no claim: {quote!r}",
+                    span=" ".join(s.text.split())[:120],
+                )
             )
             continue
         claim = truth.claim(s.claim_id)

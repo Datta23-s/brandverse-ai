@@ -18,6 +18,8 @@ The model writes a headline, a body and a call to action and NOTHING ELSE:
 - **A rejected draft is described generically.** On a revision round the model is told the KIND of
   each problem in fixed words, never the finding's message or the draft's text: a message can quote
   the copy, and handing a restricted phrase the model itself wrote back to it would be prompting it.
+  ONE exception (owner, 2026-10-30, threat V11): for an `unsourced_claim` finding the offending
+  statement alone is named (`REVEALS_SPAN`), because a reviser cannot remove what it was not told.
   `PROBLEM_WORDS` has an entry for every finding kind (a test fails when a new kind has none).
 - **Standard tier.** The creative agent is Standard (Architecture.md section 7); only claim
   verification on regulated output goes to the strong tier (T4), and that is the classifier's call.
@@ -71,6 +73,17 @@ class CopyDraft(BaseModel):
     call_to_action: str = Field(default="", max_length=150)
 
 
+# The finding kinds whose OFFENDING STATEMENT the reviser is told (owner, 2026-10-30). Every
+# other kind is described by its words alone, and a kind not named here reveals nothing: a new
+# finding kind defaults to silence. The old rule (never hand the model its own text back) exists
+# so a restricted phrase it wrote is not reinforced; an unbacked property has its own kind and is
+# not that, and a reviser cannot remove a word it was never told (the 2026-10-30 revision
+# reopened with "lightweight").
+REVEALS_SPAN: frozenset[str] = frozenset({"unsourced_claim"})
+MAX_SPANS = 3
+MAX_SPAN_CHARS = 120
+
+
 def market_notes(state: Mapping[str, Any]) -> str:
     """What A6 is shown of A2: `for_copy` and nothing else. Never a quotation, a competitor
     message, a source URL or a page excerpt, even though the state holds them for the approver's
@@ -81,10 +94,26 @@ def market_notes(state: Mapping[str, Any]) -> str:
 
 def problems_text(validation: Mapping[str, Any] | None) -> str:
     """What the previous draft is told: one line per distinct finding kind, in fixed words."""
-    kinds = sorted({f["kind"] for f in (validation or {}).get("findings", [])})
+    findings = (validation or {}).get("findings", [])
+    kinds = sorted({f["kind"] for f in findings})
     if not kinds:
         return "(none)"
-    return "\n".join(f"- {PROBLEM_WORDS.get(k, 'a check flagged the draft')}" for k in kinds)
+    lines = []
+    for k in kinds:
+        line = f"- {PROBLEM_WORDS.get(k, 'a check flagged the draft')}"
+        if k in REVEALS_SPAN:
+            spans = list(
+                dict.fromkeys(
+                    " ".join(str(f["span"]).split())[:MAX_SPAN_CHARS].replace('"', "'")
+                    for f in findings
+                    if f["kind"] == k and f.get("span")
+                )
+            )[:MAX_SPANS]
+            if spans:
+                quoted = "; ".join(f'"{s}"' for s in spans)
+                line += f" (remove it, do not rephrase it): {quoted}"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 class CopyWriter:

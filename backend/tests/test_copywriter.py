@@ -298,7 +298,7 @@ async def test_step_15_rejudges_the_stored_statements_without_another_model_call
     assert h.memory_calls == [{"decision": "approve", "report": "pass"}]
 
 
-async def test_an_unsourced_statement_blocks_and_the_next_round_is_told_in_fixed_words() -> None:
+async def test_an_unsourced_statement_blocks_and_the_next_round_is_told_where() -> None:
     h, completion, _ = real_harness(
         draft(body="Battery lasts 8 hours and doubles as a torch."),
         statements(("doubles as a torch", None)),
@@ -309,7 +309,11 @@ async def test_an_unsourced_statement_blocks_and_the_next_round_is_told_in_fixed
     assert out.state["revision_round"] == 1 and out.state["validation"]["outcome"] == "pass"
     second_prompt = sent(completion, 2)
     assert PROBLEM_WORDS["unsourced_claim"] in second_prompt
-    assert "torch" not in second_prompt, "the draft's own words are not handed back"
+    # Changed 2026-10-30 (V11): an unsourced statement is named, by its span alone, so the reviser
+    # can remove it. The message and the rest of the draft are still not handed back, and every
+    # other kind keeps the fixed words (tests/test_brief_span_and_a1_v2.py).
+    assert '"doubles as a torch"' in second_prompt
+    assert "cites no claim" not in second_prompt and "and doubles" not in second_prompt
 
 
 async def test_a_failed_extraction_is_a_gate_error_block_and_stays_one_at_step_15() -> None:

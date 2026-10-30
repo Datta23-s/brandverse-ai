@@ -32,6 +32,9 @@ class RunState(TypedDict, total=False):
     # it, not from A3's personas, which come after research (a design limit, Phases.md Phase 6).
     audience: str | None
     request: dict[str, Any]
+    # Step 3: the brief's property assertions and which of them no listed claim backs. Flagged and
+    # recorded, never a block (owner, 2026-10-30); `status` says whether the check ran.
+    brief_check: dict[str, Any] | None
     product: dict[str, Any] | None
     truth: dict[str, Any] | None  # a summary: sector, counts. Not the claims.
     blocked: list[dict[str, Any]] | None  # admission's reasons; set => the run ends `blocked`

@@ -26,8 +26,10 @@ from langgraph.types import Send
 
 from app.agents.base import AgentContext
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
+from app.core.claim_classifier import truth_context
 from app.core.gates import Finding, GateReport, Statement, evaluate
 from app.core.pipeline import PIPELINE_STEPS
+from app.core.sector_registry import verbatim_form
 from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded
 from app.memory.writeback import MemoryStage
@@ -40,7 +42,8 @@ log = logging.getLogger(__name__)
 # Step 7b. A6 runs in step 10 and A7 in step 11: they need the strategy and the draft, which do not
 # exist at step 7.
 FAN_OUT_AGENTS = ("A1", "A2", "A3")
-RESEARCH_STEP, AGENTS_STEP, CREATIVE_STEP, VALIDATION_STEP, MEMORY_STEP = 6, 7, 10, 11, 15
+ADMISSION_STEP, RESEARCH_STEP, AGENTS_STEP = 3, 6, 7
+CREATIVE_STEP, VALIDATION_STEP, MEMORY_STEP = 10, 11, 15
 
 
 class NodeFn(Protocol):
@@ -71,6 +74,7 @@ def report_dict(report: GateReport) -> dict[str, Any]:
                 "outcome": f.outcome,
                 "message": f.message,
                 "refs": list(f.refs),
+                "span": f.span,
             }
             for f in report.findings
         ],
@@ -176,7 +180,7 @@ class Nodes:
         }
 
     async def validate_product_truth(self, state: RunState) -> dict[str, Any]:
-        ctx = await self.context(state)
+        ctx = await self.context(state, ADMISSION_STEP)
         truth = ctx.truth
         inputs = AdmissionInputs(
             truth.sector,
@@ -186,13 +190,47 @@ class Nodes:
         )
         decision = decide_admission(inputs, state.get("brief"), ctx.on)
         if not decision.blocked:
-            return {"blocked": None}
+            check = await self.check_brief(state, ctx)
+            n = len(check["unbacked"])
+            detail = f"brief: {check['status']}" + (
+                f", {n} property assertion(s) no claim backs" if n else ""
+            )
+            return {"blocked": None, "brief_check": check, "_detail": detail}
         return {
             "blocked": [
                 {"code": r.code, "message": r.message, "refs": list(r.refs)}
                 for r in decision.reasons
             ],
             "_detail": "blocked: " + "; ".join(r.code for r in decision.reasons),
+        }
+
+    async def check_brief(self, state: RunState, ctx: AgentContext) -> dict[str, Any]:
+        """FLAG AND RECORD (owner, 2026-10-30), never block: which property assertions in the
+        brief no listed claim backs. Blocking would refuse every request whose brief mentions an
+        attribute the claims lack, and how many of the evaluation's requests that is has not been
+        counted. A failed check is recorded as unavailable and the run goes on; a budget refusal
+        still ends it."""
+        brief = state.get("brief")
+        if not brief or self.d.check_brief is None:
+            return {"status": "skipped", "unbacked": [], "backed": 0}
+        try:
+            statements = await self.d.check_brief(ctx, {"brief": brief})
+        except BudgetExceeded:
+            raise
+        except Exception as e:
+            log.warning("the brief check failed; recorded as unavailable", exc_info=True)
+            return {"status": "unavailable", "unbacked": [], "backed": 0, "error": type(e).__name__}
+        listed = {c.id for c in truth_context(ctx.truth)}
+        form = verbatim_form(brief)
+        said = [s for s in statements if s.text.strip() and verbatim_form(s.text) in form]
+        unbacked = list(
+            dict.fromkeys(" ".join(s.text.split()) for s in said if s.claim_id not in listed)
+        )
+        return {
+            "status": "checked",
+            "unbacked": unbacked,
+            "backed": len(said) - sum(1 for s in said if s.claim_id not in listed),
+            "prompt": "claim_extract@v2",
         }
 
     def route_after_truth(self, state: RunState) -> str:

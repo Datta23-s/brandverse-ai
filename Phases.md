@@ -520,7 +520,8 @@ writer (`app/agents/copywriter.py`, prompt `a6_copy@v1`), and step 11 on the cla
 only active verified and deduced claims (T2), never says what it relied on, and never writes a disclaimer:
 the registry's required disclaimers are appended verbatim as the `footer` by code
 (`gates.required_disclaimers`). A rejected draft is described to it in fixed words per finding kind, never
-the finding's message or the draft's text (a restricted phrase the model wrote cannot be handed back). Step
+the finding's message or the draft's text (a restricted phrase the model wrote cannot be handed back); the
+sole exception, from 2026-10-30, names the offending span of an `unsourced_claim` finding (V11). Step
 11 extracts the statements with the classifier (a model call, strong tier for a regulated sector: T4, so
 it fails closed outside the tuning organisation), stores them, and step 15 re-judges them
 deterministically with no second model call. **A3** (`app/agents/personas.py`, `a3_personas@v1`) proposes up
@@ -587,6 +588,28 @@ makes three live calls: the classifier on that draft, A6's revision, the classif
   (3) on an `unsourced_claim` finding only, name the offending span to the reviser (today the loop never repeats
   the draft's words, a rule made for restricted phrases).
 Chunk B stays open on those decisions. All 10 approved calls are used.
+
+**V11 follow-up (owner, 2026-10-30): built, offline-tested, NOT yet run live.**
+- `a1_positioning@v2`: the brief gives the campaign's objective and audience and tone; product properties come
+  from the listed claims only. The v1 wording ("built only from the listed claims and the brief") is the leak and
+  is recorded beside V11. A test renders the exact case (brief says lightweight, claims do not); whether the model
+  obeys is the live question.
+- Step 3 now classifies the brief (`claim_extract@v2`, agent `ADMISSION`, Standard tier even in a regulated
+  sector, since the brief is not output copy). **Flag and record, never block:** `state.brief_check` lists the
+  property assertions no listed claim backs (`status` checked, skipped or unavailable). A failed check does not
+  stop the run; a budget refusal still does. It is in the checkpointed state and the step's event detail; a
+  column or audit kind to keep it past the run would need a migration, not made.
+  **Cost:** one Standard call per run, about 600 tokens in and 150 out, ~$0.0006 at list price (free tier: $0).
+  Over the evaluation's 30 requests x 3 arms that is up to 90 calls and ~$0.05, 60 of them in the graph arms
+  (Baseline A is one call outside the graph); a first-pass run goes from 7 to 8 calls, a run with two revision
+  rounds from 13 to 14 of the 20-call cap, and 90 calls is under a fifth of one day's 500-request Standard quota.
+  A confound to decide: the same brief and claims across the three arms of a request would be classified three
+  times and could be flagged differently; classifying once per (brief, claim set) would cost 30 calls and give
+  every arm the same flags. Not built.
+- The reviser is shown the offending span for `unsourced_claim` only (`copywriter.REVEALS_SPAN`, at most three
+  spans of 120 characters, quotes neutralised, never the finding's message or the draft's other text). A test
+  fails if a restricted-claim finding reveals anything, and every kind not named, including a new one, reveals
+  nothing.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

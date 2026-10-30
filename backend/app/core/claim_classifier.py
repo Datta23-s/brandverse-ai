@@ -100,15 +100,17 @@ async def extract_statements(
     ctx: CallContext,
     copy: Mapping[str, str],
     truth: ProductTruth,
+    *,
+    tier: tuple[Tier, str] | None = None,
 ) -> list[Statement]:
-    tier, reason = classifier_tier(truth)
+    chosen, reason = tier or classifier_tier(truth)
     prompt = prompts.get(*CLAIM_EXTRACT).render(
         copy="\n\n".join(f"[{name}]\n{text}" for name, text in copy.items()),
         claims=claims_block(truth_context(truth)),
     )
     extracted = await gateway.structured(
         ExtractedStatements,
-        tier=tier,
+        tier=chosen,
         prompt=prompt,
         ctx=ctx,
         route_reason=reason,

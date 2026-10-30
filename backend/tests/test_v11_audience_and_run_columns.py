@@ -240,7 +240,9 @@ async def test_the_draft_with_lightweight_is_blocked_then_revised_and_the_second
     )
     revision_prompt = sent(completion, 1)
     assert "not backed by any listed claim" in revision_prompt  # told the KIND of problem
-    assert "lightweight" not in revision_prompt  # never the draft's own words (T2)
+    # the reviser is told WHERE (the span, for unsourced_claim only), never the message or the rest
+    assert '"lightweight walking shoe"' in revision_prompt
+    assert "cites no claim" not in revision_prompt and "Transition smoothly" not in revision_prompt
     assert [(c.agent_id, c.revision_round) for c in ledger.contexts][:3] == [
         ("A7", 0),
         ("A6", 1),

@@ -44,6 +44,8 @@ class ResearchResult:
 # Step 11: the factual statements in a draft, extracted by the claim classifier (a model call made
 # with the step's own execution context) and never supplied by the writer.
 ExtractStatements = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
+# Step 3's check of the brief: the same extraction as step 11, on the brief's own text.
+CheckBrief = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
 LoadContext = Callable[[UUID, UUID], Awaitable[ProductContext | None]]
 # `personas` is None before A3 has spoken (C left out of every M) and A3's summaries after
 # (app/memory/recall.py).
@@ -68,6 +70,8 @@ class GraphDeps:
     max_revisions: int = 2
     # How an agent reads a finding's text (agents/base.py). None: no text available to agents.
     evidence: EvidenceReader | None = None
+    # None: the brief is not checked (`brief_check.status` is "skipped").
+    check_brief: CheckBrief | None = None
 
 
 async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:

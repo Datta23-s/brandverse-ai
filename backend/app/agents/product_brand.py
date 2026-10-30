@@ -1,7 +1,11 @@
-"""A1, product and brand intelligence (Phases.md Phase 6 chunk B; prompt `a1_positioning@v1`).
+"""A1, product and brand intelligence (Phases.md Phase 6 chunk B; prompt `a1_positioning@v2`).
 
 The model proposes a one-line positioning and up to five differentiators, and nothing else:
 
+- **The brief is for intent, not for product facts (v2, threat V11).** v1 said the positioning
+  was "built only from the listed claims and the brief", which let a property that only the
+  brief carried ("lightweight") into the positioning, then the headline. v2 reads the brief for
+  the objective and the audience and forbids taking product properties from it.
 - **It is shown only what it may use.** The product's active verified and deduced claims
   (`truth_context`), never a restricted or a retired one (Rules.md T2), the category, the sector
   and the brief. It is told to add no product fact.
@@ -32,7 +36,7 @@ from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 
-A1_POSITIONING = ("a1_positioning", "v1")
+A1_POSITIONING = ("a1_positioning", "v2")
 MAX_DIFFERENTIATORS = 5
 
 

@@ -27,11 +27,13 @@ from app.core.truth import ProductTruth, load_product_truth
 from app.errors import ExtractionFailed, FetchError
 from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
+from app.llm.registry import Tier
 from app.memory.embeddings import Encoder
 from app.memory.recall import recall
 from app.memory.scoring import ScoringConfig, SourceScoring
 from app.memory.writeback import MemoryStage, PersonaVector, WritebackEncoder, write_memory
 from app.orchestrator.deps import (
+    CheckBrief,
     ExtractStatements,
     LoadContext,
     MemoryResult,
@@ -83,6 +85,24 @@ def classifier_extractor(gateway: LLMGateway, prompts: PromptLibrary) -> Extract
 
     async def run(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
         return await extract_statements(gateway, prompts, ctx.call_context("A7"), copy, ctx.truth)
+
+    return run
+
+
+def brief_checker(gateway: LLMGateway, prompts: PromptLibrary) -> CheckBrief:
+    """Step 3's brief check over the claim classifier (`claim_extract@v2`). The brief is not output
+    copy, so it is classified on the Standard tier whatever the sector (T4's strong tier is for the
+    verification of regulated OUTPUT); the call is logged as agent ADMISSION at step 3."""
+
+    async def run(ctx: AgentContext, texts: Mapping[str, str]) -> list[Statement]:
+        return await extract_statements(
+            gateway,
+            prompts,
+            ctx.call_context("ADMISSION"),
+            texts,
+            ctx.truth,
+            tier=(Tier.STANDARD, "brief check at admission: flag and record, standard tier"),
+        )
 
     return run
 
