@@ -161,6 +161,18 @@ class Correction:
 
 
 @dataclass(frozen=True, slots=True)
+class PersonaVector:
+    """One persona of the run that wrote, encoded: what C compares a later request's persona with
+    (migration 0037). The run's personas travel with the additions and are recorded for every item
+    the approved campaign touched; none is recorded by a run that adds nothing."""
+
+    summary: str
+    embedding: tuple[float, ...]
+    embedding_model: str
+    embedding_version: str
+
+
+@dataclass(frozen=True, slots=True)
 class StagedMemory:
     """What a run's end hands the commit. Additions — new items and reuse bumps — add or reinforce
     trust; corrections reduce it. The two are committed under different rules (module docstring)."""
@@ -168,6 +180,7 @@ class StagedMemory:
     items: tuple[MemoryWrite, ...] = ()
     reuses: tuple[Reuse, ...] = ()
     corrections: tuple[Correction, ...] = ()
+    personas: tuple[PersonaVector, ...] = ()
 
     @property
     def adds_trust(self) -> bool:
@@ -184,6 +197,7 @@ class MemoryStage:
         self._items: list[MemoryWrite] = []
         self._reuses: list[Reuse] = []
         self._corrections: list[Correction] = []
+        self._personas: tuple[PersonaVector, ...] = ()
 
     def stage(self, item: MemoryWrite) -> None:
         self._items.append(item)
@@ -196,13 +210,19 @@ class MemoryStage:
         edit at approval (12)."""
         self._corrections.append(correction)
 
+    def set_personas(self, personas: Sequence[PersonaVector]) -> None:
+        """The run's personas, encoded; recorded with every item the campaign touches."""
+        self._personas = tuple(personas)
+
     @property
     def items(self) -> tuple[MemoryWrite, ...]:
         return tuple(self._items)
 
     def all(self) -> StagedMemory:
         """For a completed run: everything staged."""
-        return StagedMemory(tuple(self._items), tuple(self._reuses), tuple(self._corrections))
+        return StagedMemory(
+            tuple(self._items), tuple(self._reuses), tuple(self._corrections), self._personas
+        )
 
     def corrections_only(self) -> StagedMemory:
         """For any other ending that is not an infrastructure failure: corrections commit,
@@ -442,6 +462,15 @@ class Committed:
 def vector_literal(v: Sequence[float]) -> str:
     return "[" + ",".join(repr(float(x)) for x in v) + "]"
 
+
+_PERSONA_SQL = """
+insert into public.memory_item_personas
+  (memory_item_id, run_id, persona_index, org_id, summary, embedding, embedding_model,
+   embedding_version)
+values (%(item)s, %(run)s, %(i)s, %(org)s, %(summary)s, %(embedding)s::public.vector, %(model)s,
+        %(version)s)
+on conflict (memory_item_id, run_id, persona_index) do nothing
+"""
 
 _NEAREST_SQL = """
 select id, revoked, 1 - (embedding operator(public.<=>) %(e)s::public.vector) as cosine
@@ -689,8 +718,27 @@ async def commit_memory(
         touched.add(inserted[0])
         done.inserted.append(str(inserted[0]))
 
+    recorded = 0
+    for item_id in sorted(touched, key=str):
+        for i, persona in enumerate(staged.personas):
+            cur = await conn.execute(
+                _PERSONA_SQL,
+                {
+                    "item": item_id,
+                    "run": run_id,
+                    "i": i,
+                    "org": org_id,
+                    "summary": persona.summary,
+                    "embedding": vector_literal(persona.embedding),
+                    "model": persona.embedding_model,
+                    "version": persona.embedding_version,
+                },
+            )
+            recorded += cur.rowcount
+
     details = {
         "campaign_id": str(campaign[0]) if campaign else None,
+        "personas_recorded": recorded,
         "near_duplicate_cosine": cfg.near_duplicate_cosine,
         "corrected": done.corrected,
         "reused": done.reused,

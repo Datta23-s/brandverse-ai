@@ -33,7 +33,9 @@ class RunState(TypedDict, total=False):
     truth: dict[str, Any] | None  # a summary: sector, counts. Not the claims.
     blocked: list[dict[str, Any]] | None  # admission's reasons; set => the run ends `blocked`
     memory_hits: list[dict[str, Any]]
-    memory_coverage: float  # 0..1
+    memory_coverage: float  # 0..1; step 4, C left out (no persona yet)
+    memory_coverage_final: float  # step 8, with the personas, when A3 spoke
+    memory_persona_scored: bool  # the hits in `memory_hits` were scored with C
     research_score: float  # R
     depth: Depth
     research: dict[str, Any] | None

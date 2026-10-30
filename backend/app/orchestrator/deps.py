@@ -5,7 +5,7 @@ model and no database. The real adapters wrap the pieces that already exist; whe
 not built yet (memory retrieval with `C` and `E`, the research-necessity engine) the port says so.
 """
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Protocol
@@ -45,7 +45,9 @@ class ResearchResult:
 # with the step's own execution context) and never supplied by the writer.
 ExtractStatements = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
 LoadContext = Callable[[UUID, UUID], Awaitable[ProductContext | None]]
-Retrieve = Callable[[RunState], Awaitable[MemoryResult]]
+# `personas` is None before A3 has spoken (C left out of every M) and A3's summaries after
+# (app/memory/recall.py).
+Retrieve = Callable[[RunState, Sequence[str] | None], Awaitable[MemoryResult]]
 Research = Callable[[RunState, Depth], Awaitable[ResearchResult]]
 # Step 15: stage what the approved campaign adds to memory. Receives the run's own MemoryStage.
 WriteMemory = Callable[[RunState, MemoryStage, GateReport, ProductTruth], Awaitable[dict[str, Any]]]
@@ -68,7 +70,7 @@ class GraphDeps:
     evidence: EvidenceReader | None = None
 
 
-async def no_memory(state: RunState) -> MemoryResult:
-    """Retrieval is wired in chunk C, where `C` and `E` enter the M-score: until then a run
-    retrieves nothing and says so (coverage 0), never a made-up hit."""
+async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:
+    """No memory: a run with nothing to retrieve from says so (coverage 0), never a made-up hit.
+    The real recall is `adapters.memory_recaller`; tests and scripts that need none use this."""
     return MemoryResult([], 0.0)

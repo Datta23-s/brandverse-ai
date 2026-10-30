@@ -33,6 +33,7 @@ EXPECTED: dict[str, dict[str, tuple[bool, bool]]] = {
     "campaigns": NONE,  # 0010
     "llm_calls": NONE,  # raw logs, Rules.md A1 (0011)
     "memory_item_sources": NONE,  # append-only evidence (0028)
+    "memory_item_personas": NONE,  # append-only persona context (0037)
     "memory_items": NONE,  # never hard-deleted, Memory.md §6.4 (0010)
     "org_members": NONE,  # revoked, never deleted (0010)
     "organisations": NONE,  # manual postgres procedure only (0010)
@@ -121,6 +122,8 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "evidence_append_only": (False, "migration", ALL_API),
     "memory_item_sources_record": (False, "migration", ALL_API),
     "memory_items_source_score_derived": (False, "migration", ALL_API),
+    # 0037: persona context. Trigger function, SECURITY INVOKER: append-only.
+    "persona_context_append_only": (False, "migration", ALL_API),
 }
 
 

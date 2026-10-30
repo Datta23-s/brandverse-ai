@@ -101,6 +101,11 @@ class Writeback(_Strict):
 
 class Retrieval(_Strict):
     hnsw_ef_search: int = Field(ge=1, le=1000)  # pgvector's accepted range
+    # The knowledge slots `memory_coverage` counts (Memory.md section 3.2): the fraction of these
+    # filled at M >= the adapt band. PROVISIONAL: the Research Necessity Engine (not built) owns it.
+    required_slots: tuple[
+        Literal["persona", "competitor", "insight", "claim", "creative", "sector"], ...
+    ] = Field(min_length=1)
 
 
 class Research(_Strict):

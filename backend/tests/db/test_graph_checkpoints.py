@@ -252,6 +252,7 @@ def test_a_killed_worker_mid_run_is_continued_from_its_checkpoint_by_another_pro
     assert "outcome suspended" in finished(worker("recover", db_url, run_id, seed, log, ready))
     after = Counter(log.read_text(encoding="utf-8").split())
     assert after["retrieve"] == 1 and after["research"] == 1, "finished steps were run again"
+    assert after["retrieve_with_personas"] == 1  # step 8, which the dead worker never reached
     assert after["A1"] == 1 and after["A2"] == 1, "finished agents of the same step were run again"
     assert after["A3"] == 2, "the agent that was running when the worker died runs again"
     assert after["A6"] == 1 and after["A7"] == 1  # and the run went on past the kill

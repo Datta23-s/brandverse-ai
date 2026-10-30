@@ -145,9 +145,9 @@ def build_pipeline(
     for agent_id, error in (failing or {}).items():
         agents[agent_id] = Failing(agent_id, error)
 
-    async def retrieve(state: RunState) -> Any:
-        note(log, "retrieve")
-        return await no_memory(state)
+    async def retrieve(state: RunState, personas: Any = None) -> Any:
+        note(log, "retrieve_with_personas" if personas else "retrieve")
+        return await no_memory(state, personas)
 
     async def research(state: RunState, depth: Any) -> ResearchResult:
         note(log, "research")

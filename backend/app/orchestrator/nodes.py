@@ -199,11 +199,14 @@ class Nodes:
         return "blocked" if state.get("blocked") else "ok"
 
     async def retrieve_memory(self, state: RunState) -> dict[str, Any]:
-        found = await self.d.retrieve(state)
+        # Before A3: the request's persona does not exist yet, so C is left out of every M here
+        # (app/memory/recall.py). This coverage is what the research-necessity step reads.
+        found = await self.d.retrieve(state, None)
         return {
             "memory_hits": found.hits,
             "memory_coverage": found.coverage,
-            "_detail": f"{len(found.hits)} hits, coverage {found.coverage:.2f}",
+            "memory_persona_scored": False,
+            "_detail": f"{len(found.hits)} hits, coverage {found.coverage:.2f} (no persona yet)",
         }
 
     async def assess_research_necessity(self, state: RunState) -> dict[str, Any]:
@@ -271,7 +274,18 @@ class Nodes:
     # ── steps 8 to 11 ─────────────────────────────────────────────────────────────────────────
     async def personalise(self, state: RunState) -> dict[str, Any]:
         personas = state.get("agent_outputs", {}).get("A3", {}).get("personas", [])
-        return {"personas": personas, "_detail": f"{len(personas)} personas"}
+        update: dict[str, Any] = {"personas": personas, "_detail": f"{len(personas)} personas"}
+        if personas:
+            # Now the persona exists: recall again so the M that reuse and write-back decisions use
+            # has C (app/memory/recall.py). Replaces the persona-less hits of step 4.
+            found = await self.d.retrieve(state, [p["summary"] for p in personas])
+            update.update(
+                memory_hits=found.hits,
+                memory_coverage_final=found.coverage,
+                memory_persona_scored=True,
+                _detail=f"{len(personas)} personas; memory re-scored with C: {len(found.hits)}",
+            )
+        return update
 
     async def build_strategy(self, state: RunState) -> dict[str, Any]:
         outputs = state.get("agent_outputs", {})

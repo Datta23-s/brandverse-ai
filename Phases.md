@@ -529,6 +529,15 @@ OPINION, not a detector: it flags and never blocks, is stored apart from the gat
 (`validation["advisory"]`), drops flags whose quote is not in the copy, and does not change `Rules.md` T5
 (unmet) or threat V3 (amended in `docs/evaluation-plan.md`). A1 and A2 are still mocks.
 
+**Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
+`score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each
+campaign that produced, reinforced or reused an item; `C` is the maximum cosine over the persona pairs
+(owner's ruling), left out, never zero, for an item without persona context or from another encoder.
+Memory is recalled twice in a run: at step 4 without a persona (C left out; the research-necessity
+coverage) and at step 8 with A3's (the M that reuse and write-back use). The bands are still uncalibrated
+(chunk G). Not yet driving anything end to end: no step injects memory or extracts candidates from an
+approved campaign.
+
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
 (`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One
 run at D0 on a non-regulated product in a throwaway tuning organisation: the real A3, A6, classifier and

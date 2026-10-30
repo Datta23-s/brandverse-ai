@@ -157,7 +157,35 @@ mean something else. **Nothing banded before `E` exists is comparable with anyth
 Band tuning happens only after `E` and `C` exist, not before; no figure derived from a
 four-component `M` is reported anywhere.
 
-*Audit, 2026-10-25.* `score()` has no caller outside the unit tests; no real `M` has ever been
+**Update 2026-10-29 (Phase 6 chunk C): the scorer has a caller, and it supplies `C` and `E`.**
+`app/memory/recall.py` retrieves, supplies both components and scores; every recalled item carries the
+components it was made of and the ones it left out. A guard test takes a retrieval from the database and
+requires all six to arrive (`tests/db/test_recall.py`). What this removes and what it does not:
+
+- **Removed:** the scorer being four-component *because nothing could supply* `C` or `E`. Where an item
+  has persona context and a source score, its `M` has six components.
+- **Not removed:** the bands are still **uncalibrated** (chunk G calibrates them against approver
+  judgement on real campaigns, not before). An item with no persona context or no source score still
+  leaves that component out, and the renormalisation is the same as before, so an item's `M` is
+  comparable only with another's that has the same components: read `left_out` with every `M`.
+- **Two stages in a run.** The request's persona does not exist at step 4 (A3 runs at step 7, on step
+  6's findings, which exist only because step 5 read step 4's coverage), so step 4's `M` has `C` left
+  out for every item (five components at most) and its coverage is what the research-necessity step
+  reads; step 8 recalls again once the personas exist (`memory_hits` is replaced; `memory_persona_scored`
+  says so). The `M` that reuse and write-back decisions use is the step-8 one.
+- **`C` (owner, 2026-10-29):** an item's persona context is the persona of the campaign that produced it,
+  encoded by the local encoder from A3's persona summary and stored on the item at write-back
+  (`memory_item_personas`, 0037). An item reinforced or reused by several campaigns carries several
+  personas; `C` is the **maximum** cosine over every (request persona, item persona) pair, clamped to
+  [0, 1] (an item relevant to persona X does not become less relevant to X because it was also used for
+  Y), and the set is stored, not an aggregate, as with source scores. Both sides are encoded as
+  documents; only vectors from the same encoder model and version are compared.
+- **Still not happening in a real run:** no step injects memory into the strategy or the copy yet, and
+  no step extracts candidate facts from an approved campaign, so a real run neither reuses an item nor
+  writes one, and no item gains persona rows. The path is built and tested at the database; nothing
+  drives it end to end until those two steps exist.
+
+*Audit, 2026-10-25 (before chunk C).* `score()` has no caller outside the unit tests; no real `M` has ever been
 computed; and no recorded figure depends on `E`. The `m` that write-back compares with the reuse
 band is supplied by its callers and set by hand in its tests. This was established by searching the
 code and documents by pattern (`score(`, `source_score`, `left_out`, the module's imports and the
@@ -243,7 +271,8 @@ type returned for the scorer. `hnsw.ef_search` is set by the caller, not by the 
 The `M`-score is `backend/app/memory/scoring.py`, weights in
 `config/scoring.yaml` (defaults, untuned): a component that cannot be computed yet — `C` until
 persona vectors (Phase 6), `E` until source scores (Phase 5) — is left out and the remaining
-weights renormalised, never filled with a guess, and the breakdown names it.
+weights renormalised, never filled with a guess, and the breakdown names it. (As of 2026-10-29 both are
+supplied by `app/memory/recall.py` where the data exists.)
 
 ### 4.3 Index strategy
 

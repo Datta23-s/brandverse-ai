@@ -809,6 +809,9 @@ the checkpointed state (completed or blocked), without committing the dead proce
 
 ### 7.9 Other closed defects
 - A password leaking into a settings validation error.
+- The M-score's `C` and `E` could not enter any M because `score()` had no caller. Found 2026-10-25, closed
+  2026-10-29 by `app/memory/recall.py` and 0037; the four-component M is gone as a limitation of the code,
+  and remains a property of any item that lacks persona context or a source score (see `Memory.md` 3.2).
 - `check_copy` turned a `BudgetExceeded` into a `gate_error` block, so a run out of budget at step 11
   would have shown the approver a "blocked" draft instead of ending `partial` (Rules.md C4). It now
   re-raises. Found 2026-10-29 wiring step 11; no earlier test pinned the old behaviour.

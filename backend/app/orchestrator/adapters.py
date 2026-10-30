@@ -12,8 +12,8 @@ findings it reasons over is a decision for chunk B, where the first agent that n
 """
 
 import asyncio
-from collections.abc import Callable, Mapping
-from datetime import date
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, date, datetime, time
 from typing import Any
 from uuid import UUID
 
@@ -27,14 +27,18 @@ from app.core.truth import ProductTruth, load_product_truth
 from app.errors import ExtractionFailed, FetchError
 from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
-from app.memory.scoring import SourceScoring
-from app.memory.writeback import MemoryStage, WritebackEncoder, write_memory
+from app.memory.embeddings import Encoder
+from app.memory.recall import recall
+from app.memory.scoring import ScoringConfig, SourceScoring
+from app.memory.writeback import MemoryStage, PersonaVector, WritebackEncoder, write_memory
 from app.orchestrator.deps import (
     ExtractStatements,
     LoadContext,
+    MemoryResult,
     ProductContext,
     Research,
     ResearchResult,
+    Retrieve,
     WriteMemory,
 )
 from app.orchestrator.state import Depth, RunState
@@ -79,6 +83,54 @@ def classifier_extractor(gateway: LLMGateway, prompts: PromptLibrary) -> Extract
 
     async def run(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
         return await extract_statements(gateway, prompts, ctx.call_context("A7"), copy, ctx.truth)
+
+    return run
+
+
+def memory_recaller(
+    pool: AsyncConnectionPool[AsyncConnection],
+    encoder: Encoder,
+    cfg: ScoringConfig,
+    *,
+    today: Callable[[], date],
+) -> Retrieve:
+    """Steps 4 and 8 over `app.memory.recall`: candidates scored with E and, once the personas
+    exist, with C. Read by the backend's own role and scoped by organisation and brand, like the
+    context loader. The query is the category, the sector and the brief; no product or brand
+    NAME."""
+
+    async def run(state: RunState, personas: Sequence[str] | None) -> MemoryResult:
+        product = state.get("product") or {}
+        truth = state.get("truth") or {}
+        sector = truth.get("sector")
+        query = (
+            " ".join(
+                t
+                for t in (
+                    product.get("category"),
+                    (sector or "").replace("_", " "),
+                    state.get("brief"),
+                )
+                if t
+            )
+            or "marketing"
+        )
+        now = datetime.combine(today(), time.min, tzinfo=UTC)
+        async with pool.connection() as conn:
+            found = await recall(
+                conn,
+                encoder,
+                cfg,
+                org_id=UUID(state["org_id"]),
+                query_text=query,
+                product_id=product.get("id"),
+                brand_id=product.get("brand_id"),
+                product_category=product.get("category"),
+                sector=sector,
+                now=now,
+                personas=personas,
+            )
+        return MemoryResult([i.record() for i in found.items], found.coverage)
 
     return run
 
@@ -181,6 +233,16 @@ def writeback_step(
     ) -> dict[str, Any]:
         approved = (state.get("approval") or {}).get("decision") == "approve"
         product = state.get("product") or {}
+        summaries = [p["summary"] for p in state.get("personas") or [] if p.get("summary")]
+        if approved and summaries:
+            # The run's personas, encoded as documents like the request side of C, travel with the
+            # additions and are recorded for every item the campaign touches (migration 0037).
+            stage.set_personas(
+                [
+                    PersonaVector(s, tuple(v), encoder.model, encoder.version)
+                    for s, v in zip(summaries, encoder.embed_documents(summaries), strict=True)
+                ]
+            )
         screening = await write_memory(
             pool,
             stage,

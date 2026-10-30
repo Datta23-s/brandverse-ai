@@ -634,3 +634,51 @@ async def test_an_agent_reads_a_findings_text_from_the_snapshot_never_from_the_n
     out = await h.start()
     assert out.state["agent_outputs"]["A2"]["copy"]["headline"] == recorded
     assert recorded not in repr(out.state["findings"])  # the text stayed out of the state
+
+
+# ── Memory is recalled twice: before the persona exists, and again once A3 has spoken ────────
+
+
+class RecordingRetrieve:
+    """A retrieval port that records what it was asked, and answers with a hit whose components say
+    whether the persona was supplied."""
+
+    def __init__(self) -> None:
+        self.asked: list[Any] = []
+
+    async def __call__(self, state: RunState, personas: Any = None) -> MemoryResult:
+        self.asked.append(None if personas is None else list(personas))
+        left_out = ["C"] if personas is None else []
+        hit = {"id": "i1", "kind": "insight", "m": 0.9, "left_out": left_out}
+        return MemoryResult([hit], 0.5 if personas is None else 0.75)
+
+
+async def test_memory_is_recalled_before_the_persona_and_again_with_it() -> None:
+    h = Harness()
+    port = RecordingRetrieve()
+    h.deps.retrieve = port
+    out = await h.start()
+    assert port.asked == [None, ["mock persona"]]
+    state = out.state
+    assert state["memory_persona_scored"] is True
+    assert state["memory_hits"][0]["left_out"] == []  # the hits in use are the persona-scored ones
+    assert (state["memory_coverage"], state["memory_coverage_final"]) == (0.5, 0.75)
+    detail = [e.detail for e in h.sink.events if isinstance(e, StepEvent) and e.step == 8][-1]
+    assert detail is not None and "re-scored with C" in detail
+
+
+async def test_without_personas_the_first_recall_stands_and_says_it_has_no_c() -> None:
+    class NoPersonas:
+        id = "A3"
+
+        async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> BaseModel:
+            raise RuntimeError("A3 down")
+
+    h = Harness(agents={**mock_agents(), "A3": NoPersonas()})
+    port = RecordingRetrieve()
+    h.deps.retrieve = port
+    out = await h.start()
+    assert port.asked == [None], "no persona, no second recall"
+    assert out.state["memory_persona_scored"] is False
+    assert out.state["memory_hits"][0]["left_out"] == ["C"]
+    assert "memory_coverage_final" not in out.state
