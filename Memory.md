@@ -149,13 +149,22 @@ These bands feed the Research Necessity Engine directly: `memory_coverage` is th
 
 **The bands are PROVISIONAL — recorded 2026-10-25, before anything else touches them.** The
 0.90 / 0.80 / 0.65 bands and the write-back gate at `M ≥ 0.90` (§6.3) were set as defaults and
-have never been calibrated against a six-component `M`. They are applied today to a four-component
-`M`: `S`, `P`, `A` and `F` renormalised over their 0.75 of the weight, because `C` (Phase 6) and `E`
-(Phase 5, then the migration) do not exist yet. When `E` and `C` arrive, identical items score
-differently (a perfect item with `E` = 0.6 falls from 1.0 to about 0.95), so the same thresholds
-mean something else. **Nothing banded before `E` exists is comparable with anything banded after.**
-Band tuning happens only after `E` and `C` exist, not before; no figure derived from a
-four-component `M` is reported anywhere.
+have never been calibrated against a six-component `M`, and **still have not been: six components
+existing does not calibrate them.** History, kept: from the day they were set (2026-10-25) until 2026-10-30 an `M` could only be computed from four
+components, `S`, `P`, `A` and `F` renormalised over their 0.75 of the weight, because nothing could
+supply `C` or `E`. In practice **no `M` was computed in that period at all**: `score()` had no caller
+until `app/memory/recall.py` (written 2026-10-29, committed 2026-10-30 as 18da971), so no item was
+ever banded. The four-component period ended on **2026-10-30 15:45 UTC**, when migration 0037
+(`memory_item_personas`) went live: `E` already reached the application (0031) and `C` now has
+somewhere to be stored and read. When `E` and `C` enter, identical
+items score differently (a perfect item with `E` = 0.6 falls from 1.0 to about 0.95), so the same
+thresholds mean something else. **Nothing banded under four components is comparable with anything
+banded after.** (There is nothing of the first kind to compare, but a figure that ever appears must
+say which it is: read `left_out` with every `M`.) Band tuning waits for chunk G, against approver
+judgement on real campaigns, and no figure derived from a four-component `M` is reported anywhere.
+At the time of writing no live item has persona rows (nothing has been written back through
+write-back live since 0037), so a live item's `M` still leaves `C` out until a campaign it served is
+approved and written back.
 
 **Update 2026-10-29 (Phase 6 chunk C): the scorer has a caller, and it supplies `C` and `E`.**
 `app/memory/recall.py` retrieves, supplies both components and scores; every recalled item carries the

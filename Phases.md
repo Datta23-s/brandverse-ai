@@ -425,6 +425,7 @@ recency (half-life from the page's own date) and specificity (query words found 
 and an accept threshold in `config/scoring.yaml`, all untuned defaults; a missing factor is left out
 and named. An item backed by several pages takes the maximum. Nothing calls it and nothing is stored:
 the migration, `app.match_memory` and the Phase 6 caller follow, so `E` is still left out of `M`.
+(Superseded 2026-10-30: 0031 and `app/memory/recall.py` supply `E`; see chunk C, Phase 6.)
 Migration 0028 (`sources`, `memory_item_sources`, the derived `memory_items.source_score`; per-source
 scores stored, the item's value the maximum) was applied 2026-10-25 17:51 UTC after a live dry run
 and the owner's approval; live posture 120 of 120 (`Architecture.md` §11). Next: 0029 (revoke `anon`'s
@@ -537,6 +538,14 @@ Memory is recalled twice in a run: at step 4 without a persona (C left out; the 
 coverage) and at step 8 with A3's (the M that reuse and write-back use). The bands are still uncalibrated
 (chunk G). Not yet driving anything end to end: no step injects memory or extracts candidates from an
 approved campaign.
+
+**Status 2026-10-30: 0037 applied live (15:45 UTC), pushed and green.** The four-component period (the
+reuse bands could only be applied to `S`, `P`, `A`, `F` renormalised over 0.75) ran from 2026-10-25 to
+then and produced no banded item, because `score()` had no caller before `recall.py`; nothing banded
+under four components is comparable with anything banded after. **The bands remain PROVISIONAL:
+having six components does not calibrate them; chunk G does, against approver judgement.** The guard
+test (`tests/db/test_recall.py`) takes real rows through `match_memory` and requires all six keys with
+values (`C` = 1.0, `E` = 0.72), and fails if either wire in `recall.py` is cut (checked by mutation).
 
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
 (`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One

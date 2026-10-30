@@ -1037,19 +1037,23 @@ The thresholds are judgement-set limits, not measured ones. 90% and 2 s are deli
 chosen to catch a set that was not read and not to police a fast, honest labeller; they were fixed
 before any new label exists, and are not to be tuned afterwards to admit a particular export.
 
-### The M-score's bands are provisional — recorded 2026-10-25
+### The M-score's bands are provisional — recorded 2026-10-25, updated 2026-10-30
 
 The reuse bands (0.90 / 0.80 / 0.65) and the write-back gate at `M >= 0.90` have never been
-calibrated against a six-component `M`; they are applied today to a four-component one (`S`, `P`,
-`A`, `F` renormalised over 0.75), because `C` and `E` do not exist yet. When they arrive identical
-items score lower, so the thresholds mean something different. Therefore:
+calibrated against a six-component `M`, and still have not been. History, kept: until 2026-10-30
+15:45 UTC (migration 0037 live) an `M` could only be four-component (`S`, `P`, `A`, `F`
+renormalised over 0.75), because nothing could supply `C` or `E`; no `M` was computed in that
+period (`score()` had no caller until `app/memory/recall.py`), so nothing was banded. `C` and `E`
+now exist; **six components existing does not calibrate the bands.** Identical items score lower
+with them than without, so the thresholds mean something different. Therefore:
 
 - The current bands are **provisional**.
 - **Band tuning, and the approver's 10-campaign calibration to >= 8/10 (D3, rubric §6), happen only
   after `E` and `C` exist.** The practice campaigns are produced by a system whose reuse decisions
   depend on the bands, so calibrating before they are fixed would calibrate a system that will not
   be the one evaluated.
-- **No figure derived from a four-component `M` is reported anywhere.**
+- **No figure derived from a four-component `M` is reported anywhere**, and nothing banded under four
+  components is comparable with anything banded after; a reported `M` states its `left_out`.
 - Audit: `score()` has no caller outside the tests, no real `M` has ever been computed, and no
   recorded figure depends on `E`. This was found by searching by pattern, not by reading every
   line. Details: `Memory.md` §3.2.

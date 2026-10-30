@@ -320,7 +320,7 @@ itself and corroboration is therefore item-level.
 rule can change later without refetching.
 
 ### 2.6 Reuse bands are provisional until E and C exist — **BUILT (the mechanism); bands PROVISIONAL**
-**Recorded 2026-10-25.**
+**Recorded 2026-10-25. Updated 2026-10-30: E and C now exist; the bands are still PROVISIONAL.**
 
 The M-score is defined over six components (S, P, C, A, F, E). C awaits persona vectors in Phase 6;
 E awaits source scores. A missing component is **left out and the remaining weights renormalised**,
@@ -329,10 +329,20 @@ and the result names what was left out. No neutral default is substituted anywhe
 *Reason.* A neutral default would produce plausible M values that silently were not the M the
 thesis defines.
 
-*Consequence, recorded.* Bands of 0.90 / 0.80 / 0.65 and the write-back gate at M ≥ 0.90 are
-currently applied to a four-component M. Nothing banded before E and C exist is comparable with
-anything banded after. Band tuning and the ten-campaign approver calibration happen only after both
-exist. No figure derived from a four-component M is reported anywhere.
+*Consequence, recorded.* Bands of 0.90 / 0.80 / 0.65 and the write-back gate at M ≥ 0.90 were, from
+2026-10-25, applicable only to a four-component M. Nothing banded before E and C exist is comparable
+with anything banded after. Band tuning and the ten-campaign approver calibration happen only after
+both exist. No figure derived from a four-component M is reported anywhere.
+
+*Update 2026-10-30, what is now true.* The four-component period ended when 0037 went live
+(15:45 UTC): E reaches the application through 0031 and C is stored per run and per persona
+(`memory_item_personas`) and taken at retrieval by `app/memory/recall.py`, the first caller of
+`score()`. **The period produced no banded item**, because `score()` had no caller before that (the
+2026-10-26 audit below), so there is no four-component record to set beside a six-component one; what
+the rule means now is that any later figure must say which components its M had (`left_out`). **The
+bands remain PROVISIONAL: six components existing does not calibrate them.** That is chunk G, against
+approver judgement. Until a campaign is approved and written back, live items have no persona rows
+and their M still leaves C out.
 
 *Audit, 2026-10-26.* `score()` has no caller outside the tests; no real M has ever been computed
 and no recorded figure depends on E. Established by pattern search rather than by reading every
