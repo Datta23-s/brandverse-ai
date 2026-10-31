@@ -260,7 +260,8 @@ def _quantity_check(s: Statement, claim: Claim) -> list[Finding]:
 
 def _term_check(s: Statement, claim: Claim, neutral: Collection[str]) -> list[Finding]:
     """Threat V12: a citation must resolve AND the claim's own text must contain what the statement
-    asserts (app/core/citation_terms.py). A word-overlap test, not entailment."""
+    asserts (app/core/citation_terms.py). A word-overlap test, not entailment. Not applied to a
+    labelled deduction (see `_claim_gate`)."""
     lacking = missing_terms(s.text, claim.text, neutral)
     if not lacking:
         return []
@@ -331,14 +332,21 @@ def _claim_gate(
             )
         elif claim.claim_type == "deduced":
             if s.labelled_deduction:
+                # EXEMPT from the lexical citation check (owner, 2026-10-31): a deduction restates
+                # its basis in different words, that is what inference is, so a word-overlap test is
+                # structurally wrong for it. It is flagged for the reviewer instead, and the flag
+                # SAYS the basis was not lexically checked, so no one reads it as "checked and passed".
                 findings.append(
-                    Finding("deduced_labelled", f"labelled deduction: {quote!r}", (claim.id,))
+                    Finding(
+                        "deduced_labelled",
+                        f"labelled deduction: {quote!r}. Its basis was NOT lexically checked "
+                        "(the citation check does not apply to a labelled deduction): the reviewer "
+                        "judges whether the cited claim supports the inference",
+                        (claim.id,),
+                    )
                 )
-                mismatch = _term_check(s, claim, neutral)
-                findings.extend(mismatch)
                 findings.extend(_quantity_check(s, claim))
-                if not mismatch:
-                    resolutions.append(Resolution(s.text, "deduced", claim.id, claim.evidence_url))
+                resolutions.append(Resolution(s.text, "deduced", claim.id, claim.evidence_url))
             else:
                 findings.append(
                     Finding(

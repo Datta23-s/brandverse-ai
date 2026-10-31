@@ -222,16 +222,12 @@ def test_a_labelled_deduction_dropping_its_claims_quantity_is_flagged_for_both()
     t = ProductTruth(FOOTWEAR, (claim,), ())
     copy = {"body": "We think it lasts for years."}
     statement = Statement("it lasts for years", "d60", labelled_deduction=True)
-    # V12: this is the one observed block that is arguably WRONG. "We think it lasts for years" is
-    # an inference the copy labels as one, drawn from a claim that is itself a deduction ("About
-    # 300 charge cycles"); the design lets a labelled deduction through as a flag. The lexical check
-    # blocks it only because the inference is worded unlike the claim, which a deduction usually is.
-    # Whether labelled deductions should be exempt is an open ruling (docs/decision-log.md, V12).
-    assert kinds(copy, (statement,), t) == [
-        "deduced_labelled",
-        "citation_lacks_term",
-        "unrepeated_quantity",
-    ]
+    # V12, ruled 2026-10-31: a labelled deduction is EXEMPT from the lexical citation check, since
+    # an inference restates its basis in other words ("years" is not in "About 300 charge cycles").
+    # It is flagged instead, and the flag says its basis was not lexically checked.
+    assert kinds(copy, (statement,), t) == ["deduced_labelled", "unrepeated_quantity"]
+    (flag, *_) = evaluate(copy, (statement,), t, LEXICON, TODAY).findings
+    assert "NOT lexically checked" in flag.message
 
 
 def test_a_quote_may_differ_from_the_copy_only_in_layout() -> None:

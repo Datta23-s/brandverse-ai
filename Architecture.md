@@ -260,6 +260,9 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-31 04:19 | `scripts/chunk_b_revision_run.py --mode z --cap 6` (approved: 6 standard; 2 used) | local `brandverse_chunk_b` | 0 | 2 | 0 |
 | **Total** | | | **4** | **57** | **10** |
 
+The 4 calls approved on 2026-10-31 for the revision test and not used are folded into the standing allowance, with no
+separate accounting (owner, 2026-10-31); the table above counts calls made.
+
 2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
 rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227
 out, A6 505 / 83, the claim classifier 418 / 124, A7 445 / 5 (copy clean: no flags), $0.0016 list price in all; then one A7

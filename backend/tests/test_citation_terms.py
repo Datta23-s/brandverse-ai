@@ -282,3 +282,62 @@ async def test_every_blocked_draft_is_handed_to_the_recorder_with_its_round() ->
         assert f["kind"] == "citation_lacks_term"
         assert f["statement"] == "lightweight walking shoe" and f["claim_text"]
     assert Harness is H
+
+
+# ── A labelled deduction is exempt, and the flag says so (owner, 2026-10-31) ─────────────────
+
+
+def _deduction_truth():  # type: ignore[no-untyped-def]
+    from app.core.sector_registry import Sector
+    from app.core.truth import Claim, ProductTruth
+
+    return ProductTruth(
+        Sector("footwear", regulated=False),
+        (
+            Claim("d1", "About 300 charge cycles before fading", "deduced", None, False),
+            Claim("v1", "Knit upper", "verified", "https://example.com/spec", False),
+        ),
+        (),
+    )
+
+
+def _eval(copy: str, statement: Statement):  # type: ignore[no-untyped-def]
+    return evaluate({"body": copy}, [statement], _deduction_truth(), LEXICON, TODAY)
+
+
+def test_a_labelled_deduction_is_flagged_not_blocked_and_the_flag_says_it_was_not_checked() -> None:
+    report = _eval(
+        "We think it lasts for years.",
+        Statement("it lasts for years", "d1", labelled_deduction=True),
+    )
+    kinds = [f.kind for f in report.findings]
+    assert "citation_lacks_term" not in kinds and report.outcome == "flag"
+    (flag, *_) = [f for f in report.findings if f.kind == "deduced_labelled"]
+    assert flag.outcome == "flag"
+    assert "NOT lexically checked" in flag.message
+    assert "reviewer judges whether the cited claim supports the inference" in flag.message
+
+
+def test_the_label_is_no_escape_for_a_verified_citation() -> None:
+    """Labelling a statement an inference does not exempt it when it cites a VERIFIED claim."""
+    report = _eval(
+        "We think it is lightweight.",
+        Statement("it is lightweight", "v1", labelled_deduction=True),
+    )
+    assert [f.kind for f in report.findings] == ["citation_lacks_term"]
+
+
+def test_an_unlabelled_deduction_is_still_the_old_block_and_not_this_one() -> None:
+    report = _eval("It lasts for years.", Statement("It lasts for years.", "d1"))
+    assert [f.kind for f in report.findings] == ["deduced_unlabelled"]
+
+
+def test_known_cost_a_property_labelled_as_an_inference_from_a_deduction_is_only_flagged() -> None:
+    """The exemption's cost, stated: 'we think it is lightweight' cited to a DEDUCED claim passes
+    as a flag (as a labelled deduction always did), with the not-checked notice for the approver."""
+    report = _eval(
+        "We think it is lightweight.",
+        Statement("it is lightweight", "d1", labelled_deduction=True),
+    )
+    assert report.outcome == "flag"
+    assert [f.kind for f in report.findings] == ["deduced_labelled", "unrepeated_quantity"]

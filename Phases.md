@@ -657,15 +657,20 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
 - **Approved and done 2026-10-31.** (1) 0038 (`runs.brief_check`) applied live at 04:15 UTC after the usual
   sequence: CI green on the pushed HEAD, the rolled-back dry run matched its recorded run, `migration list`
   identical through 0038, posture 136 of 136. (2) The 30-call brief-check precompute ran at temperature 0 and is
-  frozen: **1 of 30 briefs (R10) carries an unbacked property.** That is the number that bears on whether flagging
-  should ever become blocking: 29 clean briefs make blocking defensible, but blocking would have removed the one
-  request this whole thread was found on from the evaluation, and the test set was accepted unchanged, so it stays
-  a flag. (3) The revision test (run z, 2 of the 6 approved calls): the gate tripped `citation_lacks_term` on the
+  frozen: **1 of 30 briefs (R10) carries an unbacked property.** At 29 of 30 clean, blocking at admission was
+  considered and rejected as REDUNDANT (owner, 2026-10-31): A1 v2, the classifier's attribute extraction and the gate
+  already stand between an unbacked brief attribute and the copy, and a fourth would cost a whole request across
+  three arms to add nothing; it stays a flag. R10's brief stays unchanged: editing the test set to remove an
+  attribute after it produced a finding is the post-hoc adjustment pre-registration exists to prevent. (3) The revision test (run z, 2 of the 6 approved calls): the gate tripped `citation_lacks_term` on the
   copy that passed on 2026-10-30 (the classifier's earlier verdict replayed; the gate is real), the reviser was
   shown the span and its draft 2 dropped "lightweight" although A1's positioning still says it, and the classifier
   (temperature 0) cited all nine statements to claims that mention them; the audit log kept the block with the
   statement and the claim's text. One sample; the reviser did not obey in run X, but finding kind, wording and
   temperature all changed between the two. 4 of the 6 calls are unused.
+- **Ruled 2026-10-31 (owner), later:** labelled deductions are EXEMPT from `citation_lacks_term` (an inference
+  restates its basis in other words, so a lexical test is structurally wrong for it); the `deduced_labelled` flag
+  now states that the basis was NOT lexically checked; a label does not exempt a statement citing a verified claim.
+  The 4 unused calls of the 6 fold into the owner's standing allowance, with no separate accounting.
 - **Ruled 2026-10-31 (owner):** temperature 0 for the classifier and A7, as part of the LOCKED call
   configuration (in the prompt file, under the hash: `claim_extract@v3`, `a7_risk@v2`; `decision-log.md` 2.8);
   the reviser is shown the span of a `citation_lacks_term` finding too; `citation_lacks_term` stays a block, with

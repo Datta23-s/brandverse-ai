@@ -752,10 +752,13 @@ so a correct citation can be BLOCKED. Two existing V4 tests now block, and they 
 overstates the claim), caught here for a lexical reason that coincides with the real one, so the mitigation is
 working; "We think it lasts for years", a labelled inference from the deduced claim "About 300 charge cycles",
 is the one observed block that is arguably wrong, because the design lets a labelled deduction through as a flag.
-Whether labelled deductions should be exempt is an open ruling. The false-block rate on real copy is unmeasured;
+Ruled 2026-10-31: labelled deductions are now exempt (below). The false-block rate on real copy is unmeasured;
 its measurement is pre-registered below; (b) a property word the claim negates ("not lightweight") or uses in another sense, which passes;
 (c) in a long statement a single shared incidental word is enough, so a mis-cited sentence that also names a
-real feature passes; (d) anything the extractor never extracts (V11); and (e) since 2026-10-31 the reviser is shown the span of this finding (the span only, as for `unsourced_claim`),
+real feature passes; (c2) a LABELLED DEDUCTION is exempt (owner, 2026-10-31): an inference restates its basis in
+other words, so a lexical test is structurally wrong for it, and it is flagged for the reviewer instead, with the
+flag stating that its basis was NOT lexically checked; a property asserted as an inference from a deduced claim is
+therefore flagged and not blocked; (d) anything the extractor never extracts (V11); and (e) since 2026-10-31 the reviser is shown the span of this finding (the span only, as for `unsourced_claim`),
 so a re-citation to another claim fails unless that claim's own text contains the term. *Still refused:* a model-based entailment check, on the highest-volume path against a 20-a-day tier.
 *Untried live:* whether a revision under this check repairs the copy: the last live run needed none.
 
@@ -1336,11 +1339,21 @@ interval 0.6% to 16.7%). The other 29 either state nothing about the product bey
 claim backs ("large-display", "round-dial", "wood-pulp-fibre"). Reading the 30 objectives by eye gives the same
 answer; that is a reading, not a measurement of the extractor's recall.
 
-**What it decides, and does not.** The number of briefs with unbacked properties decides whether
-flagging should ever become blocking; blocking is not adopted, because it would refuse every request
-whose brief mentions an attribute the claims lack, and how many that is was not known. It is a model
-extraction, not a detector: its recall is unmeasured, and a brief that carries an attribute the
-model does not extract is recorded as clean.
+**What it decides, and does not.** The count was the thing that could have made blocking at admission
+defensible: 29 of 30 briefs are clean. **Blocking was considered and rejected as REDUNDANT (owner, 2026-10-31),
+and the check stays a flag.** Three defences already stand between an unbacked brief attribute and the copy: A1 v2
+refuses to take product properties from the brief, the classifier extracts attribute assertions, and the gate
+blocks unbacked ones. Blocking at admission would be a fourth, and it would cost a whole request across all three
+arms to add nothing the other three do not already do. The reason is not what a block would remove from the set.
+Each of the three defences is partial and has been observed on one request, so the ruling rests on their
+combination; the flag remains the record of which briefs carried an attribute. The check is a model extraction, not
+a detector: its recall is unmeasured, and a brief that carries an attribute the model does not extract is recorded
+as clean.
+
+**R10's brief is unchanged.** Its objective says "lightweight walking shoe", which is the one unbacked property in
+the 30. Editing the test set to remove an attribute that proved inconvenient, after it produced a finding, is the
+post-hoc adjustment that pre-registration exists to prevent, so editing it was considered and refused; the request
+stays in the evaluation as a genuine instance, and the record of how it was found stays with it.
 
 ### The false-block rate of `citation_lacks_term` is measured after the evaluation — PRE-REGISTERED 2026-10-31
 
@@ -1360,7 +1373,8 @@ arms. If there are 100 or fewer, all are reviewed; otherwise a simple random sam
 seed 20261031. A person, not an arm, reviews each pair blind to arm, request and round, asking one question:
 *does the cited claim, as written, support the statement?* Labels: **true block** (it does not), **false block**
 (it does, and only the wording differs), **unclear**. Statements the copy labels as an inference (a labelled
-deduction) are a separate stratum, reported on their own, because whether they should be exempt is an open ruling.
+deduction) are exempt from the check (ruled 2026-10-31) and so cannot appear in this review; their flags are counted
+separately.
 
 **What is reported.** The number of findings per arm; the counts of each label; the false-block rate, false /
 (true + false), with a 95% Wilson interval, and the bounds if every "unclear" were counted each way.
