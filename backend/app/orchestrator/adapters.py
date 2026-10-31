@@ -253,6 +253,7 @@ def driver_research(
                 "url": f.page.url,
                 "title": f.page.title,
                 "score": f.score.value,
+                "components": dict(f.score.components),
                 "published": f.page.published.isoformat() if f.page.published else None,
                 "queries": list(f.queries),
                 "engines": list(f.engines),

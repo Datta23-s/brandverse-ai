@@ -479,7 +479,17 @@ async def test_the_research_adapter_returns_attributed_findings_and_no_page_text
     assert result.report["searches"] == len(plan.queries) > 0
     assert result.findings, "an accepted page must come back as a finding"
     for f in result.findings:
-        assert set(f) == {"url", "title", "score", "published", "queries", "engines", "first_party"}
+        # "components" is the score broken down: write-back needs it to record the source honestly
+        assert set(f) == {
+            "url",
+            "title",
+            "score",
+            "components",
+            "published",
+            "queries",
+            "engines",
+            "first_party",
+        }
     assert "text" not in repr(result.findings) and GOOD[:30] not in repr(result.findings)
 
 

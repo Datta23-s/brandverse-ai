@@ -68,10 +68,12 @@ fact. Every commit appends one `audit_log` row naming what was inserted, reinfor
 import json
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
-from typing import Literal, Protocol, get_args
+from typing import Any, Literal, Protocol, get_args
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from psycopg import AsyncConnection
@@ -102,6 +104,53 @@ class WritebackRefused(RuntimeError):
     """The commit must not happen: raised inside the terminal transaction, which it rolls back."""
 
 
+SOURCE_SCORER = "source_scoring/1"  # app/research/source_scoring.py
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceSource:
+    """A scored page an item rests on (Memory.md section 3.1; migrations 0028 and 0040).
+
+    Without these rows `memory_items.source_score` is NULL and `E` is left out of the item's M, so
+    an item written with no evidence can never be a six-component M. `first_party` is whether the
+    page is the brand's own (None: unknown, because no domain was registered), kept beside the
+    score and never folded into it (threat V6)."""
+
+    url: str
+    score: float
+    components: Mapping[str, float]
+    scorer: str
+    config_version: str
+    published_on: date | None = None
+    first_party: bool | None = None
+
+    def __post_init__(self) -> None:
+        if not self.url.startswith(("http://", "https://")):
+            raise ValueError(f"evidence url must be http(s): {self.url!r}")
+        if not 0.0 <= self.score <= 1.0:
+            raise ValueError(f"evidence score must be in [0, 1], got {self.score}")
+
+    @property
+    def host(self) -> str:
+        return (urlsplit(self.url).hostname or "").casefold()
+
+
+def evidence_from_finding(finding: Mapping[str, Any], config_version: str) -> EvidenceSource:
+    """A run's finding (`state["findings"]`, one scored page) as the evidence for an item. Raises
+    KeyError if the finding lacks what a source row needs: a finding with no components was made
+    before they were carried and cannot be recorded honestly."""
+    published = finding.get("published")
+    return EvidenceSource(
+        url=finding["url"],
+        score=float(finding["score"]),
+        components={str(k): float(v) for k, v in finding["components"].items()},
+        scorer=SOURCE_SCORER,
+        config_version=config_version,
+        published_on=date.fromisoformat(published) if published else None,
+        first_party=finding.get("first_party"),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class MemoryWrite:
     """One memory_items row, screened and embedded, written if the run qualifies at its end."""
@@ -120,6 +169,9 @@ class MemoryWrite:
     sector: str | None = None
     source_url: str | None = None
     freshness_days: int | None = None
+    # The scored pages this item rests on, recorded with it (or, for a reinforced near-duplicate,
+    # added to the existing item: its E can only grow, as the maximum over its sources).
+    evidence: tuple[EvidenceSource, ...] = ()
 
     def __post_init__(self) -> None:
         _check_probability(self.confidence)
@@ -593,6 +645,56 @@ def _config(cfg: Writeback | None, bands: Bands | None) -> tuple[Writeback, Band
     return cfg or scoring.writeback, bands or scoring.memory.bands
 
 
+_SOURCE_SQL = """
+insert into public.sources (org_id, url, host, published_on)
+values (%(org)s, %(url)s, %(host)s, %(published)s)
+on conflict (org_id, url) do nothing
+"""
+_SOURCE_ID_SQL = "select id from public.sources where org_id = %(org)s and url = %(url)s"
+_LINK_SQL = """
+insert into public.memory_item_sources
+  (memory_item_id, source_id, org_id, score, components, scorer, config_version, first_party)
+values (%(item)s, %(source)s, %(org)s, %(score)s, %(components)s::jsonb, %(scorer)s, %(version)s,
+        %(first_party)s)
+on conflict (memory_item_id, source_id) do nothing
+"""
+
+
+async def _record_evidence(
+    conn: AsyncConnection, org_id: UUID, item_id: UUID, source: EvidenceSource
+) -> int:
+    """One scored page for one item. A page already recorded for the organisation is reused (sources
+    are shared and append-only); the same page for the same item is recorded once. Returns 1 if a
+    link was written, else 0."""
+    await conn.execute(
+        _SOURCE_SQL,
+        {
+            "org": org_id,
+            "url": source.url,
+            "host": source.host,
+            "published": source.published_on,
+        },
+    )
+    cur = await conn.execute(_SOURCE_ID_SQL, {"org": org_id, "url": source.url})
+    row = await cur.fetchone()
+    if row is None:
+        raise RuntimeError("a source row was not found right after it was written")
+    cur = await conn.execute(
+        _LINK_SQL,
+        {
+            "item": item_id,
+            "source": row[0],
+            "org": org_id,
+            "score": source.score,
+            "components": json.dumps(dict(source.components)),
+            "scorer": source.scorer,
+            "version": source.config_version,
+            "first_party": source.first_party,
+        },
+    )
+    return cur.rowcount
+
+
 async def commit_memory(
     conn: AsyncConnection,
     run_id: UUID,
@@ -648,6 +750,7 @@ async def commit_memory(
             touched.add(r.item_id)
             done.reused.append(entry | {"confidence": confidence})
 
+    evidence_of: dict[UUID, list[EvidenceSource]] = {}
     for item in staged.items:
         if item.org_id != org_id:
             raise WritebackRefused(f"a staged item names org {item.org_id}, the run's is {org_id}")
@@ -692,6 +795,7 @@ async def commit_memory(
                 confidence = await _reinforce(conn, near_id, cfg)
                 touched.add(near_id)
                 done.reinforced.append(near | {"confidence": confidence})
+                evidence_of.setdefault(near_id, []).extend(item.evidence)
             continue
         cur = await conn.execute(
             _INSERT_SQL,
@@ -717,6 +821,12 @@ async def commit_memory(
             raise RuntimeError("insert into memory_items returned no id")
         touched.add(inserted[0])
         done.inserted.append(str(inserted[0]))
+        evidence_of.setdefault(inserted[0], []).extend(item.evidence)
+
+    sources_recorded = 0
+    for item_id in sorted(touched, key=str):
+        for source in evidence_of.get(item_id, ()):
+            sources_recorded += await _record_evidence(conn, org_id, item_id, source)
 
     recorded = 0
     for item_id in sorted(touched, key=str):
@@ -739,6 +849,7 @@ async def commit_memory(
     details = {
         "campaign_id": str(campaign[0]) if campaign else None,
         "personas_recorded": recorded,
+        "evidence_recorded": sources_recorded,
         "near_duplicate_cosine": cfg.near_duplicate_cosine,
         "corrected": done.corrected,
         "reused": done.reused,

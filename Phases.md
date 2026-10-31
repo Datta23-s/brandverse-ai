@@ -709,57 +709,50 @@ where each stands (a closed chunk with named, dispositioned unknowns, not an ope
   obeyed). The one live sample so far is two runs with opposite results (X, z), not attributable to the span.
 Nothing in this list is an intention without a disposition.
 
-**Chunk D (V6 first-party), started 2026-10-31: the mechanism is built; three things are the owner's.**
-Built, tested offline and against the local database, 0039 NOT applied: `brands.domains` (migration 0039, audited like
-`brands.sector`); `app/core/first_party.py` (a label-boundary host match; unknown is `None`, never `False`);
-`ProductTruth.brand_domains` and `first_party_evidence(claim)`, the host check on a verified claim's `evidence_url`;
-`first_party` populated by the research driver on every finding, including under replay (it is computed at read time
-from the brand's domains, so the frozen snapshot, recorded before any domain existed, needs no change); and the sole-
-evidence rule in the claim gate: `first_party_sole_evidence` BLOCKS a statement citing a verified claim whose only
-evidence is the brand's own page when the sector is regulated (efficacy) or the claim's wording trips the superlative
-list (comparative), the owner's mechanical triggers. A factual property from the brand's own page stays acceptable.
-Authority and independence are kept apart: first-party is a fact about each source beside its score, not a term in it.
-- **Measured before building: what the rule does to the evaluation.** Of the 30 requests' 128 verified claims, none
-  trips the superlative list; only `health-supplements` is regulated (brand B07, requests R19-R21), and every verified
-  claim there cites the manufacturer's own page.
-- **The regulated trigger is wrong as built (owner, 2026-10-31); here are B07's claims.** "Efficacy = regulated
-  sector" conflates the sector with the claim. B07 has 7 DISTINCT verified claims (12 counting each request: R19 5,
-  R20 2, R21 5). By reading: **7 of 7 state a composition fact, 0 of 7 assert an effect on the user.**
-  Whey product A (R19, R21): "Whey protein isolate and concentrate blend, 1 kg" (quantity, unit, material); "24 g
-  protein, 11.5 g essential amino acids, 5.4 g BCAAs, 1 g glutamine (per serving)" (quantities); "4 billion CFU
-  probiotics; contains digestive enzymes" (quantity in a unit a unit list may not know, and an ingredient); "Contains
-  Velositol" (ingredient, no quantity); "Sweetened with fruit and dates; contains naturally occurring sugar"
-  (ingredient, no quantity). Marine collagen B (R20): "8000 mg marine collagen (Type I and III)" (quantity, unit,
-  material); "Contains hyaluronic acid, rosehip, astaxanthin, biotin, vitamin C (acerola), vitamin E" (ingredients,
-  no quantity). Every effect claim in that data ("enhancing muscle strength ... in 8 weeks", "reduced bloating",
-  "clinically proven botanicals", "dermatologist recommended", ...) is `restricted`: never shown to a model, never in
-  copy. So the rule as built blocks 12 of 12 legitimate claims and catches no effect claim. It binds a regulated
-  sector's whole verified set, which is the misfire.
-  *What a "quantity and unit" narrowing would still do:* by a number-plus-unit test, 3 distinct claims pass as
-  composition (1 kg; the per-serving quantities; 8000 mg) and, if CFU is a known unit, 4; the ingredient-only claims
-  ("Contains Velositol", "Sweetened with fruit and dates", the collagen ingredient list) have no unit, so 3 of 7
-  distinct (5 of 12 per request) would still be blocked, and an ingredient or a material is a composition fact too.
-  Recognising those mechanically needs a cue ("contains", "made with", "sweetened with"), which is a lexicon.
-  **Options for the ruling, not decided here:** (a) composition = a quantity with a unit only (leaves 3 of 7 blocked);
-  (b) composition = a quantity with a unit OR an ingredient/material cue (a short, stated cue list, brittle in the way
-  T5 warns about); (c) the human who enters a claim states its nature (`property` or `effect`) as a trust-deciding,
-  audited field, and the rule binds `effect` claims in any sector (no lexicon; a person can mislabel, as a person can
-  already mark a claim `verified`); (d) drop the regulated trigger, since an effect claim is `restricted` by the T2
-  definition and never verified, and keep only the comparative trigger.
-- **Done (owner order, 2026-10-31): 0039 APPLIED** at 12:43 UTC after the usual sequence (CI green on the pushed HEAD,
-  the dry run matched its record, `migration list` identical through 0039, live posture 137 of 137). The column is
-  inert until domains are registered.
-- **Ruled, not yet done: register the evaluation brands' real domains, AFTER the trigger is narrowed**, and let the
-  rule bind whatever it binds. If R19-R21 come out with every verified claim blocked, that is reported as a finding
-  about how supplement claims are evidenced.
-- **Ruled and built: independence is stored** with a memory item's evidence. 0040 adds `memory_item_sources.first_party`
-  (written with the append-only source row), the derived `memory_items.evidence_first_party_only` and returns it from
-  `app.match_memory`; recall carries it as `first_party_only`; it is not an M-score input. Dry run recorded; **0040 is
-  NOT applied (awaiting approval).** A gap to say plainly: nothing in the application writes `memory_item_sources`
-  yet (write-back does not attach evidence sources), so on the memory path the flag is stored and returned but has
-  nothing to carry until write-back records a source for what it writes. V6 is closed on the findings path and on the
-  schema of the memory path, not on the behaviour of the memory path.
-- No model calls. The standing 60: 12 spent, 48 remaining.
+**Chunk D (V6 first-party), 2026-10-31: the mechanism is built and applied; on this evaluation it binds nothing.**
+Built and tested, no model calls (standing 60: 12 spent, 48 remaining):
+- `brands.domains` (0039, **applied 12:43 UTC**, posture 137/137): the brand's own sites, audited like `brands.sector`.
+- `app/core/first_party.py`: a label-boundary host match; unknown is `None`, never `False`. `first_party` is populated by
+  the research driver on every finding, replay included (computed at read time, so the frozen snapshot is unchanged), and
+  A2 skips a brand's own pages with it. `ProductTruth.first_party_evidence(claim)` is the host check on a verified claim's
+  `evidence_url`.
+- The sole-evidence rule in the claim gate: `first_party_sole_evidence` BLOCKS a statement citing a verified claim whose one
+  evidence URL is the brand's own page **when the claim's own wording trips the superlative list (comparative)**.
+- Independence is kept with a memory item's evidence (0040, **applied 13:04 UTC**, posture 139/139): per-source
+  `memory_item_sources.first_party`, a derived `memory_items.evidence_first_party_only`, returned by `match_memory` and
+  carried by recall; not an M-score input (authority and independence stay apart).
+- The evaluation brands' domains are REGISTERED (`domains:` per brand in `evaluation/test_set.yaml`, the hosts of their
+  evidence pages): first-party marking is complete (128 of 128 verified claims are marked first-party). Only the hosts
+  of the evidence pages are listed, so a brand domain not in them reads as independent.
+
+**The regulated trigger was dropped (owner, 2026-10-31, option d).** "Efficacy = a regulated sector" conflated the sector
+with the claim. B07, the only regulated brand (R19-R21), has 7 distinct verified claims (12 per request): 7 of 7 state a
+composition fact ("24 g protein", "Contains Velositol", "8000 mg marine collagen"), 0 assert an effect; every effect claim
+in that data is `restricted` and never reaches a model or the copy. The trigger blocked 12 of 12 legitimate claims and
+caught none. **The gap it leaves, stated:** an effect claim MISLABELLED `verified` instead of `restricted` would reach the
+copy resting on the brand's own page and nothing now catches it; the dropped trigger was a backstop against exactly that.
+**The right design is (c), deferred:** the claim's nature (`property` or `effect`) as an audited, human-entered field,
+with the rule binding `effect` claims in any sector. It needs schema, a UI and human discipline; chunk D is large enough.
+
+**THE DEFLATING RESULT, as it is: on this evaluation the first-party sole-evidence rule binds NOTHING.** None of the 128
+verified claims trips the superlative list, and the regulated trigger is gone. The mechanism exists, is tested, and has no
+instance to act on; a test pins (128 claims, 128 first-party-marked, 0 bound). Do not read the rule's presence as a check
+that fired anywhere: it did not. What the domain work does deliver is first-party MARKING (A2 skips own pages; findings and,
+once evidence is attached, memory sources know whose page they are).
+
+**THE PREMISE CHECK: the six-component M does not exist in practice (owner, 2026-10-31; confirmed).** Two separate facts:
+- `writeback_step` passes `candidates=[]`. Reading the facts out of an approved campaign is not built, so **a real run
+  writes no memory item at all**. The Proposed arm's memory stays empty: campaign 2 and 3 of a brand see nothing from
+  campaign 1. That is not only "E is left out": there is nothing to recall. (Threat V13.)
+- Even an item written by `commit_memory` got only a `source_url` string: no `sources` and no `memory_item_sources` row,
+  so `source_score` was NULL and `E` was left out of its M. Chunk C's guard test inserted its rows by hand.
+`tests/db/test_memory_in_practice.py` pins both. **Built now (the unambiguous half):** `EvidenceSource` on `MemoryWrite`;
+`commit_memory` records the sources (shared per organisation, one link per item and page, `first_party` kept), for new
+items and for the near-duplicates it reinforces; findings now carry their score's components; `evidence_from_finding`.
+`tests/db/test_writeback_evidence.py` goes through `commit_memory` and shows `E` ARRIVING in recall (0.9 x 0.8) and the
+item flagged first-party-only or not. **Not built, and it is the part that matters:** WHICH facts a run proposes from an
+approved campaign (the candidate extraction Memory.md 6.1 leaves to "the agent or step that proposes it") and which page
+backs each. Until that exists, every band, reuse decision and chunk G still rest on an M that no real run produces.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

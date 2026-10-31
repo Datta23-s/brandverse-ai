@@ -683,6 +683,24 @@ search pipeline carries a `first_party` marker on every result, unpopulated and 
 6, with the domain field, the rule above and an independence factor separate from authority. The
 independence factor is not designed here. (`Memory.md` §3.1; `Phases.md` Phases 5 and 6.)
 
+*Status 2026-10-31 (Phase 6 chunk D).* Built: a brand-domain field (audited), `first_party` on findings, the host check on
+a verified claim's evidence URL, independence kept with a memory item's evidence. The sole-evidence rule blocks a verified
+claim resting only on the brand's own page when the claim is comparative; the efficacy trigger (regulated sector) was
+dropped because it blocked every one of the only regulated brand's composition facts and caught no effect claim. **On this
+evaluation the rule binds nothing: 0 of the 128 verified claims trips the superlative list.** First-party marking is
+complete (the brands' domains are registered), so A2 skips a brand's own pages and findings record whose page they are.
+Left open: an effect claim mislabelled `verified` is not caught; the fix (the claim's nature as an audited field) is
+deferred.
+
+**V13 — The Proposed arm's memory cannot accumulate (recorded 2026-10-31; found by checking a premise).** Write-back
+stages no candidate (`candidates=[]`): nothing extracts facts from an approved campaign. A real run therefore writes no
+memory item, and campaigns 2 and 3 of a brand see none of campaign 1's memory; the memory arm, as built, runs under the
+same conditions as no memory. Items that are written got no evidence sources, so their `source_score` was NULL and `E`
+was left out; that half is fixed (`commit_memory` records scored sources with `first_party`; `E` arrives, tested through
+the commit path). The extraction is not built, so no real run produces an M and the reuse bands (chunk G), the M-score and
+the memory contrast rest on a mechanism no run exercises. Until it exists, a result about memory is a result about an empty
+store.
+
 **V7 — The evaluation's searches can only return evidence about a product's CATEGORY, never about the
 product (recorded 2026-10-28; owner).** The test set's brands and products are pseudonyms, which no search
 engine can resolve, so the query planner takes the product's generic category and never a brand or product
