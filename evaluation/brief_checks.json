@@ -1,0 +1,337 @@
+{
+ "requests": {
+  "R01": {
+   "backed": 0,
+   "brief_sha256": "604479f3740e0915d347039b5b0a1f2860e2d7eae38d9a5edbeeea90f46c859f",
+   "checked_utc": "2026-10-31T04:11:15+00:00",
+   "claims_sha256": "1f59bb4d9c1a6a95c0faec26d5f4265fce2acde96b1ef33f3c515193d1d083d4",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R01",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R02": {
+   "backed": 1,
+   "brief_sha256": "7abe32938f2ad2b0e94ddc4d8ae220dca752b993b611ef340ee9197da08b0bad",
+   "checked_utc": "2026-10-31T04:11:18+00:00",
+   "claims_sha256": "00ee812f3a5570262f604c8845b5dd2ed81390131deb9f7b7cb631d84d67bda1",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R02",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R03": {
+   "backed": 0,
+   "brief_sha256": "b3082ea95d493825a70463184fdf987cc213b2cb39ecc8fff644fb799f43ac6b",
+   "checked_utc": "2026-10-31T04:11:22+00:00",
+   "claims_sha256": "1f59bb4d9c1a6a95c0faec26d5f4265fce2acde96b1ef33f3c515193d1d083d4",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R03",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R04": {
+   "backed": 1,
+   "brief_sha256": "f58fc9db87b67e1c7c1a3ee9d5091128b93ab61215934b961051cfd08f0b00ee",
+   "checked_utc": "2026-10-31T04:11:25+00:00",
+   "claims_sha256": "3d9eb52d798ceaf54fed78d2ecfb7bd41b8080ce3e10f3812f18f850ee269bb3",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R04",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R05": {
+   "backed": 2,
+   "brief_sha256": "c1bcdd0a62671fa4d30ff59efa170a0d3462dde5a0eda1025a1f211ec58a2227",
+   "checked_utc": "2026-10-31T04:11:29+00:00",
+   "claims_sha256": "77548101dec04faccee84fa18626ea097ecd9a6b55d753242a71eb1274207158",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R05",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R06": {
+   "backed": 0,
+   "brief_sha256": "456a9e7ab3b1333182f8957bc28c622b4b78d796a0880b1be2743cab3bf7f219",
+   "checked_utc": "2026-10-31T04:11:33+00:00",
+   "claims_sha256": "3d9eb52d798ceaf54fed78d2ecfb7bd41b8080ce3e10f3812f18f850ee269bb3",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R06",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R07": {
+   "backed": 0,
+   "brief_sha256": "136a83864dc1623d220229eed0e669b502ddf3b6efbb4f45758ce6963c68159f",
+   "checked_utc": "2026-10-31T04:11:34+00:00",
+   "claims_sha256": "bec5183fd42f32c297956e52d9afc1ea21ac2dd79243c56942dbb2b221d7c861",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R07",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R08": {
+   "backed": 0,
+   "brief_sha256": "824caef6ffa0b1a143135fdeb642f383139734a560da5659e0cfca2aa3934819",
+   "checked_utc": "2026-10-31T04:11:35+00:00",
+   "claims_sha256": "349ffd2bb86e201eb7546ebd4a78b2c1bb4dd2346906432ed2b5dee8c049db1e",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R08",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R09": {
+   "backed": 0,
+   "brief_sha256": "15c099778a8882a2b884e8c83bd588c6d77a77b37b88ce9b1792481912ef7cbb",
+   "checked_utc": "2026-10-31T04:11:37+00:00",
+   "claims_sha256": "bec5183fd42f32c297956e52d9afc1ea21ac2dd79243c56942dbb2b221d7c861",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R09",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R10": {
+   "backed": 0,
+   "brief_sha256": "f6808ee193e4d40f7436b08978e49c190aa314754800f20ecf57b2d339bd4e8a",
+   "checked_utc": "2026-10-31T04:11:39+00:00",
+   "claims_sha256": "4117130a665901525c6ba384534342b3715a4536f55ca12381f825f89b4f328c",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R10",
+   "status": "checked",
+   "unbacked": [
+    "lightweight walking shoe"
+   ]
+  },
+  "R11": {
+   "backed": 1,
+   "brief_sha256": "0ea4fc886ff5ce1c17791382fca2d6353bc245332469cc445e6920d9964cd241",
+   "checked_utc": "2026-10-31T04:11:42+00:00",
+   "claims_sha256": "9e97854d7fde691c4b86edabc6bee5358d67ddeee3efac7d0f4afda62409f4ce",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R11",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R12": {
+   "backed": 0,
+   "brief_sha256": "8b9a225f2b60fe55316da1c93a2f01d379d166a4c5e0918f05934425ab24379b",
+   "checked_utc": "2026-10-31T04:11:43+00:00",
+   "claims_sha256": "4117130a665901525c6ba384534342b3715a4536f55ca12381f825f89b4f328c",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R12",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R13": {
+   "backed": 1,
+   "brief_sha256": "5d50ec32ccf6571b2d02389685daad3f5383bc915ee33de545344803789fc872",
+   "checked_utc": "2026-10-31T04:11:44+00:00",
+   "claims_sha256": "53999f6089d99a723f3a455bca02e903722c6388a3874cc0c67032fba4a9634f",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R13",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R14": {
+   "backed": 0,
+   "brief_sha256": "f728c211ae0f25d7585ae29e5daa049e7bfc3307d5c379d2dcb058b3fcaa04a7",
+   "checked_utc": "2026-10-31T04:11:45+00:00",
+   "claims_sha256": "1db66c529393718dbb3a375e8d2869f0853d5d08d9a32494b7a3294e9ac1c37a",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R14",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R15": {
+   "backed": 0,
+   "brief_sha256": "4973f90d60a476b16082fa048ed53568394e19b11c420313e1ad78e57d6b013a",
+   "checked_utc": "2026-10-31T04:11:46+00:00",
+   "claims_sha256": "53999f6089d99a723f3a455bca02e903722c6388a3874cc0c67032fba4a9634f",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R15",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R16": {
+   "backed": 0,
+   "brief_sha256": "b552edac9df4b46f3e43b514de6c06dec4585c9b4c7b31b40a25b636f3f936da",
+   "checked_utc": "2026-10-31T04:12:12+00:00",
+   "claims_sha256": "0a0af981434f89f9e0c26646e46fc8f114d50ef46535c0b917f731e64073b875",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R16",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R17": {
+   "backed": 1,
+   "brief_sha256": "8e546716093846835142d03c2b5dd741f6b275f316666048ea89c72ff0e34551",
+   "checked_utc": "2026-10-31T04:12:16+00:00",
+   "claims_sha256": "ad2b3365c8c3534422091e4c29889b14db691b245c0caa1f2bbe0e60b39a9d8a",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R17",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R18": {
+   "backed": 0,
+   "brief_sha256": "020c0522e441b8d7edcb1619042a1d60fb3cba489ed3feab6324c56760d549e9",
+   "checked_utc": "2026-10-31T04:12:19+00:00",
+   "claims_sha256": "0a0af981434f89f9e0c26646e46fc8f114d50ef46535c0b917f731e64073b875",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R18",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R19": {
+   "backed": 0,
+   "brief_sha256": "89f74f90ffb9eda3fa469edd02908524fe5ec05647b2889ba9f1e7f1ddcf810a",
+   "checked_utc": "2026-10-31T04:12:23+00:00",
+   "claims_sha256": "5dd2b0acb27234e083a0b01efc373c69d88df246a317dab6c89425f7e9210c43",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R19",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R20": {
+   "backed": 0,
+   "brief_sha256": "ced67146f85640635469b0ee923098b4dc4cbec9eecc389cb05da1c054decc3e",
+   "checked_utc": "2026-10-31T04:12:26+00:00",
+   "claims_sha256": "afdaee7fdd6dba2e074470cd2cd926072a17f0eac97dd4eb747aec4490aabf53",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R20",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R21": {
+   "backed": 0,
+   "brief_sha256": "647635e5915f863311c006d6a9d488bcaa13cfdb0c3969d179bf588fd8356bae",
+   "checked_utc": "2026-10-31T04:12:30+00:00",
+   "claims_sha256": "5dd2b0acb27234e083a0b01efc373c69d88df246a317dab6c89425f7e9210c43",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R21",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R22": {
+   "backed": 1,
+   "brief_sha256": "a2563da54e4f6802bb05a167b2fdd301a470ffc272a5b1f5dabaf1b128ce33f5",
+   "checked_utc": "2026-10-31T04:12:34+00:00",
+   "claims_sha256": "5b43c729307b8139a6c7157276536fac414905fdac9a0b0aa3d4844c9c8634b8",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R22",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R23": {
+   "backed": 1,
+   "brief_sha256": "1e10c8997aad064a70476159c53bad9e5e1fefcc2dd3f16cfe4e5ae46a2d1250",
+   "checked_utc": "2026-10-31T04:12:35+00:00",
+   "claims_sha256": "548273cef3cb5e73da1f4077730303e3e0547a74c0d4d7307e3871f4a69be85f",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R23",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R24": {
+   "backed": 0,
+   "brief_sha256": "ffb7e24c3c8ef4eb60393b2ed699b358ae89e68f51f906d78e12987ad6ab8ee0",
+   "checked_utc": "2026-10-31T04:12:37+00:00",
+   "claims_sha256": "5b43c729307b8139a6c7157276536fac414905fdac9a0b0aa3d4844c9c8634b8",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R24",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R25": {
+   "backed": 0,
+   "brief_sha256": "f13f0c888d3fb4e4a831555750cc070766216798c111bbc62f20d49d3e02e583",
+   "checked_utc": "2026-10-31T04:12:39+00:00",
+   "claims_sha256": "0dabab24956d1adceeeca1b2eafbd28d1d5905852ecb218f399cdd97859fc2e2",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R25",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R26": {
+   "backed": 0,
+   "brief_sha256": "8b6166170ac6a8a236ca086b813b376af7878b088dd1f9744a5483830e0fdd70",
+   "checked_utc": "2026-10-31T04:12:40+00:00",
+   "claims_sha256": "5c0386806cc9736d3db899c98d92383b8dbbc056c0b345cac8d2c1c242532320",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R26",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R27": {
+   "backed": 0,
+   "brief_sha256": "1dd69e6103ed1d8e8471a23981f6bd3837166f4844f73577905a87b5cccc95ed",
+   "checked_utc": "2026-10-31T04:12:43+00:00",
+   "claims_sha256": "0dabab24956d1adceeeca1b2eafbd28d1d5905852ecb218f399cdd97859fc2e2",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R27",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R28": {
+   "backed": 1,
+   "brief_sha256": "08c5b04e4a32bf5be1fcfa53e61089f79fb5b5790cf9a5a47f6c2c417c330d1f",
+   "checked_utc": "2026-10-31T04:12:44+00:00",
+   "claims_sha256": "2a2c04119be69e3eeccf6ab7f7f09e8eb2b679f3f5ee03007c80a23705aa6cb3",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R28",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R29": {
+   "backed": 0,
+   "brief_sha256": "46f82d6692fc158e404f18a2cd4d3c21b98b8fd050466b6997c2495a51a492df",
+   "checked_utc": "2026-10-31T04:12:45+00:00",
+   "claims_sha256": "edb0edb75d439441cb4cf76e8f4558e71ab2f8d9c13183c67c29ef3a7a35cbca",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R29",
+   "status": "checked",
+   "unbacked": []
+  },
+  "R30": {
+   "backed": 0,
+   "brief_sha256": "59fc43dd80f1c18e920dfa6ab092bd5b4302c8c20b9f6420c286803abcddcdc6",
+   "checked_utc": "2026-10-31T04:12:47+00:00",
+   "claims_sha256": "2a2c04119be69e3eeccf6ab7f7f09e8eb2b679f3f5ee03007c80a23705aa6cb3",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "prompt": "claim_extract@v3",
+   "request": "R30",
+   "status": "checked",
+   "unbacked": []
+  }
+ },
+ "version": 1
+}

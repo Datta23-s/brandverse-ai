@@ -55,6 +55,7 @@ from app.orchestrator.adapters import (
     brief_checker,
     classifier_extractor,
     driver_research,
+    gate_block_recorder,
     memory_recaller,
     pool_context_loader,
     writeback_step,
@@ -77,8 +78,13 @@ from scripts.chunk_b_d1_replay import (
 )
 from scripts.e2e_prepare_db import main as prepare_database
 from tests.db.target_guard import managed_supabase_hosts
+from tests.test_citation_terms import DRAFT_2, SAID_ON_DRAFT_2
+from tests.test_v11_audience_and_run_columns import R10_TRUTH
 
-CAPS = {"x": 5, "y": 7}  # 12 approved in all
+CAPS = {"x": 5, "y": 7, "z": 6}  # x and y: 12 approved; z: 6 more (2026-10-31)
+
+
+CLAIM_TEXT = {c.id: c.text for c in R10_TRUTH.claims}  # the test truth's ids -> claim text
 
 
 class Replayed:
@@ -128,7 +134,7 @@ async def main(mode: str, cap_override: int | None) -> int:
         return 1
     saved = latest_report()["state"]
     outputs = saved["agent_outputs"]
-    first_copy = CreativeOutput(copy=saved["creative"]["copy"])
+    first_copy = CreativeOutput(copy=DRAFT_2 if mode == "z" else saved["creative"]["copy"])
     inp = request_inputs()
     cfg = load_scoring()
     research_cfg = cfg.research
@@ -187,11 +193,20 @@ async def main(mode: str, cap_override: int | None) -> int:
         )
         encoder = HashingEncoder()
         real_writer = CopyWriter(gateway, prompts)
-        writer = FirstDraftThenReal(first_copy, real_writer, replay_first=mode == "x")
+        writer = FirstDraftThenReal(first_copy, real_writer, replay_first=mode in ("x", "z"))
         real_extract = classifier_extractor(gateway, prompts)
 
         async def recording_extract(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
-            statements = await real_extract(ctx, copy)
+            if mode == "z" and ctx.revision_round == 0:
+                # the verdict the real classifier gave on this very copy on 2026-10-30 (the
+                # attribute cited to the lace-up claim), replayed so the gate trips
+                # citation_lacks_term for real
+                by_text = {c.text: c.id for c in ctx.truth.claims}
+                statements = [
+                    Statement(q, by_text[CLAIM_TEXT[c]] if c else None) for q, c in SAID_ON_DRAFT_2
+                ]
+            else:
+                statements = await real_extract(ctx, copy)
             extractions.append(
                 {
                     "round": ctx.revision_round,
@@ -204,7 +219,7 @@ async def main(mode: str, cap_override: int | None) -> int:
         agents: dict[str, Agent] = {
             "A1": (
                 Replayed("A1", ProductBrandOutput.model_validate(outputs["A1"]))
-                if mode == "x"
+                if mode in ("x", "z")
                 else ProductBrandAnalyst(gateway, prompts)
             ),
             "A2": Replayed("A2", MarketOutput.model_validate(outputs["A2"])),
@@ -223,6 +238,7 @@ async def main(mode: str, cap_override: int | None) -> int:
             lexicon=load_superlatives("v1"),
             today=lambda: date.today(),
             evidence=PageEvidence(pages, extractor),
+            record_block=gate_block_recorder(pool),
         )
         precomputed: dict[str, Any] | None = None
         if mode == "y":
@@ -274,6 +290,24 @@ async def main(mode: str, cap_override: int | None) -> int:
         print("extraction, round", ex["round"])
         for text, claim in ex["statements"]:
             print("   ", repr(text[:90]), "->", claim)
+    with psycopg.connect(url) as c:
+        blocks = c.execute(
+            "select details from audit_log where entity_id = %s and action = 'output.blocked' "
+            "order by id",
+            (str(run),),
+        ).fetchall()
+    print("audit_log output.blocked rows:", len(blocks))
+    for (d,) in blocks:
+        for f in d["findings"]:
+            print(
+                "   round",
+                d.get("revision_round"),
+                f["kind"],
+                "|",
+                f.get("statement"),
+                "|",
+                f.get("claim_text"),
+            )
     print("drafts:", len(writer.drafts))
     for i, d in enumerate(writer.drafts):
         print(f"--- draft {i}")
@@ -321,7 +355,7 @@ async def main(mode: str, cap_override: int | None) -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["x", "y"], required=True)
+    parser.add_argument("--mode", choices=["x", "y", "z"], required=True)
     parser.add_argument("--cap", type=int, help="fewer calls than the mode's default")
     args = parser.parse_args()
     sys.exit(asyncio.run(main(args.mode, args.cap), loop_factory=asyncio.SelectorEventLoop))
