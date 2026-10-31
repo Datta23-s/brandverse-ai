@@ -120,8 +120,8 @@ def write_report(report: dict[str, object]) -> Path:
     return path
 
 
-async def main(mode: str) -> int:
-    cap = CAPS[mode]
+async def main(mode: str, cap_override: int | None) -> int:
+    cap = cap_override or CAPS[mode]
     settings = get_settings()
     if settings.google_api_key is None:
         print("GOOGLE_API_KEY is not set in .env")
@@ -322,4 +322,6 @@ async def main(mode: str) -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["x", "y"], required=True)
-    sys.exit(asyncio.run(main(parser.parse_args().mode), loop_factory=asyncio.SelectorEventLoop))
+    parser.add_argument("--cap", type=int, help="fewer calls than the mode's default")
+    args = parser.parse_args()
+    sys.exit(asyncio.run(main(args.mode, args.cap), loop_factory=asyncio.SelectorEventLoop))

@@ -611,6 +611,26 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
   fails if a restricted-claim finding reveals anything, and every kind not named, including a new one, reveals
   nothing.
 
+**V11 follow-up, live (2026-10-30), 6 of the 12 approved calls used; the other 6 remain.**
+- **Run X, first attempt (2 calls):** the classifier blocked draft 1 as before; the revision call got a provider
+  503 ("high demand", a real, counted call). The graph did what it should: A6 recorded as failed, the run went
+  on with no creative, `no_creative` blocked the gate and it parked at approval. A real provider failure took the
+  failure-isolation path.
+- **Run X, second attempt (3 calls): the span did not repair it.** Draft 1 was blocked ("lightweight walking shoe"
+  with no claim). The reviser was told that span (remove it, do not rephrase it) and wrote "discover a
+  lightweight walking shoe" in draft 2. The classifier then cited that statement to the spec claim
+  "Lace-up, low top, medium width, almond toe, low arch", and the gate PASSED. The unbacked attribute is in a
+  copy that reached the approver as `pass`. This run replayed A1's old positioning (which says "lightweight") and
+  the brief, so it isolates the reviser: with its other inputs carrying the word, it did not obey.
+- **The classifier is not deterministic.** Five judgments of the same attribute: no claim four times, a wrong
+  citation once. `LLMGateway` sets no temperature, so the provider default applies to the classifier and to
+  every other call. Proposed, not made: temperature 0 for the classifier (and A7), then re-measure agreement on
+  the same copy. Until then step 11's verdict on a borderline statement is one draw.
+- **Run Y (the full fix) did not complete.** It made its one precompute call (the brief check, 648 in / 48 out)
+  and was stopped by the system for low memory before reporting; its output was lost with the process. So what
+  `a1_positioning@v2` does with the brief, and what the brief check flags on R10, are still unobserved. Rerunning
+  Y costs 4 calls if the first draft is clean and 6 with one revision, which is all that remains.
+
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each
 campaign that produced, reinforced or reused an item; `C` is the maximum cosine over the persona pairs

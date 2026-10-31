@@ -1245,6 +1245,39 @@ respect to a configuration declared in advance and reported beside every result.
   evidence, named here and to be named in the limitations of the write-up, not discovered during the
   recording.
 
+### The brief check is computed once per request and held constant across the arms — RULED 2026-10-30, before any evaluation run
+
+**What it is.** Step 3 of the pipeline reads the request's brief and lists the property assertions in
+it that no verified claim backs (`app/core/brief_check.py`; threat V11, `docs/decision-log.md`).
+Found by a real run: the brief for R10 says "lightweight walking shoe", no claim says the shoe is
+light, and the word reached the headline. The check **flags and records; it never blocks.**
+
+**The ruling.** The check is a property of the REQUEST, like the planner's query list, not of the
+run. So it is a PRECOMPUTATION, not a cache: each of the 30 requests is classified once
+(`scripts/precompute_brief_checks.py`, `claim_extract@v2`, one Standard-tier call per request), the
+result is stored with the request's frozen inputs (`evaluation/brief_checks.json`, bound by
+`evaluation/brief_checks.lock` the way `test_set.categories.lock` binds the categories), and every arm
+of the request reads that same record (`Pipeline.start(brief_check=...)`). A run that finds a record
+made from another brief or other claims records `stale` and uses nothing.
+
+**Why, before any evaluation run.** The three arms of one request would otherwise each classify the
+same brief and could be flagged differently by a model's variation (the call is not deterministic).
+That is the confound "search is held constant across the arms" rules out, applied to a new input: a
+difference between arms that came from the checker and not from the arm. Precomputing gives
+identical flags by construction instead of by luck, and costs 30 calls, not 90.
+
+**What is kept, and where.** The frozen record per request (which assertions, which backed, the
+hashes of the brief and the claims, the prompt and the model); each run's own copy in
+`runs.brief_check` (migration 0038), written by the backend with the terminal status, so the
+evaluation reads how many briefs carried unbacked properties, and which, from the run rows and from
+the one frozen file, never from checkpointed state.
+
+**What it decides, and does not.** The number of briefs with unbacked properties decides whether
+flagging should ever become blocking; blocking is not adopted, because it would refuse every request
+whose brief mentions an attribute the claims lack, and how many that is was not known. It is a model
+extraction, not a detector: its recall is unmeasured, and a brief that carries an attribute the
+model does not extract is recorded as clean.
+
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 
 *Degraded-search rate (added 2026-10-28; owner):* the time estimate below assumes a share of searches

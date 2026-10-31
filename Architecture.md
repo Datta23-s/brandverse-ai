@@ -252,7 +252,10 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-29 17:35 | `scripts/chunk_b_a7_probe.py` (cap 1, within the same 6) | local `brandverse_chunk_b` | 0 | 1 | 0 |
 | 2026-10-30 16:22 | `scripts/chunk_b_d1_replay.py` (cap 10; approved: 10 standard, tuning organisation) | local `brandverse_chunk_b` | 0 | 7 | 0 |
 | 2026-10-30 17:03 | `scripts/chunk_b_revision_run.py` (cap 3; the remaining 3 of the 10) | local `brandverse_chunk_b` | 0 | 3 | 0 |
-| **Total** | | | **4** | **15** | **10** |
+| 2026-10-30 17:41 | `scripts/chunk_b_revision_run.py --mode x` (cap 5; of the 12 approved for the V11 re-run) | local `brandverse_chunk_b` | 0 | 2 | 0 |
+| 2026-10-30 17:46 | `scripts/chunk_b_revision_run.py --mode x --cap 3` | local `brandverse_chunk_b` | 0 | 3 | 0 |
+| 2026-10-30 17:46 | `scripts/chunk_b_revision_run.py --mode y` (stopped by the system after its first call) | local `brandverse_chunk_b` | 0 | 1 | 0 |
+| **Total** | | | **4** | **21** | **10** |
 
 2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
 rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227

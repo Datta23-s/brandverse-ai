@@ -27,6 +27,7 @@ from langgraph.types import Send
 from app.agents.base import AgentContext
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
 from app.core.brief_check import assess, reconcile
+from app.core.citation_terms import neutral_stems
 from app.core.gates import Finding, GateReport, Statement, evaluate
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.truth import ProductTruth
@@ -57,6 +58,13 @@ class PipelineInputError(BrandverseError):
 
 def _ids(state: RunState) -> tuple[UUID, UUID, UUID]:
     return UUID(state["run_id"]), UUID(state["org_id"]), UUID(state["product_id"])
+
+
+def naming_terms(state: RunState) -> frozenset[str]:
+    """The stems of the words that merely name the product: its category and its name. The citation
+    check (threat V12) does not count them as something a statement asserts."""
+    product = state.get("product") or {}
+    return neutral_stems([product.get("category"), product.get("name")])
 
 
 def report_dict(report: GateReport) -> dict[str, Any]:
@@ -378,7 +386,15 @@ class Nodes:
         if stored is None:
             return self._gate_error(ctx, "the draft's statements were never extracted"), ctx.truth
         statements = [Statement(**s) for s in stored]
-        return evaluate(creative["copy"], statements, ctx.truth, self.d.lexicon, ctx.on), ctx.truth
+        report = evaluate(
+            creative["copy"],
+            statements,
+            ctx.truth,
+            self.d.lexicon,
+            ctx.on,
+            neutral_terms=naming_terms(state),
+        )
+        return report, ctx.truth
 
     async def validate_evidence(self, state: RunState) -> dict[str, Any]:
         """Step 11. A7's claim verification: the classifier EXTRACTS the statements from the copy (a
@@ -409,7 +425,14 @@ class Nodes:
             statements: list[Statement] | None
             try:
                 statements = await self.d.extract_statements(ctx, creative["copy"])
-                report = evaluate(creative["copy"], statements, ctx.truth, self.d.lexicon, ctx.on)
+                report = evaluate(
+                    creative["copy"],
+                    statements,
+                    ctx.truth,
+                    self.d.lexicon,
+                    ctx.on,
+                    neutral_terms=naming_terms(state),
+                )
             except BudgetExceeded:
                 raise
             except Exception as e:

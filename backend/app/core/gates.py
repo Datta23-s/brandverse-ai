@@ -38,7 +38,7 @@ not caught here (docs/evaluation-plan.md, threat V2).
 
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -50,6 +50,7 @@ import yaml
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
+from app.core.citation_terms import missing_terms
 from app.core.config import REPO_ROOT
 from app.core.quantities import unrepeated_quantities
 from app.core.sector_registry import check_registry_coverage, verbatim_form
@@ -72,6 +73,7 @@ FindingKind = Literal[
     "deduced_unlabelled",
     "deduced_labelled",
     "unrepeated_quantity",
+    "citation_lacks_term",
     # risk gate: the whole copy
     "restricted_claim_in_copy",
     "prohibited_phrase",
@@ -107,6 +109,7 @@ GATE_OF: Mapping[FindingKind, GateName] = MappingProxyType(
                 "deduced_unlabelled",
                 "deduced_labelled",
                 "unrepeated_quantity",
+                "citation_lacks_term",
                 "gate_error",
             )
             else "brand_voice"
@@ -251,8 +254,27 @@ def _quantity_check(s: Statement, claim: Claim) -> list[Finding]:
     ]
 
 
+def _term_check(s: Statement, claim: Claim, neutral: Collection[str]) -> list[Finding]:
+    """Threat V12: a citation must resolve AND the claim's own text must contain what the statement
+    asserts (app/core/citation_terms.py). A word-overlap test, not entailment."""
+    lacking = missing_terms(s.text, claim.text, neutral)
+    if not lacking:
+        return []
+    return [
+        Finding(
+            "citation_lacks_term",
+            f"the cited claim does not mention {', '.join(repr(t) for t in lacking)}: "
+            f"{s.text[:80]!r}",
+            (claim.id,),
+        )
+    ]
+
+
 def _claim_gate(
-    statements: Sequence[Statement], copy: str, truth: ProductTruth
+    statements: Sequence[Statement],
+    copy: str,
+    truth: ProductTruth,
+    neutral: Collection[str] = (),
 ) -> tuple[list[Finding], list[Resolution]]:
     findings: list[Finding] = []
     resolutions: list[Resolution] = []
@@ -305,8 +327,11 @@ def _claim_gate(
                 findings.append(
                     Finding("deduced_labelled", f"labelled deduction: {quote!r}", (claim.id,))
                 )
+                mismatch = _term_check(s, claim, neutral)
+                findings.extend(mismatch)
                 findings.extend(_quantity_check(s, claim))
-                resolutions.append(Resolution(s.text, "deduced", claim.id, claim.evidence_url))
+                if not mismatch:
+                    resolutions.append(Resolution(s.text, "deduced", claim.id, claim.evidence_url))
             else:
                 findings.append(
                     Finding(
@@ -316,8 +341,11 @@ def _claim_gate(
                     )
                 )
         else:
+            mismatch = _term_check(s, claim, neutral)
+            findings.extend(mismatch)
             findings.extend(_quantity_check(s, claim))
-            resolutions.append(Resolution(s.text, "verified", claim.id, claim.evidence_url))
+            if not mismatch:
+                resolutions.append(Resolution(s.text, "verified", claim.id, claim.evidence_url))
     return findings, resolutions
 
 
@@ -457,12 +485,16 @@ def evaluate(
     truth: ProductTruth,
     lexicon: Superlatives,
     on: date,
+    neutral_terms: Collection[str] = (),
 ) -> GateReport:
-    """All three gates over the copy. Never raises: any error is a `gate_error` block."""
+    """All three gates over the copy. Never raises: any error is a `gate_error` block.
+
+    `neutral_terms` are the stems of the words that merely name the product (its category and its
+    name): the citation check does not count them as something a statement asserts."""
     sector = truth.sector.describe() if truth.sector is not None else "no sector"
     try:
         text = _copy_text(copy)
-        claim_findings, resolutions = _claim_gate(statements, text, truth)
+        claim_findings, resolutions = _claim_gate(statements, text, truth, neutral_terms)
         restricted = [
             Finding(
                 "restricted_claim_in_copy",
