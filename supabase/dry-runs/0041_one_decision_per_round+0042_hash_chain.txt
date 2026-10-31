@@ -1,8 +1,8 @@
-# dry run, rolled back, 2026-10-31 18:25 UTC; commit 4798108; target aws-0-ap-south-1.pooler.supabase.com
-# 0041_one_decision_per_round.sql sha256 d7161a971d182d37; 0042_hash_chain.sql sha256 8971b39178409d0d
+# dry run, rolled back, 2026-10-31 18:55 UTC; commit e1c88e3; target aws-0-ap-south-1.pooler.supabase.com
+# 0041_one_decision_per_round.sql sha256 747884decb2d8a90; 0042_hash_chain.sql sha256 8971b39178409d0d
 recorded migrations (last 3): [('0038',), ('0039',), ('0040',)]
-attempt 1: backend 1740778, started 1.0s ago, pgvector loaded -> reused, held open
-attempt 2: backend 1740780, started 0.0s ago, pgvector not loaded -> FRESH
+attempt 1: backend 1742913, started 0.5s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1742915, started 0.0s ago, pgvector not loaded -> FRESH
 acting as postgres (the CLI's role, no SET ROLE), superuser: False
 still fresh immediately before the files: pgvector not loaded
 applied inside the dry-run transaction: 0041_one_decision_per_round.sql
@@ -25,7 +25,7 @@ applied inside the dry-run transaction: 0042_hash_chain.sql
   columns + ('public', 'audit_log', 'row_hash', 'text', 'YES', None)
   columns + ('public', 'campaigns', 'revision_round', 'integer', 'NO', '0')
   indexes + ('public', 'approvals', 'approvals_chain_seq_key', 'CREATE UNIQUE INDEX approvals_chain_seq_key ON public.approvals USING btree (chain_seq) WHERE (chain_seq IS NOT NULL)')
-  indexes + ('public', 'approvals', 'approvals_one_decision_per_round', "CREATE UNIQUE INDEX approvals_one_decision_per_round ON public.approvals USING btree (campaign_id, revision_round) WHERE (outcome <> 'undecided'::text)")
+  indexes + ('public', 'approvals', 'approvals_one_decision_per_round', "CREATE UNIQUE INDEX approvals_one_decision_per_round ON public.approvals USING btree (campaign_id, revision_round, approver_id) WHERE (outcome <> 'undecided'::text)")
   indexes + ('public', 'audit_log', 'audit_log_chain_seq_key', 'CREATE UNIQUE INDEX audit_log_chain_seq_key ON public.audit_log USING btree (chain_seq) WHERE (chain_seq IS NOT NULL)')
   indexes + ('public', 'campaigns', 'campaigns_run_id_key', 'CREATE UNIQUE INDEX campaigns_run_id_key ON public.campaigns USING btree (run_id)')
   column grants + ('public', 'approvals', 'chain_seq', 'anon', 'INSERT')

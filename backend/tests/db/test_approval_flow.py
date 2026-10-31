@@ -7,6 +7,7 @@ bounded; an edit-out removes words and re-runs the gates; and A7's advisory is s
 nothing the approver is sent.
 """
 
+import dataclasses
 import json
 from typing import Any
 from urllib.parse import quote
@@ -24,6 +25,57 @@ from tests.db.conftest import Seed
 from tests.db.test_api import api, bearer, drain_queue
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db, pytest.mark.redis]
+
+
+@pytest.fixture(scope="module")
+def seed(seed: Seed, db_url: str) -> Seed:
+    """The shared seed with `org_a`, `product_a` and four users replaced by this module's own.
+
+    These tests COMMIT real approvals (the worker runs in another connection), and approvals can
+    never be deleted, so they must not land in the organisation other tests count rows in."""
+    org, brand, product = uuid4(), uuid4(), uuid4()
+    # Users of this organisation only: the shared users belong to org A, whose approvals other
+    # tests count through their own membership.
+    users = {
+        **seed.users,
+        **{n: uuid4() for n in ("owner_a", "editor_a", "viewer_a", "approver_a")},
+    }
+    with psycopg.connect(db_url, autocommit=True) as c:
+        for n in ("owner_a", "editor_a", "viewer_a", "approver_a"):
+            c.execute("insert into auth.users (id) values (%s)", (users[n],))
+        c.execute("insert into organisations (id, name) values (%s, 'Approval flow')", (org,))
+        for who, role in [
+            ("owner_a", "owner"),
+            ("editor_a", "editor"),
+            ("viewer_a", "viewer"),
+            ("approver_a", "approver"),
+        ]:
+            c.execute(
+                "insert into org_members (org_id, user_id, role) values (%s, %s, %s)",
+                (org, users[who], role),
+            )
+        c.execute(
+            "insert into brands (id, org_id, name, sector) values (%s, %s, 'BF', 'footwear')",
+            (brand, org),
+        )
+        c.execute(
+            "insert into products (id, org_id, brand_id, name) values (%s, %s, %s, 'PF')",
+            (product, org, brand),
+        )
+        with c.transaction():
+            c.execute(
+                "select set_config('role', 'authenticated', true), "
+                "set_config('request.jwt.claims', %s, true)",
+                (json.dumps({"sub": str(users["owner_a"]), "role": "authenticated"}),),
+            )
+            c.execute(
+                "insert into product_claims (org_id, product_id, claim, claim_type, evidence_url, "
+                "created_by) values (%s, %s, 'Upper made of recycled mesh', 'verified', "
+                "'https://example.invalid/spec', 'human')",
+                (org, product),
+            )
+    return dataclasses.replace(seed, org_a=org, product_a=product, users=users)
+
 
 DECISION = {"seconds_spent": 12, "reason": "needs work", "failed_gate": "T1.3"}
 

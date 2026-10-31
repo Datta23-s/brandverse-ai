@@ -768,7 +768,11 @@ def test_backend_cannot_cascade_away_approvals(tx: Tx) -> None:
     tx.as_service_role()
     _raises_permission(tx, "delete from runs where id = %s", (tx.seed.run_a,))
     tx.execute("rollback to savepoint s")
-    assert len(tx.execute("select id from approvals")) == 1
+    # Scoped to the campaign: other test modules commit approvals of their own.
+    assert (
+        len(tx.execute("select id from approvals where campaign_id = %s", (tx.seed.campaign_a,)))
+        == 1
+    )
 
 
 def test_table_owner_can_still_delete_an_organisation(tx: Tx) -> None:
@@ -817,7 +821,10 @@ def test_table_owner_deleting_an_organisation_still_removes_its_memory(tx: Tx) -
 
 def test_a_tuning_approval_is_accepted_in_a_practice_organisation(tx: Tx) -> None:
     _tuning_decision(tx, "approver_a", tx.seed.campaign_practice, tx.seed.org_practice)
-    rows = tx.execute("select kind, is_calibration from approvals")
+    rows = tx.execute(
+        "select kind, is_calibration from approvals where campaign_id = %s",
+        (tx.seed.campaign_practice,),
+    )
     assert rows == [("tuning", False)]
 
 
