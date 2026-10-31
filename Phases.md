@@ -720,20 +720,46 @@ evidence is the brand's own page when the sector is regulated (efficacy) or the 
 list (comparative), the owner's mechanical triggers. A factual property from the brand's own page stays acceptable.
 Authority and independence are kept apart: first-party is a fact about each source beside its score, not a term in it.
 - **Measured before building: what the rule does to the evaluation.** Of the 30 requests' 128 verified claims, none
-  trips the superlative list; only `health-supplements` is regulated (brand B07, requests R19-R21, 12 verified claims),
-  and every one of those claims cites the manufacturer's own page. So the rule binds exactly those three requests, and
-  only if B07's real domain is registered.
-- **Decision 1 (owner): register the evaluation brands' real manufacturer domains or not.** The brands are
-  pseudonyms and the evidence is the real manufacturer's page. Registered, first-party detection is honest and R19-R21
-  could state no verified claim (every statement citing one is blocked). Unregistered, the rule is inert across the
-  evaluation and the V6 gap stays open for it. Not decided here.
-- **Decision 2 (owner): the regulated trigger is blunt.** "24 g protein per serving" is a label fact, a factual
-  property, yet in a regulated sector it is treated as efficacy by construction and needs independent evidence. That is
-  the owner's rule, mechanical by design; this records its cost so it is a choice.
-- **Decision 3 (owner): where independence is stored.** Per-source first-party is computed and carried on findings;
-  keeping it with a memory item's evidence (`memory_item_sources`) would need a column (a migration). Not built.
-- **Not built:** the independence column above; applying 0039; the live posture check for it. No model calls were made
-  (the standing 60 is untouched: 12 spent, 48 remaining).
+  trips the superlative list; only `health-supplements` is regulated (brand B07, requests R19-R21), and every verified
+  claim there cites the manufacturer's own page.
+- **The regulated trigger is wrong as built (owner, 2026-10-31); here are B07's claims.** "Efficacy = regulated
+  sector" conflates the sector with the claim. B07 has 7 DISTINCT verified claims (12 counting each request: R19 5,
+  R20 2, R21 5). By reading: **7 of 7 state a composition fact, 0 of 7 assert an effect on the user.**
+  Whey product A (R19, R21): "Whey protein isolate and concentrate blend, 1 kg" (quantity, unit, material); "24 g
+  protein, 11.5 g essential amino acids, 5.4 g BCAAs, 1 g glutamine (per serving)" (quantities); "4 billion CFU
+  probiotics; contains digestive enzymes" (quantity in a unit a unit list may not know, and an ingredient); "Contains
+  Velositol" (ingredient, no quantity); "Sweetened with fruit and dates; contains naturally occurring sugar"
+  (ingredient, no quantity). Marine collagen B (R20): "8000 mg marine collagen (Type I and III)" (quantity, unit,
+  material); "Contains hyaluronic acid, rosehip, astaxanthin, biotin, vitamin C (acerola), vitamin E" (ingredients,
+  no quantity). Every effect claim in that data ("enhancing muscle strength ... in 8 weeks", "reduced bloating",
+  "clinically proven botanicals", "dermatologist recommended", ...) is `restricted`: never shown to a model, never in
+  copy. So the rule as built blocks 12 of 12 legitimate claims and catches no effect claim. It binds a regulated
+  sector's whole verified set, which is the misfire.
+  *What a "quantity and unit" narrowing would still do:* by a number-plus-unit test, 3 distinct claims pass as
+  composition (1 kg; the per-serving quantities; 8000 mg) and, if CFU is a known unit, 4; the ingredient-only claims
+  ("Contains Velositol", "Sweetened with fruit and dates", the collagen ingredient list) have no unit, so 3 of 7
+  distinct (5 of 12 per request) would still be blocked, and an ingredient or a material is a composition fact too.
+  Recognising those mechanically needs a cue ("contains", "made with", "sweetened with"), which is a lexicon.
+  **Options for the ruling, not decided here:** (a) composition = a quantity with a unit only (leaves 3 of 7 blocked);
+  (b) composition = a quantity with a unit OR an ingredient/material cue (a short, stated cue list, brittle in the way
+  T5 warns about); (c) the human who enters a claim states its nature (`property` or `effect`) as a trust-deciding,
+  audited field, and the rule binds `effect` claims in any sector (no lexicon; a person can mislabel, as a person can
+  already mark a claim `verified`); (d) drop the regulated trigger, since an effect claim is `restricted` by the T2
+  definition and never verified, and keep only the comparative trigger.
+- **Done (owner order, 2026-10-31): 0039 APPLIED** at 12:43 UTC after the usual sequence (CI green on the pushed HEAD,
+  the dry run matched its record, `migration list` identical through 0039, live posture 137 of 137). The column is
+  inert until domains are registered.
+- **Ruled, not yet done: register the evaluation brands' real domains, AFTER the trigger is narrowed**, and let the
+  rule bind whatever it binds. If R19-R21 come out with every verified claim blocked, that is reported as a finding
+  about how supplement claims are evidenced.
+- **Ruled and built: independence is stored** with a memory item's evidence. 0040 adds `memory_item_sources.first_party`
+  (written with the append-only source row), the derived `memory_items.evidence_first_party_only` and returns it from
+  `app.match_memory`; recall carries it as `first_party_only`; it is not an M-score input. Dry run recorded; **0040 is
+  NOT applied (awaiting approval).** A gap to say plainly: nothing in the application writes `memory_item_sources`
+  yet (write-back does not attach evidence sources), so on the memory path the flag is stored and returned but has
+  nothing to carry until write-back records a source for what it writes. V6 is closed on the findings path and on the
+  schema of the memory path, not on the behaviour of the memory path.
+- No model calls. The standing 60: 12 spent, 48 remaining.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

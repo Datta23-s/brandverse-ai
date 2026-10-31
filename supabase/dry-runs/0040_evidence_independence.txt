@@ -1,0 +1,30 @@
+# dry run, rolled back, 2026-10-31 12:49 UTC; commit d60634e; target aws-0-ap-south-1.pooler.supabase.com
+# 0040_evidence_independence.sql sha256 4b3a4b026a4ae9f3
+recorded migrations (last 3): [('0037',), ('0038',), ('0039',)]
+attempt 1: backend 1716947, started 8.9s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1716949, started 0.2s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0040_evidence_independence.sql
+-- scope: app, public
+-- catalog changes inside the transaction
+  functions - ('app', 'match_memory', 'p_org_id uuid, p_query_embed vector, p_query_text text, p_brand_id uuid, p_include_seed boolean, p_limit integer', False, 'postgres', '{"search_path=\\"\\""}', 's', '{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}', '05ed650ab67a1e12fa8a8b6247113e89')
+  functions + ('app', 'match_memory', 'p_org_id uuid, p_query_embed vector, p_query_text text, p_brand_id uuid, p_include_seed boolean, p_limit integer', False, 'postgres', '{"search_path=\\"\\""}', 's', '{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}', '38b9f0207663224249266126595841e2')
+  functions + ('app', 'memory_item_sources_first_party', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, 'a8a8314d0ea89dd09abe38fe596c10e0')
+  functions + ('app', 'memory_items_evidence_derived', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, 'e4700379f314be72aaa70539230ca7d6')
+  triggers + ('memory_item_sources', 'memory_item_sources_first_party', 'CREATE TRIGGER memory_item_sources_first_party AFTER INSERT ON public.memory_item_sources FOR EACH ROW EXECUTE FUNCTION app.memory_item_sources_first_party()')
+  triggers + ('memory_items', 'memory_items_evidence_derived', 'CREATE TRIGGER memory_items_evidence_derived BEFORE INSERT OR UPDATE ON public.memory_items FOR EACH ROW EXECUTE FUNCTION app.memory_items_evidence_derived()')
+  columns + ('public', 'memory_item_sources', 'first_party', 'boolean', 'YES', None)
+  columns + ('public', 'memory_items', 'evidence_first_party_only', 'boolean', 'YES', None)
+  column grants + ('public', 'memory_item_sources', 'first_party', 'authenticated', 'SELECT')
+  column grants + ('public', 'memory_item_sources', 'first_party', 'service_role', 'INSERT')
+  column grants + ('public', 'memory_item_sources', 'first_party', 'service_role', 'SELECT')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'anon', 'REFERENCES')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'anon', 'SELECT')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'authenticated', 'REFERENCES')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'authenticated', 'SELECT')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'service_role', 'INSERT')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'service_role', 'REFERENCES')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'service_role', 'SELECT')
+  column grants + ('public', 'memory_items', 'evidence_first_party_only', 'service_role', 'UPDATE')
+-- after rollback: catalog identical to before
