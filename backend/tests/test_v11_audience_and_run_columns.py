@@ -84,12 +84,14 @@ async def test_a_property_statement_v2_is_asked_to_add_is_blocked_for_having_no_
     assert finding.kind == "unsourced_claim" and "lightweight walking shoe" in finding.message
 
 
-async def test_a_property_citing_a_related_claim_is_not_a_pass_by_the_gate_alone() -> None:
-    """The gate trusts the model's citation (V4); this records that the v2 prompt, not the gate, is
-    what tells 'a knit upper' apart from 'lightweight'. Cited wrongly, it would pass."""
+async def test_a_property_cited_to_an_unrelated_claim_is_no_longer_a_pass() -> None:
+    """Before V12 the gate trusted the model's citation: "lightweight walking shoe" cited to the
+    knit upper claim PASSED (it did, live, on 2026-10-30). The lexical citation check blocks it
+    (tests/test_citation_terms.py has the exact draft)."""
     said = (*WHAT_V1_EXTRACTED, ("lightweight walking shoe", "c1"))
     report, _, _ = await check(R10_COPY, R10_TRUTH, model_says(*said), strong=False)
-    assert report.outcome == "pass"
+    assert report.outcome == "block"
+    assert [f.kind for f in report.findings] == ["citation_lacks_term"]
 
 
 def test_v2_is_the_classifier_prompt_and_asks_for_properties_in_noun_phrases() -> None:
@@ -104,9 +106,30 @@ def test_v2_is_the_classifier_prompt_and_asks_for_properties_in_noun_phrases() -
 
 
 def test_the_code_holds_no_word_list_for_attributes() -> None:
-    src = (Path(__file__).resolve().parents[1] / "app" / "core").rglob("*.py")
-    text = "\n".join(p.read_text(encoding="utf-8") for p in src)
-    assert not re.search(r"\blightweight\b", text.replace("lightweight walking shoe", ""))
+    """No string in the code outside a docstring or a comment names the attribute: a lexicon of
+    adjectives would be a brittle detector (T5). Docstrings may cite it as the example."""
+    import ast
+
+    offenders = []
+    for p in (Path(__file__).resolve().parents[1] / "app").rglob("*.py"):
+        tree = ast.parse(p.read_text(encoding="utf-8"))
+        docs = {
+            id(n.body[0].value)
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+            and n.body
+            and isinstance(n.body[0], ast.Expr)
+            and isinstance(n.body[0].value, ast.Constant)
+        }
+        for n in ast.walk(tree):
+            if (
+                isinstance(n, ast.Constant)
+                and isinstance(n.value, str)
+                and id(n) not in docs
+                and re.search(r"\blightweight\b", n.value)
+            ):
+                offenders.append(f"{p.name}: {n.value[:40]!r}")
+    assert offenders == []
 
 
 # ── Production research plans from the request's audience ────────────────────────────────────

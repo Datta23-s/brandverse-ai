@@ -196,12 +196,17 @@ def test_v4_a_resolved_citation_that_drops_the_claims_quantity_is_flagged_not_bl
     # so before this the gate passed it. 60 hours is 2.5 days; a week is 7.
     t = ProductTruth(FOOTWEAR, (PLAYBACK,), ())
     report = evaluate({"body": TIDEWELL}, (Statement("Lasts all week.", "60h"),), t, LEXICON, TODAY)
+    # Changed 2026-10-30 (V12): "Lasts all week" shares no term with "Up to 60 hours playback
+    # (at 60% volume)", so the lexical citation check now BLOCKS it as well. That is the check's
+    # known false block on a paraphrase (docs/decision-log.md, V12); the V4 numeric flag reports.
     assert [(f.kind, f.outcome, f.refs) for f in report.findings] == [
-        ("unrepeated_quantity", "flag", ("60h",))
+        ("citation_lacks_term", "block", ("60h",)),
+        ("unrepeated_quantity", "flag", ("60h",)),
     ]
-    assert "60 hours" in report.findings[0].message and "60%" in report.findings[0].message
-    assert report.outcome == "flag"
-    assert [r.label for r in report.resolutions] == ["verified"]  # still resolved, and shown
+    quantity = report.findings[1]
+    assert "60 hours" in quantity.message and "60%" in quantity.message
+    assert report.outcome == "block"
+    assert report.resolutions == ()  # a citation that fails the term check resolves nothing
 
 
 def test_a_statement_repeating_the_claims_quantities_passes() -> None:
@@ -216,7 +221,12 @@ def test_a_labelled_deduction_dropping_its_claims_quantity_is_flagged_for_both()
     t = ProductTruth(FOOTWEAR, (claim,), ())
     copy = {"body": "We think it lasts for years."}
     statement = Statement("it lasts for years", "d60", labelled_deduction=True)
-    assert kinds(copy, (statement,), t) == ["deduced_labelled", "unrepeated_quantity"]
+    # V12: the paraphrase also fails the lexical citation check ("years" is not in the claim)
+    assert kinds(copy, (statement,), t) == [
+        "deduced_labelled",
+        "citation_lacks_term",
+        "unrepeated_quantity",
+    ]
 
 
 def test_a_quote_may_differ_from_the_copy_only_in_layout() -> None:
