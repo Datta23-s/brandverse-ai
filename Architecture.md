@@ -260,8 +260,12 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-31 04:19 | `scripts/chunk_b_revision_run.py --mode z --cap 6` (approved: 6 standard; 2 used) | local `brandverse_chunk_b` | 0 | 2 | 0 |
 | **Total** | | | **4** | **57** | **10** |
 
-The 4 calls approved on 2026-10-31 for the revision test and not used are folded into the standing allowance, with no
-separate accounting (owner, 2026-10-31); the table above counts calls made.
+**Standing budget (owner, 2026-10-31): 60 Standard-tier calls in the tuning organisation for Phase 6 chunks D, E and F;
+no strong tier without asking; the running tally is reported in every report.** Counted against the 60 so far: the V11
+re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2) = **12 of 60 spent,
+48 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
+before the standing budget (chunk B's earlier live runs: the rows through the first full D1 run and its first forced
+revision). The 4 unused calls of z's approval are folded in with no separate accounting. The table counts calls made.
 
 2026-10-29, Phase 6 chunk B, `gemini-3.5-flash-lite` (standard), 5 of the 6 approved calls, all `ok`, none refused, no
 rate-limit wait: one run at depth D0 on a non-regulated product in a throwaway tuning (practice) organisation: A3 446 in / 227

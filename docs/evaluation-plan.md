@@ -1383,6 +1383,24 @@ separately.
 mis-citation that shares a word and passes, a negated match, anything the extractor never extracted: V11), so a low
 false-block rate is not evidence that the check is good, only that it was not often wrong when it fired.
 
+### Two measurements of the gates' mechanisms, from data the evaluation already produces — PRE-REGISTERED 2026-10-31
+
+Both cost zero model calls, are fixed now, and are reported whatever they show.
+
+**The reviser's obedience.** From `audit_log` (`output.blocked`, details: `findings`, `revision_round`) for all
+evaluation runs. A *revealed* finding is a blocked `unsourced_claim` or `citation_lacks_term` finding in round r (its
+statement was shown to the reviser). It is *disobeyed* if the same normalised statement (whitespace collapsed, case
+folded) appears in a blocked finding of the same run in round r+1. Reported: revealed findings, disobeyed findings, and
+the disobedience share with a 95% Wilson interval, per arm. It is a LOWER bound on disobedience: a draft that keeps the
+idea in other words, or whose repeated statement the classifier no longer extracts, counts as obeyed; and a draft that
+passes writes no row, so the share is among rounds that blocked again.
+
+**The extractor's misses a human caught.** From `approvals`: the campaigns whose step-11 gate outcome was `pass` or
+`flag` and whose approval has `failed_gate = 'T1.1'`. Reported: the count, the denominator (campaigns read), and the
+cases themselves. It is a LOWER bound on the extractor's misses and is NOT recall: true recall needs gold labels the
+evaluation does not produce, and the approver misses too (threat V3). The extractor's recall stays an unmeasured
+limitation (threat V11).
+
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 
 *Degraded-search rate (added 2026-10-28; owner):* the time estimate below assumes a share of searches

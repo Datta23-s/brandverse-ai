@@ -487,6 +487,14 @@ against `OfflineSearch`; any live run (the real campaign, the D2 latency run, th
 recording is finished or deliberately paused, and the owner rules on the pause. No strong tier outside the tuning
 organisation.
 
+**Standing budget for live model calls (owner, 2026-10-31).** 60 Standard-tier calls in the tuning organisation for
+chunks D, E and F; no strong tier without asking; the running tally is reported in every report. *Spent: 12 of the 60*
+(10 on the forced-revision re-runs X and Y of the V11 follow-up, 2 on the revision test z; the call-by-call lines are in
+`Architecture.md` section 4). *Remaining: 48.* The 30 calls of the brief-check precompute were approved separately and
+are NOT counted against the 60; the calls made before the standing budget (chunk B's earlier live runs, 15 Standard
+calls up to and including the first full D1 run and its first forced revision) are not counted either: 15 + 12 + 30 = 57, the tally's total. The 4 calls of
+z's approval that went unused are folded into the 60 with no separate accounting.
+
 | Chunk | Covers | Rulings |
 |---|---|---|
 | **A. Graph skeleton** | LangGraph with all 15 nodes, reducers, Postgres checkpointer, approval interrupt, run under `budgeted_run`; real step events to the existing stepper | `langgraph` and `langgraph-checkpoint-postgres` approved (the checkpointer is not optional: resume is an exit criterion). The `runs.status` CHECK lands now, with `awaiting_approval`, under the usual migration procedure; the status is added to `Architecture.md` §4.4 first |
@@ -587,7 +595,7 @@ makes three live calls: the classifier on that draft, A6's revision, the classif
   (2) the brief itself classified at admission, so an unbacked property in it is raised before any agent sees it;
   (3) on an `unsourced_claim` finding only, name the offending span to the reviser (today the loop never repeats
   the draft's words, a rule made for restricted phrases).
-Chunk B stays open on those decisions. All 10 approved calls are used.
+(Chunk B is CLOSED as built, 2026-10-31: see "Chunk B: closed as built" below.)
 
 **V11 follow-up (owner, 2026-10-30): built, offline-tested, NOT yet run live.**
 - `a1_positioning@v2`: the brief gives the campaign's objective and audience and tone; product properties come
@@ -677,6 +685,29 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
   its false-block rate pre-registered; gate blocks are now logged to `audit_log` in the graph (they were not).
   Re-examined: of the two V4 tests that now block, "Lasts all week" (V4's original example) is a TRUE block, the
   mitigation working; "We think it lasts for years" (a labelled inference) is the one arguably wrong block.
+
+**Chunk B: CLOSED as built (owner, 2026-10-31).** A1, A2, A3, A6 and A7 are real agents with locked prompts and call
+configuration; the first full D1 run on real models and replayed evidence ran; the revision loop ran live, including
+a repair under `citation_lacks_term` with the span shown; V10, V11 and V12 are recorded. "Closed" means built and
+verified as far as the instruments that exist reach, not that every property is measured. What is NOT measured, and
+where each stands (a closed chunk with named, dispositioned unknowns, not an open chunk):
+- **The false-block rate of `citation_lacks_term`: PRE-REGISTERED** against the evaluation (`docs/evaluation-plan.md`,
+  "The false-block rate of `citation_lacks_term` ..."). Fixed procedure, sample, seed and report; reported whatever it is.
+- **The extractor's recall (does `claim_extract@v3` find the property assertions a copy makes?): UNMEASURED
+  LIMITATION, with a free lower-bound instrument pre-registered.** True recall needs gold labels of every property
+  assertion in a body of real copy, which no one has and which the evaluation does not produce. What the evaluation
+  does produce, at zero model calls: every campaign the system's gates passed and the approver then failed on `T1.1`
+  ("every factual product claim ... is in the verified set", `approvals.failed_gate`). That count is the misses a
+  human caught, a LOWER bound on the extractor's misses, not recall: the approver misses too (threat V3). A seeded
+  test (plant a known unbacked attribute in accepted copy and see whether the classifier finds it) would cost one
+  Standard call per planted copy (about 40 for a useful set) and measures only the easy case, as A7's planted-copy
+  test did, so it is not scheduled.
+- **The reviser's obedience (does it remove a span it is told to remove?): MEASURABLE FROM DATA THE GRAPH NOW KEEPS,
+  zero model calls, pre-registered** (`docs/evaluation-plan.md`). Every blocked draft is in `audit_log` with its round
+  and, for `unsourced_claim` and `citation_lacks_term`, the statement; the share of revealed statements that recur in
+  the next round's blocked findings of the same run is the disobedience, a lower bound (a reworded statement counts as
+  obeyed). The one live sample so far is two runs with opposite results (X, z), not attributable to the span.
+Nothing in this list is an intention without a disposition.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each
