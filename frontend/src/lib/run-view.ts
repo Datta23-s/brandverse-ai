@@ -6,7 +6,8 @@ import { PIPELINE_STEPS, RunEvent, TOTAL_STEPS } from "@/contracts/runs";
 
 /** `not_run`: the run ended (failed) before reaching this step. */
 export type StepPhase = "pending" | "active" | "completed" | "skipped" | "failed" | "not_run";
-export type RunPhase = "waiting" | "queued" | "running" | "completed" | "failed";
+/** `awaiting_approval`: parked at step 12 for a person (not finished; the stream stays open). */
+export type RunPhase = "waiting" | "queued" | "running" | "awaiting_approval" | "completed" | "failed";
 
 export interface StepView {
   number: number;
@@ -28,6 +29,8 @@ export interface RunView {
   queuedAt: number | null;
   startedAt: number | null;
   endedAt: number | null;
+  /** A budget refusal stopped the run (`run.completed` with `partial`): later steps did not run. */
+  partial: boolean;
   error: string | null;
   failedStep: number | null;
   /** Steps finished, whether completed or skipped. */
@@ -36,6 +39,9 @@ export interface RunView {
   announcement: string;
   eventCount: number;
 }
+
+/** The approval step (backend/app/core/pipeline.py). */
+export const APPROVAL_STEP = 12;
 
 export const initialRunView: RunView = {
   runId: null,
@@ -54,6 +60,7 @@ export const initialRunView: RunView = {
   queuedAt: null,
   startedAt: null,
   endedAt: null,
+  partial: false,
   error: null,
   failedStep: null,
   doneCount: 0,
@@ -84,7 +91,10 @@ export function reduceRunView(view: RunView, event: RunEvent): RunView {
         ...next,
         phase: "completed",
         endedAt: at,
-        announcement: `Run completed: ${TOTAL_STEPS} of ${TOTAL_STEPS} steps.`,
+        partial: event.partial,
+        announcement: event.partial
+          ? "Run stopped early: a budget limit was reached. Later steps did not run."
+          : `Run completed: ${TOTAL_STEPS} of ${TOTAL_STEPS} steps.`,
       };
     case "run.failed": {
       const steps = view.steps.map((s): StepView => {
@@ -132,9 +142,17 @@ export function reduceRunView(view: RunView, event: RunEvent): RunView {
           break;
       }
       const steps = view.steps.map((s, i) => (i === index ? updated : s));
+      // The park is step 12 "started" with its detail; any later step event (the decision was
+      // taken and the run resumed, or a revision round began) puts the run back to running.
+      const parks = event.step === APPROVAL_STEP && event.status === "started";
+      const phase: RunPhase = parks
+        ? "awaiting_approval"
+        : view.phase === "waiting" || view.phase === "queued" || view.phase === "awaiting_approval"
+          ? "running"
+          : view.phase;
       return {
         ...next,
-        phase: view.phase === "waiting" || view.phase === "queued" ? "running" : view.phase,
+        phase,
         steps,
         doneCount: countDone(steps),
         announcement: `Step ${updated.number} of ${TOTAL_STEPS}, ${updated.title}: ${PHASE_WORDS[updated.phase]}.`,

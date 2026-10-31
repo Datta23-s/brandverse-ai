@@ -11,7 +11,17 @@ import {
   productClaimSchema,
 } from "@/contracts/claims";
 import {
+  type CampaignView,
+  type DecisionAccepted,
+  type DecisionKind,
+  type DecisionRequest,
+  campaignViewSchema,
+  decisionAcceptedSchema,
+  editOutAcceptedSchema,
+} from "@/contracts/campaigns";
+import {
   type FakeRunRequest,
+  type RunRequest,
   type RunAccepted,
   type RunBlocked,
   runAcceptedSchema,
@@ -117,6 +127,14 @@ export const api = {
     json(productClaimSchema, "POST", `/api/v1/products/${productId}/claims`, body),
   retireClaim: (productId: string, claimId: string, body: ClaimRetire): Promise<ProductClaim> =>
     json(productClaimSchema, "POST", `/api/v1/products/${productId}/claims/${claimId}/retire`, body),
+  startRun: (body: RunRequest): Promise<RunAccepted> =>
+    json(runAcceptedSchema, "POST", "/api/v1/runs", body),
+  campaign: (runId: string): Promise<CampaignView> =>
+    json(campaignViewSchema, "GET", `/api/v1/runs/${runId}/campaign`),
+  decide: (runId: string, kind: DecisionKind, body: DecisionRequest): Promise<DecisionAccepted> =>
+    json(decisionAcceptedSchema, "POST", `/api/v1/runs/${runId}/${kind}`, body),
+  editOut: (runId: string, statement: string) =>
+    json(editOutAcceptedSchema, "POST", `/api/v1/runs/${runId}/edit-out`, { statement }),
   startFakeRun: (body: FakeRunRequest): Promise<RunAccepted> =>
     json(runAcceptedSchema, "POST", "/api/v1/runs/fake", body),
 };

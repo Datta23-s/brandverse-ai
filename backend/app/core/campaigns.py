@@ -138,15 +138,19 @@ async def record_decision(
             raise CampaignNotFound(f"no campaign for run {run_id}")
         campaign_id, org_id, status, round_ = row
         cur = await conn.execute(
-            "select outcome from public.approvals where campaign_id = %s and revision_round = %s "
-            "and outcome <> 'undecided'",
+            "select outcome, approver_id from public.approvals where campaign_id = %s "
+            "and revision_round = %s and outcome <> 'undecided'",
             (campaign_id, round_),
         )
-        existing = await cur.fetchone()
-        if existing is not None:
-            if existing[0] == outcome:
+        decided = await cur.fetchall()
+        # The index keys a decision by approver (calibration records two scorers on one campaign).
+        # In an evaluation organisation ONE decision settles the round, whoever made it; in a
+        # practice organisation each approver's own decision is the one that counts.
+        relevant = [d for d in decided if d[1] == approver_id or kind == "evaluation"]
+        if relevant:
+            if relevant[0][0] == outcome and relevant[0][1] == approver_id:
                 return Decision(outcome, round_, recorded=False)
-            raise DecisionConflict(f"this round already has a decision: {existing[0]}")
+            raise DecisionConflict(f"this round already has a decision: {relevant[0][0]}")
         if status != "awaiting_approval":
             raise NotAwaitingDecision(f"the campaign is {status}")
         if outcome == "revise" and round_ >= max_revisions:

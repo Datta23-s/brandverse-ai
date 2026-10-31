@@ -43,6 +43,16 @@ export const fakeRunRequestSchema = z.strictObject({
 });
 export type FakeRunRequest = z.infer<typeof fakeRunRequestSchema>;
 
+/** POST /api/v1/runs: a real run. Unlike the fake run it carries the audience. */
+export const runRequestSchema = z.strictObject({
+  org_id: z.uuid(),
+  product_id: z.uuid(),
+  brief: z.string().max(2000, "At most 2000 characters.").nullable(),
+  audience: z.string().max(500, "At most 500 characters.").nullable(),
+  depth: researchDepthSchema,
+});
+export type RunRequest = z.infer<typeof runRequestSchema>;
+
 export const runAcceptedSchema = z.strictObject({
   run_id: z.uuid(),
   stream_url: z.string(),
@@ -95,7 +105,12 @@ export const stepEventSchema = z.strictObject({
   status: stepStatusSchema,
   detail: z.string().nullable(),
 });
-export const runCompletedSchema = z.strictObject({ ...base, type: z.literal("run.completed") });
+export const runCompletedSchema = z.strictObject({
+  ...base,
+  type: z.literal("run.completed"),
+  /** True when a budget refusal stopped the run: later steps did not run. A rejection is not partial. */
+  partial: z.boolean(),
+});
 export const runFailedSchema = z.strictObject({
   ...base,
   type: z.literal("run.failed"),

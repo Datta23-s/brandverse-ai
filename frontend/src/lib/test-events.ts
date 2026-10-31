@@ -22,7 +22,12 @@ export const queued = (): RunEvent => ({
   total_steps: 15,
 });
 export const started = (): RunEvent => ({ type: "run.started", run_id: RUN_ID, ts: ts(), total_steps: 15 });
-export const completed = (): RunEvent => ({ type: "run.completed", run_id: RUN_ID, ts: ts() });
+export const completed = (partial = false): RunEvent => ({
+  type: "run.completed",
+  run_id: RUN_ID,
+  ts: ts(),
+  partial,
+});
 export const failed = (step: number | null, error = "boom"): RunEvent => ({
   type: "run.failed",
   run_id: RUN_ID,

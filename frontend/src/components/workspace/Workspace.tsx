@@ -19,6 +19,7 @@ import {
 import { api } from "@/lib/api";
 
 import { StartFakeRunForm } from "../StartFakeRunForm";
+import { StartRunForm } from "../StartRunForm";
 import { Alert, Button, Field, Panel } from "../ui";
 import { ProductClaims } from "./ProductClaims";
 
@@ -73,6 +74,13 @@ export function Workspace() {
                 then reports, so the live view can be checked before the real pipeline (Phase 6).
               </p>
               <StartFakeRunForm orgId={org.id} />
+              <h3 className="mb-3 mt-8 text-sm font-medium uppercase tracking-[0.08em] text-bv-faint">
+                A real run
+              </h3>
+              <p className="mb-4 text-sm text-bv-muted">
+                The agents answer and the run parks for an approver&rsquo;s decision (the approver role).
+              </p>
+              <StartRunForm orgId={org.id} />
             </>
           ) : (
             <p className="text-sm text-bv-muted">Starting a run needs the owner or editor role.</p>

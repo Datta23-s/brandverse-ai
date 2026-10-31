@@ -197,7 +197,8 @@ jobs:
         run: |
           nohup uv run python -m scripts.e2e_fake_auth "$DATABASE_URL" 9999 > "$RUNNER_TEMP/auth.log" 2>&1 &
           nohup uv run python -m app.api > "$RUNNER_TEMP/api.log" 2>&1 &
-          nohup uv run python -m app.workers > "$RUNNER_TEMP/worker.log" 2>&1 &
+          # The mock agents: no model call and no network (Settings refuses them in production).
+          PIPELINE_AGENTS=mock nohup uv run python -m app.workers > "$RUNNER_TEMP/worker.log" 2>&1 &
           for i in $(seq 1 60); do
             curl -sf http://127.0.0.1:8000/health/ready && curl -sf http://127.0.0.1:9999/auth/v1/.well-known/jwks.json > /dev/null && exit 0
             sleep 1

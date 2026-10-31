@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { RunEvent } from "@/contracts/runs";
 
 import { formatDuration, initialRunView, reduceRunView, type RunView } from "./run-view";
-import { failed, fullRun, queued, resetClock, started, step } from "./test-events";
+import { completed, failed, fullRun, queued, resetClock, started, step } from "./test-events";
 
 const fold = (events: RunEvent[]): RunView => events.reduce(reduceRunView, initialRunView);
 
@@ -22,6 +22,23 @@ describe("reduceRunView", () => {
     expect(view.steps.map((s) => s.phase).slice(0, 3)).toEqual(["completed", "active", "pending"]);
     expect(view.doneCount).toBe(1);
     expect(view.announcement).toBe("Step 2 of 15, Load product context: running.");
+  });
+
+  it("parks at the approval step, and any later step puts the run back to running", () => {
+    const parked = [queued(), started(), step(11, "completed"), step(12, "started", "awaiting approval")];
+    expect(fold(parked).phase).toBe("awaiting_approval");
+    // A revision round: the decision arrived, the run regenerates, then parks again.
+    const revised = [...parked, step(10, "started"), step(11, "completed")];
+    expect(fold(revised).phase).toBe("running");
+    expect(fold([...revised, step(12, "started", "awaiting approval")]).phase).toBe("awaiting_approval");
+    // The decision on a full run ends it completed.
+    expect(fold([...parked, step(12, "completed"), completed()]).phase).toBe("completed");
+  });
+
+  it("tells a partial run from a complete one", () => {
+    expect(fold([queued(), started(), completed(true)])).toMatchObject({ phase: "completed", partial: true });
+    expect(fold([queued(), started(), completed()])).toMatchObject({ phase: "completed", partial: false });
+    expect(fold([queued(), started(), completed(true)]).announcement).toContain("stopped early");
   });
 
   it("times each step from the server's timestamps", () => {

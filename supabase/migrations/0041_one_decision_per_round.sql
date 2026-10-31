@@ -17,5 +17,10 @@ alter table campaigns add constraint campaigns_run_id_key unique (run_id);
 
 alter table approvals add column revision_round int not null default 0
   check (revision_round >= 0);
+-- Per APPROVER as well: calibration (rubric section 6) records two scorers' decisions on one
+-- campaign, so the key is (campaign, round, approver). One approver cannot decide a round twice.
+-- That ONE decision settles an evaluation campaign is not this index's job: it is the application's
+-- (app/core/campaigns.py record_decision, which refuses a second approver in an evaluation
+-- organisation once the round has a decision).
 create unique index approvals_one_decision_per_round
-  on approvals (campaign_id, revision_round) where outcome <> 'undecided';
+  on approvals (campaign_id, revision_round, approver_id) where outcome <> 'undecided';

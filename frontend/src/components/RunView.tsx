@@ -7,6 +7,7 @@ import { RunStreamError, type ConnectionState } from "@/lib/run-stream";
 import { formatDuration, isFinished, type RunView as RunViewModel } from "@/lib/run-view";
 import { useNow, useRunStream } from "@/lib/use-run-stream";
 
+import { CampaignReview } from "./CampaignReview";
 import { PipelineStepper } from "./PipelineStepper";
 
 export function RunView({ runId }: { runId: string }) {
@@ -40,6 +41,9 @@ export function RunView({ runId }: { runId: string }) {
         {error !== null && <StreamProblem error={error} onRetry={restart} />}
         {view.phase === "failed" && <FailureOutcome view={view} />}
         {view.phase === "completed" && <CompletedOutcome view={view} />}
+        {view.mode === "pipeline" && (
+          <CampaignReview runId={runId} awaiting={view.phase === "awaiting_approval"} finished={view.phase === "completed"} />
+        )}
 
         <PipelineStepper steps={view.steps} now={now} />
       </section>
@@ -64,8 +68,10 @@ function RunTitle({ view }: { view: RunViewModel }) {
       return <>Queued — waiting for the worker</>;
     case "running":
       return <>Running the pipeline</>;
+    case "awaiting_approval":
+      return <>Waiting for your decision</>;
     case "completed":
-      return <>Pipeline complete</>;
+      return <>{view.partial ? "Run stopped early" : "Pipeline complete"}</>;
     case "failed":
       return <>Run failed</>;
   }
@@ -163,7 +169,9 @@ function CompletedOutcome({ view }: { view: RunViewModel }) {
   return (
     <div className="bv-enter mb-6 rounded-bv-md border border-bv-glass-edge bg-bv-glass p-4" role="status">
       <p className="font-medium">
-        All {TOTAL_STEPS} steps finished{total === null ? "" : ` in ${total}`}.
+        {view.partial
+          ? "The run stopped early: a budget limit was reached. The steps after it did not run."
+          : `All ${TOTAL_STEPS} steps finished${total === null ? "" : ` in ${total}`}.`}
       </p>
       {skipped > 0 && (
         <p className="mt-1 text-sm text-bv-muted">
@@ -247,6 +255,7 @@ const STATUS_WORD: Record<RunViewModel["phase"], string> = {
   waiting: "Connecting",
   queued: "Queued",
   running: "Running",
+  awaiting_approval: "Awaiting approval",
   completed: "Completed",
   failed: "Failed",
 };

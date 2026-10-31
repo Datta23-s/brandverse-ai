@@ -38,7 +38,8 @@ def main() -> int:
     with psycopg.connect(url, autocommit=True) as conn:
         for table in TABLES:
             row = conn.execute("select * from app.chain_verify(%s)", (table,)).fetchone()
-            assert row is not None
+            if row is None:
+                raise RuntimeError(f"chain_verify returned no row for {table}")
             chained, unchained, head_seq, head_hash, first_bad, ok = row
             print(
                 f"{table} rows_chained={chained} rows_unchained={unchained} "

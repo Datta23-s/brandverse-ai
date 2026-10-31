@@ -293,11 +293,19 @@ def test_deleting_product_nulls_only_memory_product_id(tx: Tx) -> None:
 # ── Approval (database backstop for Rules.md T6) ─────────────────────────────────────────
 
 
+def _fresh_run(tx: Tx) -> object:
+    """A run with no campaign yet: a campaign is one row per run (0041)."""
+    return tx.execute(
+        "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
+        (tx.seed.org_a, tx.seed.product_a),
+    )[0][0]
+
+
 def _approve(tx: Tx, approver: str) -> None:
     tx.execute(
         "insert into campaigns (org_id, run_id, status, approved_by, approved_at) "
         "values (%s, %s, 'approved', %s, now())",
-        (tx.seed.org_a, tx.seed.run_a, tx.seed.users[approver]),
+        (tx.seed.org_a, _fresh_run(tx), tx.seed.users[approver]),
     )
 
 
@@ -321,7 +329,7 @@ def test_approved_campaign_must_name_approver(tx: Tx) -> None:
     with pytest.raises(errors.CheckViolation):
         tx.execute(
             "insert into campaigns (org_id, run_id, status) values (%s, %s, 'approved')",
-            (tx.seed.org_a, tx.seed.run_a),
+            (tx.seed.org_a, _fresh_run(tx)),
         )
 
 
@@ -477,10 +485,22 @@ def test_org_caps_must_be_positive(tx: Tx, column: str) -> None:
 
 # ── Approval decisions (docs/approval-rubric.md §5) ──────────────────────────────────────
 
-_DECISION = (
-    "insert into approvals (campaign_id, org_id, approver_id, outcome, failed_gate, reason, "
-    "seconds_spent, arm_inferred, arm_inference_note) values (%s, %s, %s, %s, %s, %s, 120, %s, %s)"
+# 0041: one decision per (campaign, round, approver). These tests record several decisions on one
+# campaign, so each insert takes the next free round for its (campaign, approver).
+_NEXT_ROUND = (
+    "(select coalesce(max(revision_round) + 1, 0) from approvals "
+    "where campaign_id = %s and approver_id = %s)"
 )
+_DECISION = (
+    "insert into approvals (campaign_id, org_id, approver_id, outcome, failed_gate, reason, "  # noqa: S608 - a fixed constant, no input
+    "seconds_spent, arm_inferred, arm_inference_note, revision_round) "
+    f"values (%s, %s, %s, %s, %s, %s, 120, %s, %s, {_NEXT_ROUND})"
+)
+
+
+def _insert_decision(tx: Tx, params: tuple[object, ...]) -> None:
+    """`_DECISION` with its two trailing parameters (the campaign and approver) appended."""
+    tx.execute(_DECISION, (*params, params[0], params[2]))
 
 
 def _decide(
@@ -492,8 +512,8 @@ def _decide(
     arm_inferred: bool = False,
     note: str | None = None,
 ) -> None:
-    tx.execute(
-        _DECISION,
+    _insert_decision(
+        tx,
         (
             tx.seed.campaign_a,
             tx.seed.org_a,
@@ -549,8 +569,8 @@ def test_revoked_approver_cannot_decide(tx: Tx) -> None:
 
 def test_decision_cannot_point_at_another_orgs_campaign(tx: Tx) -> None:
     with pytest.raises(errors.ForeignKeyViolation):
-        tx.execute(
-            _DECISION,
+        _insert_decision(
+            tx,
             (
                 tx.seed.campaign_a,
                 tx.seed.org_b,
@@ -598,6 +618,8 @@ def test_users_cannot_write_decisions(tx: Tx) -> None:
             "x",
             False,
             None,
+            tx.seed.campaign_a,
+            tx.seed.users["approver_a"],
         ),
     )
 
@@ -628,9 +650,10 @@ def _calibration_decision(
     tx: Tx, scorer: str, campaign: object, org: object, outcome: str = "approve"
 ) -> None:
     tx.execute(
-        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "
-        "is_calibration, kind) values (%s, %s, %s, %s, 'x', 60, true, 'calibration')",
-        (campaign, org, tx.seed.users[scorer], outcome),
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "  # noqa: S608 - a fixed constant, no input
+        "is_calibration, kind, revision_round) "
+        f"values (%s, %s, %s, %s, 'x', 60, true, 'calibration', {_NEXT_ROUND})",
+        (campaign, org, tx.seed.users[scorer], outcome, campaign, tx.seed.users[scorer]),
     )
 
 
@@ -638,9 +661,10 @@ def _tuning_decision(
     tx: Tx, scorer: str, campaign: object, org: object, outcome: str = "approve"
 ) -> None:
     tx.execute(
-        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "
-        "is_calibration, kind) values (%s, %s, %s, %s, 'x', 60, false, 'tuning')",
-        (campaign, org, tx.seed.users[scorer], outcome),
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "  # noqa: S608 - a fixed constant, no input
+        "is_calibration, kind, revision_round) "
+        f"values (%s, %s, %s, %s, 'x', 60, false, 'tuning', {_NEXT_ROUND})",
+        (campaign, org, tx.seed.users[scorer], outcome, campaign, tx.seed.users[scorer]),
     )
 
 
@@ -666,9 +690,16 @@ def test_calibration_row_never_reaches_evaluation_query(tx: Tx) -> None:
 
 def _unflagged_practice_decision(tx: Tx) -> None:
     tx.execute(
-        "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "
-        "is_calibration) values (%s, %s, %s, 'approve', 60, false)",
-        (tx.seed.campaign_practice, tx.seed.org_practice, tx.seed.users["second_scorer"]),
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, seconds_spent, "  # noqa: S608 - a fixed constant, no input
+        "is_calibration, revision_round) "
+        f"values (%s, %s, %s, 'approve', 60, false, {_NEXT_ROUND})",
+        (
+            tx.seed.campaign_practice,
+            tx.seed.org_practice,
+            tx.seed.users["second_scorer"],
+            tx.seed.campaign_practice,
+            tx.seed.users["second_scorer"],
+        ),
     )
 
 
