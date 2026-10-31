@@ -145,6 +145,10 @@ on this number. The sampled HEAD estimate (`docs/evaluation-plan.md` section 8) 
 | **0.65 – 0.79** | Supporting context | Inject as background only. Cannot be the sole basis for a claim. |
 | **< 0.65** | Perform fresh analysis | Discard. Mark the knowledge slot as a research gap. |
 
+**Status of the Behaviour column (owner, 2026-10-31; V14, `docs/decision-log.md` 2.10): nothing performs it yet.** No step injects
+a recalled item into an agent, so the 0.90 and 0.80 bands described behaviour that no phase scheduled until today. Injection is
+now scheduled (not built) in Phase 7 together with the Research Necessity Engine, and no evaluation run happens before it (`Phases.md` Phase 7).
+
 These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`. **Since 2026-10-31 there are two required slots, `insight` and `competitor`** (the only kinds that can carry a full component set), and coverage is always reported as "k of 2 slots"; `decision-log.md` 2.9.
 
 **The bands are PROVISIONAL — recorded 2026-10-25, before anything else touches them.** The

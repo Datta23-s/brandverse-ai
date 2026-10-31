@@ -40,7 +40,7 @@ Three commitments decide every structural choice:
 ├─────────────────┴──────────────────┴─────────────────────────────┤
 │ 7. SPECIALIST AGENTS — A1 … A7                                   │
 ├──────────────────────────────────────────────────────────────────┤
-│ 8. VALIDATION ENGINE — claim check, brand voice, risk            │
+│ 8. VALIDATION ENGINE — claim check, voice (registry only), risk  │
 ├──────────────────────────────────────────────────────────────────┤
 │ 9. CAMPAIGN INTELLIGENCE — assembly + scoring                    │
 ├──────────────┬──────────────────┬────────────────────────────────┤
@@ -565,7 +565,7 @@ class Agent(Protocol):
 
 | ID | Agent | Produces | Default tier | Phase |
 |---|---|---|---|---|
-| **A1** | Product & Brand Intelligence | Positioning, differentiators, brand voice vector, claim inventory | Standard | 6 |
+| **A1** | Product & Brand Intelligence | Positioning, differentiators, claim inventory. *Brand voice vector: specified, NOT IMPLEMENTED (§8)* | Standard | 6 |
 | **A2** | Market & Advertisement Intelligence | Competitor ads, category conventions, whitespace | Standard | 6 (live research); 9 (persistent ad repository) |
 | **A3** | Customer Behaviour Intelligence | Personas, jobs-to-be-done, objections, channel affinity | Standard | 6 |
 | **A4** | Sector & Evidence Intelligence | Sourced proof, evolving regulatory context. *Required disclaimers and prohibited phrasings are not A4's: they are rules in the sector constraint registry (§8.1).* | Standard; escalates to Strong only where `Rules.md` T4 or the high-risk rule requires it (§4.2) | 9 |
@@ -586,7 +586,7 @@ Three independent gates. Any `block` stops publication.
 | Gate | Checks | Outcome |
 |---|---|---|
 | **Claim** | Every factual assertion maps to a `verified` claim or a scored source. **Registry:** a claim matching a `prohibited_phrase` rule for the brand's sector is blocked even if `verified` — a manufacturer stating something does not make it permissible to advertise. A claim matching a `required_disclaimer` rule's trigger must carry that disclaimer. | `pass` / `flag` / `block` |
-| **Brand voice** | Cosine distance between generated copy embedding and brand voice vector. **Registry:** required disclaimer text is excluded from the similarity score and must appear verbatim; any rewording of it for voice is a block. | `pass` if above threshold; `block` on altered disclaimer |
+| **Brand voice** | **Similarity half: specified, NOT IMPLEMENTED** (no brand voice vector is built, A1 does not produce one, and no similarity is computed; same treatment as the anti-patterns below and `Rules.md` T5; `docs/decision-log.md` 3.5). It would be the cosine distance between generated copy embedding and brand voice vector. **Registry half, which DOES run:** required disclaimer text must appear verbatim; any rewording of it for voice is a block. | Runs today: `block` on altered disclaimer. Not run: `pass` if above threshold |
 | **Risk** | Restricted claims, regulated-sector language, superlatives without proof, 8 predatory marketing anti-patterns (**specified, not implemented** — no detector exists; `Rules.md` T5 is unmet; §8.3, `Phases.md` Phase 3). **Registry:** full copy scanned for every active `prohibited_phrase`; every applicable `required_disclaimer` must be present. | `pass` / `block` |
 
 ### 8.1 Sector constraint registry
@@ -868,7 +868,8 @@ are revoked from `anon`, `authenticated` and `service_role`, and a trigger rejec
 >    before-insert trigger stores `sha256(previous hash ‖ row)` (`pgcrypto` `digest()` is
 >    available), inserts serialised by an advisory lock; the head hash is anchored outside the
 >    database, committed to git with the weekly `pg_dump`. **Built and verified before
->    calibration begins** (`Phases.md` Phase 10). Its value is evidential: `Rules.md` A1 requires
+>    calibration begins** (`Phases.md` Phase 6 chunk E, with the approval API; moved from Phase 10 on 2026-10-31,
+>    because approvals are written in earnest from chunk E). Its value is evidential: `Rules.md` A1 requires
 >    every reported number to trace to a raw log, and the chain is how the project shows that
 >    approvals and audit events were not edited after the fact. It is **detection, not
 >    prevention**, and is claimed as nothing more.

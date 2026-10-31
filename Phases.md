@@ -26,6 +26,8 @@ The thesis-critical track ships everything the *finding* depends on and defers e
 P0 → P1 → P2 → P3 → P4 → P5 → P6(5 agents) → P7 → P10 → P11
 ```
 
+P7 is a hard prerequisite of P10, not a neighbour: no evaluation run before memory is consumed (Phase 7, owner, 2026-10-31).
+
 Deferred: P8 Creative Studio (beyond basic copy), P9 Enterprise Capabilities (A4 and A5 agents, the persistent competitor advertisement repository), P12 Monitoring.
 
 **Never defer:** P4 Memory, P5 Research, P7 Adaptive Intelligence, P10 Evaluation. Those four *are* the thesis.
@@ -212,7 +214,7 @@ read-only demo path — is Phase 11 work, amended the same way and for the same 
 **Phase 3 progress.** Chunk A (truth store, run admission, sector keys; 2026-10-17):
 `Architecture.md` §8.2. Rule provenance and the illustrative rule set (0021): §8.1. Chunk B (output
 gates, superlative list v1, registry authoring path, staged write-back; 2026-10-17): §8.3. The
-brand-voice gate's registry half is built; its similarity score is Phase 6. Chunk C (the claim
+brand-voice gate's registry half is built; its similarity half is specified, NOT IMPLEMENTED (ruled 2026-10-31, `docs/decision-log.md` 3.5). Chunk C (the claim
 classifier, `claim_extract@v1`; 2026-10-18): §8.3, mocked model only — zero real calls. **Phase 3
 is built but cannot exit**: criteria 2–5 stay provisional until a generator (Phase 6) produces real
 output that passes the gates.
@@ -502,6 +504,7 @@ z's approval that went unused are folded into the 60 with no separate accounting
 | **C. Persona vectors, six-component M** | `C` and `E` wired through the `retrieve_memory` caller; a test that a real retrieval returns six components | An item's persona context is the persona of the campaign that produced it, encoded by the local encoder from A3's persona output and stored on the item at write-back. `C` is the similarity between the request's persona and the item's. An item reinforced by several campaigns carries several personas: **the maximum** (monotone, as for `E`), and the set is stored, not only the aggregate |
 | **D. V6 first-party** | Brand-domain field, `first_party` populated, host check on verified claims' `evidence_url`, an independence factor separate from authority | The independence factor is designed in this chunk. The sole-evidence rule **blocks**, it does not flag: the triggers are mechanical (comparative = trips the superlative list; efficacy = a regulated sector), so a block cannot fire on a misclassification |
 | **E. Approval API and UI** | Campaign view with copy and gate findings, edit-out, approve, reject; `ApprovalBar` per `Design.md`; demo grade | Edit-out **removes** a statement and re-runs the gates; the approver does not rewrite text (a human rewriting copy would make the arm comparison measure the human). "Revise" is a regeneration round, inside the 2-round bound |
+| **E (addition, owner 2026-10-31). Hash chain on `approvals` and `audit_log`** | Built and verified **with the approval API, before the first approval is written in earnest** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on, detection not prevention. Moved from Phase 10: it was ruled "before calibration begins", calibration is in chunk G, and approvals start in E | Applies to every approval from E on; migration under the usual procedure |
 | **F. Real runs and measurements** | First real campaign, killed-worker run, forced-failure run, per-step latency (N1, N2) with and without rate-limit waits, s on the tuning organisation | Live runs wait for the recording |
 | **G. Reuse-band calibration** | Calibrate the 0.90 / 0.80 / 0.65 bands and the write-back gate on the six-component `M` | Stays in Phase 6, after F, and is **not** blocked by the missing relevance labels: those measure retrieval relevance (Precision@10); the bands are reuse thresholds on `M`, calibrated against approver judgement on the real campaigns that E and F produce |
 
@@ -550,7 +553,7 @@ messages (each with a quote checked against the excerpt the model saw, dropped a
 URL set by code) and whitespace (an inference, naming its basis pages). The pages are untrusted text:
 threat V10 (`docs/decision-log.md`). A6 is shown A2's DERIVED summaries only (`for_copy`, code-checked,
 prompt `a6_copy@v2`), never a quote, competitor message or excerpt. Not built: A1's brand-voice
-vector (Architecture.md section 7 lists it; the brand-voice gate's similarity score is unscheduled).
+vector (Architecture.md section 7 lists it; the brand-voice gate's similarity half is specified, not implemented, and unscheduled by ruling, `docs/decision-log.md` 3.5).
 **First full D1 run on real models and replayed evidence (2026-10-30), 7 of 10 approved Standard calls**
 (`scripts/chunk_b_d1_replay.py`; tally in `Architecture.md` section 4). Request R10 through A1, A2, A3, A6, the
 classifier and A7, research replayed from the snapshot (98 findings, no live search). It parked at the approval
@@ -800,16 +803,48 @@ and API must not return `validation["advisory"]` to the approver's session, one 
 ## Phase 7 — Adaptive Intelligence
 **Weeks 12–13 · Never defer — this is the contribution**
 
+**Purpose, restated (owner, 2026-10-31).** Phase 7 is the phase in which **memory is consumed**: where what a run
+recalled changes what the run does. It is not the daily-quota downgrade with a small engine attached. Injection of
+recalled items into the agents and the research-necessity engine are one feature under two names, "memory changes what
+the run does", and they ship together. Until this phase lands nothing reads memory (V14, `docs/decision-log.md` section 8,
+2.10), so a Proposed run is a no-memory run and the memory contrast (ARR, SRR, CR, LR) is zero by construction.
+
+**Dependency (owner, 2026-10-31): NO EVALUATION RUN BEFORE MEMORY IS CONSUMED.** The Phase 10 experiment (30 requests x 3
+arms) cannot start until Phase 7's engine and injection are built, tested and frozen. With nothing reading memory the three
+arms are identical in memory terms, and ARR, SRR, CR and LR would show no difference for a reason that has nothing to do with
+the hypothesis; such a run would produce a null result that means nothing. Phase 7 is therefore on the critical path ahead of
+Phase 10, not beside it. This binds the recording-dependent live runs too: a run made before the freeze is a tuning or
+practice run and is never counted as evaluation.
+
 | Deliverable | Done when |
 |---|---|
-| Research Necessity Engine | `R` computed, D0/D1/D2 selected and logged |
-| Dynamic agent selection | 3–7 agents chosen with persisted rationale |
+| Research Necessity Engine | Reads memory coverage (k of 2 slots) and sets depth: `R` computed, D0/D1/D2 selected and logged |
+| **Memory injection** | Recalled items reach the agents by band: **verbatim at `M` >= 0.90, rephrasable at 0.80-0.89, supporting context only at 0.65-0.79** (`Memory.md` 3.2); below 0.65 the slot is a research gap. Each injected item and its band is recorded in the run, so what a run reused is read from the log. A test shows a recalled item changing an agent's input |
+| Dynamic agent selection | Agents chosen from request type, sector risk and memory coverage, with persisted rationale. On the thesis-critical track the pool is A1, A2, A3, A6, A7, so 3 to 5 agents, not 3 to 7 (A4 and A5 are Phase 9) |
 | Model routing policy | Tier chosen per call with recorded reason |
 | Budget manager | Per-run caps enforced across the whole run (`Rules.md` C3), plus the per-day per-model RPD budget with downgrade or deferral and a logged reason (C9) |
 | **Close the C4/C9 daily-quota gap** (recorded 2026-10-17) | A call that would breach its model's daily quota is downgraded to a lower tier with the reason in `llm_calls.route_reason`; a T4-required strong-tier call is deferred until the quota resets; the run degrades instead of failing (`Rules.md` C4, C9). **Until this lands, a run that exhausts a daily quota fails** (`QuotaExhausted` → `runs.status = 'failed'`) — see `Architecture.md` §4.4, "Known divergence from C4 and C9" |
 | Rate-limit scheduler | Per-model RPM/TPM buckets; `429` waits logged and kept out of the C8 retry count (C10) |
 
+**Also in Phase 7 (ruled 2026-10-31, owner; all parts of "memory is consumed"):**
+
+| Deliverable | Done when |
+|---|---|
+| **Used-items record** | Campaign assembly records which injected items the campaign used; step 15 passes them as `reused` so the reuse bump (`Memory.md` 6.3) can fire (it passes `reused=[]` today, `orchestrator/adapters.py`) |
+| **Injection cap and forced fresh slot** (not optional, ships WITH injection, not after) | At most 12 injected items ranked by `M`; at least one fresh research slot on every run regardless of `R` (`Memory.md` 9, over-retrieval and echo chamber). Without them memory can dominate a run, and echo-chamber risk is a property of the mechanism the thesis claims. Originality over time is tracked |
+| **Correction staging** | `Correction.flagged` (validation) and `Correction.edited_out` (approval) are staged by real runs, so confidence decay and revocation by rule can fire (no real run stages one today) |
+
+**THE FIRST DECISION OF PHASE 7, before anything is built (owner, 2026-10-31): the sources of `R`'s inputs.** `R = wN N + wU U
++ wF F + wS S + wE E` (`Architecture.md` 6.1); `N`, `F` and `E` have no defined source: `N` (novelty vs prior runs) needs a
+store of prior requests' embeddings that does not exist; `F` (freshness requirement by request type) needs a request-type
+taxonomy; `E` (claims needing external proof) has no computation. `U` (unfilled slots) and `S` (sector risk) have sources.
+Each input is brought to the owner with options and ruled one at a time; none is chosen in advance. The same pass settles
+the two related holes: dynamic agent selection's inputs (the pool is A1, A2, A3, A6, A7, so 3 to 5 agents, not 3 to 7) and
+the model-routing policy's inputs (`route()`: complexity, `is_structural`, reserve floor, `prior_failures`; today every agent
+is hard-coded Standard and the Cheap tier is unused). Full list of the design's un-performed items: `docs/decision-log.md` 2.11.
+
 **Exit criteria**
+- [ ] A recalled item at `M` >= 0.90 reaches the agent verbatim, one at 0.80-0.89 is rephrasable, one at 0.65-0.79 is context only, one below 0.65 does not reach it (injection test, per band)
 - [ ] Identical request twice: second run picks a lower depth, logs prove it
 - [ ] Agent count varies across request types
 - [ ] Routing distribution is visible in the admin view
@@ -860,7 +895,6 @@ ships in Phase 6 (see 6.1); the repository is what Phase 9 adds to it.
 | Weight tuning | `R` and `M` weights tuned; defaults and tuned values both reported |
 | Cost analysis | Tokens per approved campaign per arm (primary, by tier), with list-price-equivalent USD labelled as such — actual spend is zero |
 | **Opt-in experiment membership** | Built as designed in `Architecture.md` §9, "Experiment membership" (approved 2026-10-17): `experiments` immutable once referenced; `experiment_id`, `arm`, `request_ref`, `attempt` set together by the harness role or forced null; every evaluation read selects by experiment. Attempt rule pre-registered 2026-10-17 in `docs/evaluation-plan.md` §2 — the primary result is the first attempt that terminated without a listed infrastructure failure, recorded mechanically in `runs.infrastructure_failure` |
-| **Hash chain on `approvals` and `audit_log`** | Built and verified **before calibration begins** (`Architecture.md` §9, decision 2): tamper evidence for the decisions the results rest on — detection, not prevention |
 
 **Regulated sector:** runs against the illustrative synthetic rule set (Phase 3, 0021). Every
 table or figure that names a sector prints its rules' provenance (`docs/evaluation-plan.md` §4).
@@ -899,7 +933,8 @@ month. Verify in Phase 5 by sending one multi-text request and reading the AI St
 counter. If it counts per text, embed only the top-k chunks after a lexical pre-filter (about 50 per
 run: about 2,000 requests in total, about 2 days).
 
-Start executing at the beginning of Phase 10, or as soon as Phase 7 is frozen. Measure Strong
+Start executing at the beginning of Phase 10 **and not before Phase 7 is frozen** (memory injection and the necessity
+engine built; owner, 2026-10-31: no evaluation run before memory is consumed). Measure Strong
 calls per run on the tuning set first, and re-plan from the measured figure.
 
 ---

@@ -240,7 +240,7 @@ LR = ((T_baseline − T_proposed) / T_baseline) × 100
 |---|---:|---|
 | Product relevance | 20% | Human rater + LLM judge |
 | Customer relevance | 15% | Human rater + LLM judge |
-| Brand consistency | 15% | Automated brand-voice check |
+| Brand consistency | 15% | Automated brand-voice check — **NOT IMPLEMENTED** (no voice vector, no similarity; `docs/decision-log.md` 3.5). Scored by the human raters until it is |
 | Evidence quality | 15% | Fraction of claims with live, resolvable sources |
 | Trustworthiness | 10% | Hallucination audit, manual |
 | Originality | 10% | Human rater |
