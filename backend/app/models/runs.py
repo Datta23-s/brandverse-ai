@@ -59,6 +59,27 @@ class FakeRunRequest(Contract):
     )
 
 
+class RunRequest(Contract):
+    """A real run (`POST /api/v1/runs`). Unlike the fake run it carries the audience: research is
+    planned from the request's stated audience, not from A3's personas, which come after it."""
+
+    org_id: UUID = Field(
+        description="The organisation the run belongs to; the caller must be its owner or editor."
+    )
+    product_id: UUID = Field(description="The product the run is for (admitted as for a fake run).")
+    brief: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="What the campaign should say. A brief asking for a restricted claim blocks.",
+    )
+    audience: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Who the campaign is for, in the requester's words.",
+    )
+    depth: ResearchDepth = Field(default="D1", description="Research depth requested.")
+
+
 class RunAccepted(Contract):
     run_id: UUID
     stream_url: str
@@ -131,6 +152,9 @@ class StepEvent(_Event):
 
 class RunCompleted(_Event):
     type: Literal["run.completed"] = "run.completed"
+    # True when a budget refusal stopped the run (`runs.status = 'partial'`): the steps after the
+    # one that was refused did not run. A rejected campaign is a COMPLETE run, not a partial one.
+    partial: bool = False
 
 
 class RunFailed(_Event):

@@ -7,6 +7,7 @@ Runs on the laptop (Architecture.md §11, worker-host decision). Start it with
 import asyncio
 import logging
 import signal
+from contextlib import AsyncExitStack
 from typing import Any
 
 from arq.worker import Worker, func
@@ -16,7 +17,20 @@ from app.core.db import create_db_pool, ping_database
 from app.core.logging import configure_logging
 from app.core.redis import arq_redis_settings, json_deserializer, json_serializer
 from app.core.run_events import RunEventLog
-from app.workers.jobs import PING, RUN_FAKE_PIPELINE, bind_job_run_id, ping, run_fake_pipeline
+from app.workers.jobs import (
+    EDIT_OUT_PIPELINE,
+    PING,
+    RESUME_PIPELINE,
+    RUN_FAKE_PIPELINE,
+    RUN_PIPELINE,
+    bind_job_run_id,
+    edit_out_pipeline,
+    ping,
+    resume_pipeline,
+    run_fake_pipeline,
+    run_pipeline,
+)
+from app.workers.pipeline_factory import open_pipeline
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +57,21 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         # No chunk-A job needs the database, so the worker keeps serving the queue; the failure
         # is logged, not swallowed (Rules.md P13).
         log.exception("database unreachable at worker startup")
+        return
+    stack = AsyncExitStack()
+    ctx["stack"] = stack
+    try:
+        ctx["pipeline"] = await open_pipeline(settings, pool, ctx["events"], stack)
+        log.info("pipeline ready", extra={"agents": settings.pipeline_agents})
+    except Exception:
+        # Real runs fail visibly (no `pipeline` in ctx); the fake run and ping keep working.
+        log.exception("pipeline could not be built at worker startup")
 
 
 async def on_shutdown(ctx: dict[str, Any]) -> None:
+    stack = ctx.get("stack")
+    if stack is not None:
+        await stack.aclose()
     pool = ctx.get("db_pool")
     if pool is not None:
         await pool.close()
@@ -58,6 +84,10 @@ def build_worker(settings: Settings, *, burst: bool = False) -> Worker:
             func(ping, name=PING),
             # A crashed fake run reports `run.failed` itself; re-running it would replay events.
             func(run_fake_pipeline, name=RUN_FAKE_PIPELINE, max_tries=1),
+            # A real run reports its own failure; ARQ must not start it a second time.
+            func(run_pipeline, name=RUN_PIPELINE, max_tries=1),
+            func(resume_pipeline, name=RESUME_PIPELINE, max_tries=1),
+            func(edit_out_pipeline, name=EDIT_OUT_PIPELINE, max_tries=1),
         ],
         redis_settings=arq_redis_settings(settings),
         on_startup=on_startup,

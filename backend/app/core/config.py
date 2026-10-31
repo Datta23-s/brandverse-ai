@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     # The fake 15-step run (Phases.md Phase 1). Never mounted in production.
     fake_runs_enabled: bool = True
 
+    # Who answers inside a real run. "real": the model-backed agents (needs GOOGLE_API_KEY).
+    # "mock": the deterministic stand-ins (app/agents/mock.py), no model call and no network, for
+    # the end-to-end tests and the demo. Refused in production, like the fake run.
+    pipeline_agents: Literal["real", "mock"] = "real"
+    # Regeneration rounds an approver may ask for after the first draft (Phases.md chunk B).
+    max_revision_rounds: int = Field(default=2, ge=0, le=5)
+
     # Supabase Auth. Access tokens are ES256 JWTs verified locally against the project's JWKS
     # (Architecture.md §11, "Authentication"); the API never asks Supabase per request.
     supabase_url: HttpUrl | None = None
@@ -162,6 +169,8 @@ class Settings(BaseSettings):
             )
         if self.environment == "production" and self.fake_runs_enabled:
             raise ValueError("fake_runs_enabled must be false in production")
+        if self.environment == "production" and self.pipeline_agents == "mock":
+            raise ValueError("pipeline_agents must be 'real' in production")
         longest_pending_s = (
             self.llm_max_rate_limit_waits + 1
         ) * self.llm_call_timeout_s + self.llm_max_rate_limit_wait_s

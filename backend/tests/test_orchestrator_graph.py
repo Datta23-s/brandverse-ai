@@ -238,7 +238,7 @@ async def test_an_approval_completes_the_run_and_stages_memory_under_the_executo
     assert [(n, "completed") for n in (12, 13, 14, 15)] == [
         p for p in pairs if p[0] >= 12 and p[1] == "completed"
     ]
-    assert isinstance(h.sink.events[-1], RunCompleted)
+    assert isinstance(h.sink.events[-1], RunCompleted) and not h.sink.events[-1].partial
 
 
 async def test_a_rejection_is_a_completed_run_with_a_rejected_campaign_and_needs_a_reason() -> None:
@@ -300,6 +300,9 @@ async def test_a_budget_refusal_ends_the_run_partial_with_corrections_only() -> 
     assert (kind, status, exhausted) == ("end", "partial", True)
     assert isinstance(memory, StagedMemory) and not memory.adds_trust
     assert not any(c[0] == "suspend" for c in h.ledger.calls)
+    # The stream can tell a partial run from a complete one (chunk E).
+    last = h.sink.events[-1]
+    assert isinstance(last, RunCompleted) and last.partial is True
 
 
 async def test_a_gate_block_at_step_3_ends_the_run_blocked_and_audits_it() -> None:

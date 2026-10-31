@@ -128,6 +128,11 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "memory_items_evidence_derived": (False, "migration", ALL_API),
     # 0037: persona context. Trigger function, SECURITY INVOKER: append-only.
     "persona_context_append_only": (False, "migration", ALL_API),
+    # 0042: the hash chain. The stamp is a security definer TRIGGER function (it reads the chain's
+    # last row, which the audit writer's own rights do not cover); verification is not for the
+    # API roles but for the backend and the operator.
+    "chain_stamp": (True, "migration", ALL_API),
+    "chain_verify": (True, "migration", frozenset({"service_role"})),
 }
 
 
@@ -161,7 +166,11 @@ def test_app_function_posture(tx: Tx, function: str) -> None:
     assert actual_owner == (migration_role if owner == "migration" else owner)
     # Only the pinned search_path: a tuning setting such as hnsw.ef_search belongs to the caller,
     # where it can be varied and logged (app/memory/retrieval.py), not to the function definition.
-    assert config == ['search_path=""'], f"app.{function}: config {config}"
+    # The chain functions also pin TimeZone: a row's hash must not depend on the session's zone.
+    expected_config = ['search_path=""'] + (
+        ["TimeZone=UTC"] if function in {"chain_stamp", "chain_verify"} else []
+    )
+    assert config == expected_config, f"app.{function}: config {config}"
     can_execute = {
         role
         for role in sorted(ALL_API)

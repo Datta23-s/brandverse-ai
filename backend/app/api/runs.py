@@ -27,11 +27,13 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.api.deps import IdentityDep, ResourcesDep, require_db
 from app.core.admission import decide_admission, load_admission, record_block, summarise
+from app.core.budgeted_run import fail_run
 from app.core.db import as_user
 from app.core.logging import bind_run_id
 from app.core.run_events import STREAM_START, at_or_before, parse_entry_id
 from app.core.tenancy import has_role, is_member
 from app.errors import JobNotEnqueued
+from app.models.campaigns import PipelineRunJob
 from app.models.runs import (
     BlockReasonOut,
     FakeRunJob,
@@ -40,8 +42,9 @@ from app.models.runs import (
     RunBlocked,
     RunFailed,
     RunQueued,
+    RunRequest,
 )
-from app.workers.jobs import RUN_FAKE_PIPELINE, fake_run_job_id
+from app.workers.jobs import RUN_FAKE_PIPELINE, RUN_PIPELINE, fake_run_job_id, pipeline_run_job_id
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/runs", tags=["runs"])
@@ -59,6 +62,60 @@ def stream_path(run_id: UUID) -> str:
     return f"/api/v1/runs/{run_id}/stream"
 
 
+async def _admit(
+    resources: ResourcesDep,
+    identity: IdentityDep,
+    *,
+    org_id: UUID,
+    product_id: UUID,
+    brief: str | None,
+    mode: str,
+) -> None:
+    """Membership, role and run admission (steps 2 and 3, `app/core/admission.py`). Returns when
+    the run may be queued; raises 404, 403 or 409 (every reason, audit-logged) otherwise."""
+    pool = require_db(resources)
+    async with as_user(pool, identity) as conn:
+        if not await is_member(conn, org_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, ORG_NOT_FOUND)
+        if not await has_role(conn, org_id, ["owner", "editor"]):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "starting a run needs owner or editor")
+        inputs = await load_admission(conn, org_id, product_id)
+    if inputs is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such product")
+    decision = decide_admission(inputs, brief, datetime.now(UTC).date())
+    if not decision.blocked:
+        return
+    log.warning(
+        "run blocked at admission",
+        extra={
+            "org": str(org_id),
+            "product": str(product_id),
+            "user": str(identity.user_id),
+            "reasons": [r.code for r in decision.reasons],
+        },
+    )
+    try:
+        await record_block(
+            pool,
+            org_id=org_id,
+            product_id=product_id,
+            user_id=identity.user_id,
+            mode=mode,
+            decision=decision,
+        )
+    except Exception:
+        # The run stays blocked; a lost audit row is an error to see, never a reason to admit.
+        log.exception("run block could not be written to audit_log")
+    body = RunBlocked(
+        message=summarise(decision.reasons),
+        reasons=[
+            BlockReasonOut(code=r.code, message=r.message, refs=list(r.refs))
+            for r in decision.reasons
+        ],
+    )
+    raise HTTPException(status.HTTP_409_CONFLICT, body.model_dump(mode="json"))
+
+
 @fake_router.post(
     "/fake",
     status_code=status.HTTP_202_ACCEPTED,
@@ -70,47 +127,14 @@ async def start_fake_run(
     """Start a fake 15-step run: no LLM call, no pipeline. Returns at once; progress is streamed.
 
     Admitted first, like a real run: a refusal is 409 with every reason, and is audit-logged."""
-    pool = require_db(resources)
-    async with as_user(pool, identity) as conn:
-        if not await is_member(conn, request.org_id):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, ORG_NOT_FOUND)
-        if not await has_role(conn, request.org_id, ["owner", "editor"]):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "starting a run needs owner or editor")
-        inputs = await load_admission(conn, request.org_id, request.product_id)
-    if inputs is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such product")
-    decision = decide_admission(inputs, request.brief, datetime.now(UTC).date())
-    if decision.blocked:
-        log.warning(
-            "run blocked at admission",
-            extra={
-                "org": str(request.org_id),
-                "product": str(request.product_id),
-                "user": str(identity.user_id),
-                "reasons": [r.code for r in decision.reasons],
-            },
-        )
-        try:
-            await record_block(
-                pool,
-                org_id=request.org_id,
-                product_id=request.product_id,
-                user_id=identity.user_id,
-                mode="fake",
-                decision=decision,
-            )
-        except Exception:
-            # The run stays blocked; a lost audit row is an error to see, never a reason to admit.
-            log.exception("run block could not be written to audit_log")
-        body = RunBlocked(
-            message=summarise(decision.reasons),
-            reasons=[
-                BlockReasonOut(code=r.code, message=r.message, refs=list(r.refs))
-                for r in decision.reasons
-            ],
-        )
-        raise HTTPException(status.HTTP_409_CONFLICT, body.model_dump(mode="json"))
-
+    await _admit(
+        resources,
+        identity,
+        org_id=request.org_id,
+        product_id=request.product_id,
+        brief=request.brief,
+        mode="fake",
+    )
     run_id = uuid4()
     job = FakeRunJob(run_id=run_id, request=request)
     with bind_run_id(str(run_id)):
@@ -133,6 +157,56 @@ async def start_fake_run(
             "fake run queued",
             extra={"request": job.request.model_dump(mode="json"), "user": str(identity.user_id)},
         )
+    return RunAccepted(run_id=run_id, stream_url=stream_path(run_id))
+
+
+@router.post(
+    "",
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={status.HTTP_409_CONFLICT: {"model": RunBlocked, "description": "Run blocked"}},
+)
+async def start_run(
+    resources: ResourcesDep, identity: IdentityDep, request: RunRequest
+) -> RunAccepted:
+    """Start a real run (`Architecture.md` section 10). Admitted first; the run row is inserted as
+    the caller (row-level security and the 0016 trigger decide), then the job is queued. Carries the
+    audience, which the fake run's contract does not."""
+    await _admit(
+        resources,
+        identity,
+        org_id=request.org_id,
+        product_id=request.product_id,
+        brief=request.brief,
+        mode="pipeline",
+    )
+    pool = require_db(resources)
+    run_id = uuid4()
+    async with as_user(pool, identity) as conn:
+        await conn.execute(
+            "insert into public.runs (id, org_id, product_id, request) values (%s, %s, %s, %s)",
+            (run_id, request.org_id, request.product_id, request.model_dump_json()),
+        )
+    job = PipelineRunJob(run_id=run_id, request=request, by=identity.user_id)
+    with bind_run_id(str(run_id)):
+        await resources.events.append(
+            RunQueued(run_id=run_id, mode="pipeline", org_id=request.org_id)
+        )
+        try:
+            job_id = pipeline_run_job_id(run_id)
+            queued = await resources.redis.enqueue_job(
+                RUN_PIPELINE, job.model_dump(mode="json"), _job_id=job_id
+            )
+            if queued is None:
+                raise JobNotEnqueued(f"job {job_id} already exists")
+        except Exception as e:
+            log.exception("run could not be enqueued")
+            # The row can never be deleted (0010): end it, so it is counted as failed, not queued.
+            await fail_run(pool, run_id, None)
+            await resources.events.append(
+                RunFailed(run_id=run_id, error=f"not enqueued: {type(e).__name__}")
+            )
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "run queue unavailable") from e
+        log.info("run queued", extra={"user": str(identity.user_id)})
     return RunAccepted(run_id=run_id, stream_url=stream_path(run_id))
 
 

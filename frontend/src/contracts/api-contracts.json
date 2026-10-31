@@ -226,6 +226,239 @@
       "title": "BrandSectorUpdate",
       "type": "object"
     },
+    "CampaignView": {
+      "$defs": {
+        "DecisionView": {
+          "additionalProperties": false,
+          "properties": {
+            "decided_at": {
+              "format": "date-time",
+              "title": "Decided At",
+              "type": "string"
+            },
+            "failed_gate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Failed Gate"
+            },
+            "outcome": {
+              "enum": [
+                "approve",
+                "revise",
+                "reject",
+                "undecided"
+              ],
+              "title": "Outcome",
+              "type": "string"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            },
+            "revision_round": {
+              "title": "Revision Round",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "outcome",
+            "reason",
+            "failed_gate",
+            "revision_round",
+            "decided_at"
+          ],
+          "title": "DecisionView",
+          "type": "object"
+        },
+        "FindingView": {
+          "additionalProperties": false,
+          "properties": {
+            "gate": {
+              "title": "Gate",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "outcome": {
+              "enum": [
+                "flag",
+                "block"
+              ],
+              "title": "Outcome",
+              "type": "string"
+            },
+            "span": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Span"
+            },
+            "statement": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Statement"
+            }
+          },
+          "required": [
+            "gate",
+            "kind",
+            "outcome",
+            "message",
+            "span",
+            "statement"
+          ],
+          "title": "FindingView",
+          "type": "object"
+        },
+        "StatementView": {
+          "additionalProperties": false,
+          "description": "A factual statement the classifier extracted, and whether it rests on a claim.",
+          "properties": {
+            "cited": {
+              "title": "Cited",
+              "type": "boolean"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "cited"
+          ],
+          "title": "StatementView",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "campaign_id": {
+          "format": "uuid",
+          "title": "Campaign Id",
+          "type": "string"
+        },
+        "copy_parts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Copy Parts",
+          "type": "object"
+        },
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/DecisionView"
+          },
+          "title": "Decisions",
+          "type": "array"
+        },
+        "edited_out": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Edited Out",
+          "type": "array"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/FindingView"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "gate_outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "pass",
+                "flag",
+                "block"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gate Outcome"
+        },
+        "revision_round": {
+          "title": "Revision Round",
+          "type": "integer"
+        },
+        "rounds_remaining": {
+          "title": "Rounds Remaining",
+          "type": "integer"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "statements": {
+          "items": {
+            "$ref": "#/$defs/StatementView"
+          },
+          "title": "Statements",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "awaiting_approval",
+            "approved",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "campaign_id",
+        "run_id",
+        "status",
+        "revision_round",
+        "rounds_remaining",
+        "gate_outcome",
+        "copy_parts",
+        "findings",
+        "statements",
+        "edited_out",
+        "decisions"
+      ],
+      "title": "CampaignView",
+      "type": "object"
+    },
     "ClaimRetire": {
       "additionalProperties": false,
       "description": "Retire a claim. Claims are never edited or deleted (migration 0017).",
@@ -247,6 +480,115 @@
         "reason"
       ],
       "title": "ClaimRetire",
+      "type": "object"
+    },
+    "DecisionAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "enum": [
+            "approve",
+            "revise",
+            "reject"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "recorded": {
+          "title": "Recorded",
+          "type": "boolean"
+        },
+        "revision_round": {
+          "title": "Revision Round",
+          "type": "integer"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "outcome",
+        "revision_round",
+        "recorded"
+      ],
+      "title": "DecisionAccepted",
+      "type": "object"
+    },
+    "DecisionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "failed_gate": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Failed Gate"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "seconds_spent": {
+          "maximum": 86400,
+          "minimum": 0,
+          "title": "Seconds Spent",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seconds_spent"
+      ],
+      "title": "DecisionRequest",
+      "type": "object"
+    },
+    "EditOutAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "EditOutAccepted",
+      "type": "object"
+    },
+    "EditOutRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "statement": {
+          "description": "Exact words in the copy to remove. The approver does not rewrite text.",
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement"
+      ],
+      "title": "EditOutRequest",
       "type": "object"
     },
     "FakeRunRequest": {
@@ -833,6 +1175,11 @@
         "RunCompleted": {
           "additionalProperties": false,
           "properties": {
+            "partial": {
+              "default": false,
+              "title": "Partial",
+              "type": "boolean"
+            },
             "run_id": {
               "format": "uuid",
               "title": "Run Id",
@@ -853,7 +1200,8 @@
           "required": [
             "run_id",
             "ts",
-            "type"
+            "type",
+            "partial"
           ],
           "title": "RunCompleted",
           "type": "object"
@@ -1085,6 +1433,69 @@
           "$ref": "#/$defs/RunFailed"
         }
       ]
+    },
+    "RunRequest": {
+      "additionalProperties": false,
+      "description": "A real run (`POST /api/v1/runs`). Unlike the fake run it carries the audience: research is\nplanned from the request's stated audience, not from A3's personas, which come after it.",
+      "properties": {
+        "audience": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Who the campaign is for, in the requester's words.",
+          "title": "Audience"
+        },
+        "brief": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the campaign should say. A brief asking for a restricted claim blocks.",
+          "title": "Brief"
+        },
+        "depth": {
+          "default": "D1",
+          "description": "Research depth requested.",
+          "enum": [
+            "D0",
+            "D1",
+            "D2"
+          ],
+          "title": "Depth",
+          "type": "string"
+        },
+        "org_id": {
+          "description": "The organisation the run belongs to; the caller must be its owner or editor.",
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "product_id": {
+          "description": "The product the run is for (admitted as for a fake run).",
+          "format": "uuid",
+          "title": "Product Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "product_id"
+      ],
+      "title": "RunRequest",
+      "type": "object"
     },
     "Sector": {
       "additionalProperties": false,

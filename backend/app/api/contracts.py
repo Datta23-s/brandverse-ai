@@ -11,8 +11,21 @@ from typing import Any
 
 from app.core.config import REPO_ROOT
 from app.core.pipeline import PIPELINE_STEPS
+from app.models.campaigns import (
+    CampaignView,
+    DecisionAccepted,
+    DecisionRequest,
+    EditOutAccepted,
+    EditOutRequest,
+)
 from app.models.claims import ClaimRetire, ProductClaim, ProductClaimCreate
-from app.models.runs import FakeRunRequest, RunAccepted, RunBlocked, run_event_adapter
+from app.models.runs import (
+    FakeRunRequest,
+    RunAccepted,
+    RunBlocked,
+    RunRequest,
+    run_event_adapter,
+)
 from app.models.tenancy import (
     Brand,
     BrandCreate,
@@ -41,6 +54,12 @@ def build_contracts() -> dict[str, Any]:
         "schemas": {
             # Requests are validated on the way in, responses and events serialised on the way out.
             "FakeRunRequest": FakeRunRequest.model_json_schema(mode="validation"),
+            "RunRequest": RunRequest.model_json_schema(mode="validation"),
+            "CampaignView": CampaignView.model_json_schema(mode="serialization"),
+            "DecisionRequest": DecisionRequest.model_json_schema(mode="validation"),
+            "DecisionAccepted": DecisionAccepted.model_json_schema(mode="serialization"),
+            "EditOutRequest": EditOutRequest.model_json_schema(mode="validation"),
+            "EditOutAccepted": EditOutAccepted.model_json_schema(mode="serialization"),
             "RunAccepted": RunAccepted.model_json_schema(mode="serialization"),
             "RunBlocked": RunBlocked.model_json_schema(mode="serialization"),
             "RunEvent": run_event_adapter.json_schema(mode="serialization"),

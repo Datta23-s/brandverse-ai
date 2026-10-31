@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, runs, tenancy
+from app.api import campaigns, health, runs, tenancy
 from app.api.deps import Resources
 from app.core.auth import TokenVerifier, build_verifier
 from app.core.config import Settings, get_settings
@@ -95,6 +95,7 @@ def create_app(
     )
     app.include_router(health.router)
     app.include_router(tenancy.router)
+    app.include_router(campaigns.router)
     # The stream endpoint is the real pipeline's too; only the fake trigger is gated.
     app.include_router(runs.router)
     if settings.fake_runs_enabled:

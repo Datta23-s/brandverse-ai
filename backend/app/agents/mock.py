@@ -61,7 +61,15 @@ class MockA6:
 
     async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> CreativeOutput:
         claims = ctx.truth.active("verified")
-        return CreativeOutput(copy={"headline": " ".join(c.text.rstrip(".") + "." for c in claims)})
+        # Only the headline restates claims; the body and call to action say nothing factual, so
+        # an approver's edit-out has words to remove that no statement rests on.
+        return CreativeOutput(
+            copy={
+                "headline": " ".join(c.text.rstrip(".") + "." for c in claims),
+                "body": "Available now in selected stores.",
+                "call_to_action": "Order today",
+            }
+        )
 
 
 async def lexical_extractor(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:

@@ -6,6 +6,7 @@ before that node, nothing is held in memory, and approval resumes it from the ch
 (`runner.py`).
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -13,10 +14,24 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.orchestrator.deps import GraphDeps
-from app.orchestrator.nodes import Nodes
+from app.orchestrator.nodes import Nodes, report_dict
 from app.orchestrator.state import AgentTask, RunState
 
 APPROVAL_NODE = "await_human_approval"
+
+
+def build_regate(deps: GraphDeps) -> Callable[[RunState], Awaitable[dict[str, Any]]]:
+    """The deterministic gates over a state's copy and its stored statements, for an edit-out: the
+    same evaluation step 15 repeats, with no model call (`Nodes._gate`)."""
+    n = Nodes(deps)
+
+    async def regate(state: RunState) -> dict[str, Any]:
+        report, _ = await n._gate(state)  # noqa: SLF001 - the same judgement, one definition
+        if report is None:
+            raise ValueError("there is no copy to judge")
+        return report_dict(report)
+
+    return regate
 
 
 def build_graph(

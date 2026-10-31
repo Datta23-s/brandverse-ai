@@ -15,9 +15,8 @@ interrupt, but its endings are what Architecture.md §4.4 binds Phase 6 to: this
 - cancellation: NOTHING is written and it propagates. The checkpoint is the run's record, so the run
   stays resumable; a worker that is killed outright writes nothing either, for the same reason.
 
-LIMITATION, stated: the event contract has no "partial" ending. A partial run emits `run.completed`
-after the failed step event; telling the two apart in the stream needs a field on `RunCompleted` and
-the matching TypeScript contract (chunk E).
+A partial run emits `run.completed` with `partial = true` (chunk E), so a stream reader can tell it
+from a complete run; a rejected campaign is a complete run (`partial = false`).
 """
 
 import asyncio
@@ -50,6 +49,10 @@ TRUTH_STEP = 3
 
 class NotAwaitingApproval(BrandverseError):
     """A decision was offered for a run that is not parked at the approval interrupt."""
+
+
+class EditOutRefused(BrandverseError):
+    """The words an edit-out names cannot be removed (absent, ambiguous, or not removable)."""
 
 
 class NotRecoverable(BrandverseError):
@@ -128,6 +131,33 @@ class PipelineOutcome:
 
 
 OnBlocked = Callable[[RunState], Awaitable[None]]
+# The deterministic gates over the state as it now stands, with no model call (graph.build_regate).
+Regate = Callable[[RunState], Awaitable[dict[str, Any]]]
+
+
+class CampaignStore(Protocol):
+    """Where the campaign is written when the run parks and when an edit-out changes it."""
+
+    async def park(
+        self,
+        *,
+        run_id: UUID,
+        org_id: UUID,
+        strategy: Mapping[str, Any] | None,
+        creative: Mapping[str, Any] | None,
+        validation: Mapping[str, Any] | None,
+        revision_round: int,
+    ) -> None: ...
+
+    async def revise_copy(
+        self, run_id: UUID, creative: Mapping[str, Any], validation: Mapping[str, Any]
+    ) -> None: ...
+
+
+# Parts of the copy an edit-out may shorten. The footer is the registry's required disclaimer,
+# appended by code, never by the approver; the headline and body cannot be emptied.
+EDITABLE_PARTS = ("headline", "body", "call_to_action")
+MUST_REMAIN = ("headline", "body")
 Graph = CompiledStateGraph[RunState, Any, RunState, RunState]
 
 
@@ -140,9 +170,12 @@ class Pipeline:
         *,
         max_revisions: int,
         on_blocked: OnBlocked | None = None,
+        campaigns: CampaignStore | None = None,
+        regate: Regate | None = None,
     ) -> None:
         self._graph, self._events, self._ledger = graph, events, ledger
         self._max_revisions, self._on_blocked = max_revisions, on_blocked
+        self._campaigns, self._regate = campaigns, regate
 
     async def start(
         self,
@@ -252,7 +285,7 @@ class Pipeline:
                 memory=stage.corrections_only(),
                 facts=await self._saved_facts(config),
             )
-            await self._events.append(RunCompleted(run_id=run_id))
+            await self._events.append(RunCompleted(run_id=run_id, partial=True))
             return PipelineOutcome("partial", {}, str(e))
         except asyncio.CancelledError:
             raise  # nothing is written: the checkpoint is the record, and the run stays resumable
@@ -293,7 +326,68 @@ class Pipeline:
         await self._events.append(RunCompleted(run_id=run_id))
         return PipelineOutcome("completed", values, reason)
 
+    async def edit_out(self, run_id: UUID, statement: str) -> dict[str, Any]:
+        """The reviewer removes words from the copy of a parked campaign; the gates run again.
+
+        The approver does not rewrite text (owner, 2026-10-29: a human rewriting copy would make
+        the arm comparison measure the human): the words come out, nothing goes in. Statements the
+        classifier extracted that are no longer in the copy are dropped with them, and the
+        deterministic gates re-judge what is left. No model call. A7's advisory stays as stored."""
+        config = self._config(run_id, MemoryStage())
+        snapshot = await self._graph.aget_state(config)
+        if tuple(snapshot.next) != (APPROVAL_NODE,):
+            raise NotAwaitingApproval(f"run {run_id} is not waiting for approval")
+        values = dict(snapshot.values)
+        creative, validation = values.get("creative"), values.get("validation")
+        if creative is None or validation is None or self._regate is None:
+            raise EditOutRefused("there is no copy to edit, or the gates cannot be re-run")
+        copy = dict(creative["copy"])
+        parts = [k for k, v in copy.items() if statement in v]
+        if len(parts) != 1 or copy[parts[0]].count(statement) != 1:
+            raise EditOutRefused("the words must appear exactly once in the copy")
+        part = parts[0]
+        if part not in EDITABLE_PARTS:
+            raise EditOutRefused(f"the {part} cannot be edited out")
+        shortened = " ".join(copy[part].replace(statement, "", 1).split())
+        if not shortened and part in MUST_REMAIN:
+            raise EditOutRefused(f"the {part} cannot be emptied: reject or ask for a revision")
+        copy[part] = shortened
+        kept = [
+            s
+            for s in (validation.get("statements") or [])
+            if any(s["text"] in v for v in copy.values())
+        ]
+        new_creative = {**creative, "copy": copy}
+        regated = await self._regate(
+            cast(RunState, {**values, "creative": new_creative, "validation": {"statements": kept}})
+        )
+        new_validation = {
+            **regated,
+            "statements": kept if validation.get("statements") is not None else None,
+            "advisory": validation.get("advisory"),
+            "edited_out": [*(validation.get("edited_out") or []), statement],
+        }
+        await self._graph.aupdate_state(
+            config,
+            {"creative": new_creative, "validation": new_validation},
+            as_node="validate_evidence",
+        )
+        if tuple((await self._graph.aget_state(config)).next) != (APPROVAL_NODE,):
+            raise EditOutRefused("the edit-out moved the run off the approval step")
+        if self._campaigns is not None:
+            await self._campaigns.revise_copy(run_id, new_creative, new_validation)
+        return new_validation
+
     async def _park(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
+        if self._campaigns is not None:
+            await self._campaigns.park(
+                run_id=run_id,
+                org_id=UUID(values["org_id"]),
+                strategy=values.get("strategy"),
+                creative=values.get("creative"),
+                validation=values.get("validation"),
+                revision_round=values.get("revision_round", 0),
+            )
         await self._events.append(
             StepEvent(
                 run_id=run_id,
