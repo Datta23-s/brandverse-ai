@@ -335,7 +335,8 @@ def _claim_gate(
                 # EXEMPT from the lexical citation check (owner, 2026-10-31): a deduction restates
                 # its basis in different words, that is what inference is, so a word-overlap test is
                 # structurally wrong for it. It is flagged for the reviewer instead, and the flag
-                # SAYS the basis was not lexically checked, so no one reads it as "checked and passed".
+                # SAYS the basis was not lexically checked, so no one reads it as "checked and
+                # passed".
                 findings.append(
                     Finding(
                         "deduced_labelled",
