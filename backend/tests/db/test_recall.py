@@ -373,3 +373,29 @@ def test_the_json_roundtrip_of_a_recalled_item_is_plain_data() -> None:
 
     record = RecalledItem("i", "insight", "c", 0.81234, "adapt", {"S": 0.9}, ("C",)).record()
     assert json.loads(json.dumps(record))["left_out"] == ["C"]
+
+
+# ── V6: the provenance that made evidence first-party survives reuse ─────────────────────────
+
+
+async def test_a_recalled_item_carries_whether_its_evidence_is_the_brands_own(
+    conn: AsyncConnection, seed: Seed
+) -> None:
+    item = await add_item(conn, seed, "rain sells")
+    cur = await conn.execute(
+        "insert into sources (org_id, url, host) values (%s, %s, 'brand.example') returning id",
+        (seed.org_a, f"https://brand.example/{uuid4()}"),
+    )
+    row = await cur.fetchone()
+    assert row is not None
+    await conn.execute(
+        "insert into memory_item_sources (memory_item_id, source_id, org_id, score, components, "
+        "scorer, config_version, first_party) values (%s, %s, %s, 0.9, '{}', 'test/1', 'test', "
+        "true)",
+        (item, row[0], seed.org_a),
+    )
+    found = await run_recall(conn, seed, None)
+    got = one(found, "rain sells")
+    assert got.first_party_only is True
+    assert got.record()["first_party_only"] is True
+    assert set(got.components) >= {"S", "E"}  # independence is carried, not scored: E is unchanged

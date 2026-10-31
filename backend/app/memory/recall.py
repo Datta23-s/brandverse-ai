@@ -65,6 +65,10 @@ class RecalledItem:
     band: str
     components: dict[str, float]
     left_out: tuple[str, ...]
+    # V6: True if every source behind the item is the brand's own page, False if any is independent,
+    # None if unknown. Carried, never scored: independence decides what a claim may rest on, not
+    # how relevant a memory is.
+    first_party_only: bool | None = None
 
     def record(self) -> dict[str, Any]:
         """Plain data for run state (a checkpoint is strict msgpack)."""
@@ -76,6 +80,7 @@ class RecalledItem:
             "band": self.band,
             "components": {k: round(v, 4) for k, v in self.components.items()},
             "left_out": list(self.left_out),
+            "first_party_only": self.first_party_only,
         }
 
 
@@ -170,6 +175,7 @@ async def recall(
                 s.band,
                 {str(k): v for k, v in s.components.items()},
                 tuple(s.left_out),
+                r.get("evidence_first_party_only"),
             )
         )
     items.sort(key=lambda i: i.m, reverse=True)

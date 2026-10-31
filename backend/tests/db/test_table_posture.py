@@ -123,6 +123,9 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     "evidence_append_only": (False, "migration", ALL_API),
     "memory_item_sources_record": (False, "migration", ALL_API),
     "memory_items_source_score_derived": (False, "migration", ALL_API),
+    # 0040: independence (V6): the derived item flag and its guard.
+    "memory_item_sources_first_party": (False, "migration", ALL_API),
+    "memory_items_evidence_derived": (False, "migration", ALL_API),
     # 0037: persona context. Trigger function, SECURITY INVOKER: append-only.
     "persona_context_append_only": (False, "migration", ALL_API),
 }

@@ -128,3 +128,4 @@ async def test_every_m_score_field_retrieval_supplies_is_a_column_of_the_returne
     wanted = {f.name for f in fields(Candidate)} - {"customer_similarity"}
     assert wanted <= columns, f"retrieval does not return {sorted(wanted - columns)}"
     assert "source_score" in columns  # 0031, named so the E input cannot be missed
+    assert "evidence_first_party_only" in columns  # 0040: V6 provenance survives reuse
