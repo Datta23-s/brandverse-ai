@@ -784,6 +784,26 @@ having six components does not calibrate them; chunk G does, against approver ju
 test (`tests/db/test_recall.py`) takes real rows through `match_memory` and requires all six keys with
 values (`C` = 1.0, `E` = 0.72), and fails if either wire in `recall.py` is cut (checked by mutation).
 
+**Chunk E state (2026-11-01), pushed as 177752d; remote CI not yet seen.**
+*Delivered:* `POST /api/v1/runs` (carries `audience`); the campaign view (copy beside gate findings;
+A7's advisory stored in `validation["advisory"]` and in nothing sent: pinned by an API test, a contract test
+and an e2e assertion); approve / revise (bounded, 2) / reject (ends `completed`, corrections only) /
+edit-out (removes exact words, re-runs the gates, no model call); a decision keyed (campaign, round, approver)
+so approving twice writes one `approvals` row and queues one continuation (0041); the hash chain on
+`approvals` and `audit_log` (0042; `scripts/chain_head.py` prints the heads to anchor); `RunCompleted.partial`
+and its TypeScript contract; RunView `awaiting_approval`, `CampaignReview`, `ApprovalBar`, a real-run form;
+worker jobs and `pipeline_factory` (mock and real compositions); e2e for approve, reject and revise (17 of 17
+locally, stub mode). *Not delivered:* `GET /runs/{id}`; any live check of the real composition (zero model
+calls spent); memory recall and live research in a real run (D0 only; D1 and D2 refuse until live runs are
+allowed); an edit-out staging `Correction.edited_out` (no injected item exists until Phase 7); a way for
+calibration's second scorer to record after the first decision has ended the run (the database allows it, the
+API does not yet); e2e of the approval path on the live project (needs an approver membership there). *Open:*
+`anon` and `authenticated` still hold table-level INSERT and UPDATE on `campaigns` and INSERT on `approvals`,
+blocked by row-level security only: the `memory_items` 0029/0030 pattern, candidate 0043, not built.
+*Migrations:* 0041 and 0042 are NOT applied live: dry run recorded (`supabase/dry-runs/`), waiting for CI green
+on the pushed HEAD, then the CLI procedure. *Standing call budget:* 12 of 60 Standard calls spent, 48 remaining,
+none this chunk; no strong tier.
+
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
 (`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One
 run at D0 on a non-regulated product in a throwaway tuning organisation: the real A3, A6, classifier and
