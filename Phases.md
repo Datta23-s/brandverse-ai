@@ -654,6 +654,18 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
   load-bearing. Costs and limits are written there, not only in the test file: it is lexical, it can block a
   correct citation that is merely worded differently, and it passes a negated or incidental match. Its
   false-block rate is unmeasured and the measurement is pre-registered (`docs/evaluation-plan.md`).
+- **Approved and done 2026-10-31.** (1) 0038 (`runs.brief_check`) applied live at 04:15 UTC after the usual
+  sequence: CI green on the pushed HEAD, the rolled-back dry run matched its recorded run, `migration list`
+  identical through 0038, posture 136 of 136. (2) The 30-call brief-check precompute ran at temperature 0 and is
+  frozen: **1 of 30 briefs (R10) carries an unbacked property.** That is the number that bears on whether flagging
+  should ever become blocking: 29 clean briefs make blocking defensible, but blocking would have removed the one
+  request this whole thread was found on from the evaluation, and the test set was accepted unchanged, so it stays
+  a flag. (3) The revision test (run z, 2 of the 6 approved calls): the gate tripped `citation_lacks_term` on the
+  copy that passed on 2026-10-30 (the classifier's earlier verdict replayed; the gate is real), the reviser was
+  shown the span and its draft 2 dropped "lightweight" although A1's positioning still says it, and the classifier
+  (temperature 0) cited all nine statements to claims that mention them; the audit log kept the block with the
+  statement and the claim's text. One sample; the reviser did not obey in run X, but finding kind, wording and
+  temperature all changed between the two. 4 of the 6 calls are unused.
 - **Ruled 2026-10-31 (owner):** temperature 0 for the classifier and A7, as part of the LOCKED call
   configuration (in the prompt file, under the hash: `claim_extract@v3`, `a7_risk@v2`; `decision-log.md` 2.8);
   the reviser is shown the span of a `citation_lacks_term` finding too; `citation_lacks_term` stays a block, with

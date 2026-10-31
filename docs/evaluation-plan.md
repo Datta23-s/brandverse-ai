@@ -1329,6 +1329,13 @@ the one frozen file, never from checkpointed state.
 tokens in) produced 48 output tokens once and 28 another time (2026-10-30), and the classifier sets no
 temperature. Two classifications of one brief are not guaranteed to agree; one record per request is.
 
+**The result (2026-10-31).** The 30 checks were precomputed once, at temperature 0 (`claim_extract@v3`,
+`gemini-3.5-flash-lite`), one call per request, and frozen (`evaluation/brief_checks.json` and its lock). **1 of 30
+briefs carries a property assertion no verified claim backs: R10, "lightweight walking shoe"** (3.3%; Wilson 95%
+interval 0.6% to 16.7%). The other 29 either state nothing about the product beyond naming it or state a property a
+claim backs ("large-display", "round-dial", "wood-pulp-fibre"). Reading the 30 objectives by eye gives the same
+answer; that is a reading, not a measurement of the extractor's recall.
+
 **What it decides, and does not.** The number of briefs with unbacked properties decides whether
 flagging should ever become blocking; blocking is not adopted, because it would refuse every request
 whose brief mentions an attribute the claims lack, and how many that is was not known. It is a model
