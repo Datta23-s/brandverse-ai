@@ -110,6 +110,20 @@ class Whitespace(BaseModel):
     basis_urls: list[str] = Field(min_length=1)
 
 
+class MemoryFact(BaseModel):
+    """A fact A2 found that write-back may propose to remember (Memory.md 6.1): a category
+    convention (`insight`) or a competitor's message (`competitor`), each tied to the scored page it
+    came from. Only quote-verified items, and only their own derived wording (no markup, no URL, no
+    run of words copied from a page), become one; a whitespace inference, which is speculation with
+    no verified quote, never does (Memory.md 6.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["insight", "competitor"]
+    text: str = Field(min_length=1, max_length=200)
+    source_url: str
+
+
 class MarketOutput(BaseModel):
     """What A2 returns, from third-party pages read through the research layer. It is context for
     strategy about OTHER people's claims: it is never a source for a claim about the product
@@ -127,3 +141,5 @@ class MarketOutput(BaseModel):
     # that code checked for markup, URLs and words copied from a page. Never a quote.
     for_copy: list[str] = Field(default_factory=list)
     dropped_unsafe: int = 0
+    # What write-back may propose to remember from this read (app/memory/proposer.py).
+    memory_facts: list[MemoryFact] = Field(default_factory=list)

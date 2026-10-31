@@ -472,6 +472,20 @@ under the limit holds only one fact is NOT detected, and stays with its author. 
 writes one `audit_log` row. Tests: `backend/tests/test_writeback.py`,
 `backend/tests/db/test_writeback_commit.py`, `backend/tests/db/test_memory_staging.py`.
 
+**Update 2026-10-31 (Phase 6 chunk D, threat V13): the proposer, and rule 2 for a page.** Until now the step passed no
+candidate, so no real run wrote any item. A deterministic proposer (`backend/app/memory/proposer.py`) offers A2's
+quote-verified category conventions (`insight`) and competitor messages (`competitor`), each with the scored page it came
+from; it makes no model call, so the same run state gives the same proposal. Rule 2 now reads, as built: a candidate rests on
+a verified claim the gate resolved (as before), OR, for `insight` and `competitor` only, on at least one scored source page
+(the "deduced with a scored source" branch, possible since Phase 5), with the source score at or above the acceptance score.
+Every item is written with its `sources` and `memory_item_sources` rows (`first_party` kept), so its `source_score` and `E`
+arrive. **Only kinds that can carry the full component set are created:** `claim` items are not (their evidence page is not
+scored, so they would lack `E` while insights have it; the claim already lives in `product_claims`; the spec lists the kind in
+section 2 and exempts verified ones from decay in 3.3 but 6.1 does not require them), nor `persona` items (personas are
+persona rows on every item), nor A1's positioning (the spec has no `strategy` kind and its basis has no scored page), and
+A2's whitespace never (an inference with no verified quote, 6.2). A new item starts at `evidence_item_confidence` (0.60) with
+the typical freshness of its kind (section 2), both configured defaults, not tuned.
+
 ### 6.2 What is never written
 
 - Anything from a rejected or revised-away campaign

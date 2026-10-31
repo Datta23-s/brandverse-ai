@@ -29,8 +29,9 @@ from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 from app.memory.embeddings import Encoder
+from app.memory.proposer import Proposal, propose
 from app.memory.recall import recall
-from app.memory.scoring import ScoringConfig, SourceScoring
+from app.memory.scoring import ScoringConfig, SourceScoring, load_scoring
 from app.memory.writeback import MemoryStage, PersonaVector, WritebackEncoder, write_memory
 from app.orchestrator.deps import (
     CheckBrief,
@@ -278,9 +279,10 @@ def driver_research(
 def writeback_step(
     pool: AsyncConnectionPool[AsyncConnection], encoder: WritebackEncoder
 ) -> WriteMemory:
-    """Step 15 over `writeback.write_memory`. The candidates are EMPTY for now: reading the facts
-    out of an approved campaign is not built, so a run stages no new item. What does run is the
-    real approval check: an unapproved campaign stages nothing that adds trust."""
+    """Step 15 over `writeback.write_memory`. The candidates are the deterministic proposer's
+    (app/memory/proposer.py: A2's quote-verified insights and competitor messages, each with the
+    scored page it came from); an unapproved campaign proposes nothing and stages nothing that adds
+    trust. Before 2026-10-31 this passed `candidates=[]` and no real run wrote any item (V13)."""
 
     async def step(
         state: RunState, stage: MemoryStage, report: GateReport, truth: ProductTruth
@@ -297,6 +299,10 @@ def writeback_step(
                     for s, v in zip(summaries, encoder.embed_documents(summaries), strict=True)
                 ]
             )
+        scoring = load_scoring()
+        proposal = (
+            propose(state, scoring.writeback, scoring.version) if approved else Proposal((), ())
+        )
         screening = await write_memory(
             pool,
             stage,
@@ -305,12 +311,18 @@ def writeback_step(
             brand_id=UUID(product["brand_id"]),
             product_id=UUID(state["product_id"]),
             approved=approved,
-            candidates=[],
+            candidates=list(proposal.candidates),
             reused=[],
             report=report,
             truth=truth,
             encoder=encoder,
         )
-        return {"approved": approved, "staged": len(stage.items), "refused": len(screening.refused)}
+        return {
+            "approved": approved,
+            "proposed": len(proposal.candidates),
+            "not_proposed": [s.record() for s in proposal.skipped],
+            "staged": len(stage.items),
+            "refused": len(screening.refused),
+        }
 
     return step

@@ -294,6 +294,9 @@ class Candidate:
     claim_id: str | None
     confidence: float  # stated by whoever proposes the fact; there is no default (0025)
     freshness_days: int | None = None
+    # The scored pages the fact rests on. A fact with no product claim needs at least one (rule 2,
+    # "deduced with a scored source"); one that has a claim may carry them too.
+    evidence: tuple[EvidenceSource, ...] = ()
 
     def __post_init__(self) -> None:
         _check_probability(self.confidence)
@@ -384,8 +387,19 @@ def content_screens(content: str) -> list[str]:
     return [reason for reason, pattern in _SCREENS if pattern.search(content)]
 
 
+# The kinds that may rest on a scored source page alone (Memory.md 6.1 rule 2, "deduced with a
+# scored source", possible since Phase 5): a fact about the category or a competitor. A claim, a
+# persona, a creative or a sector fact still needs what it always needed.
+EVIDENCE_BASED_KINDS = frozenset({"insight", "competitor"})
+
+
 def _basis(candidate: Candidate, report: GateReport, truth: ProductTruth) -> list[str]:
     if candidate.claim_id is None:
+        if candidate.kind in EVIDENCE_BASED_KINDS and candidate.evidence:
+            floor = load_scoring().source.accept_at_or_above
+            if all(e.score >= floor for e in candidate.evidence):
+                return []
+            return ["source_below_the_acceptance_score"]
         return ["no_claim_basis"]
     claim = truth.claim(candidate.claim_id)
     if claim is None:
@@ -457,9 +471,10 @@ async def stage_writeback(
             product_id=product_id,
             claim_id=UUID(claim.id) if claim else None,
             sector=truth.sector.id if truth.sector else None,
-            source_url=claim.evidence_url if claim else None,
+            source_url=claim.evidence_url if claim else (c.evidence[0].url if c.evidence else None),
             confidence=c.confidence,
             freshness_days=c.freshness_days,
+            evidence=c.evidence,
         )
         stage.stage(item)
         staged.append(item)

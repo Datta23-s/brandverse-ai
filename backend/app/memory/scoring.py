@@ -97,6 +97,8 @@ class Writeback(_Strict):
     correction_step: float = Field(gt=0, lt=1)
     revoke_below: float = Field(gt=0, lt=1)
     max_item_tokens: int = Field(gt=0)
+    evidence_item_confidence: float = Field(gt=0, lt=1)
+    typical_freshness_days: dict[str, int]
 
 
 class Retrieval(_Strict):

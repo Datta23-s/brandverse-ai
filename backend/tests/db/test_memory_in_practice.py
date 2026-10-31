@@ -1,19 +1,19 @@
-"""What memory is, IN PRACTICE, today: a characterization of the gap that decides whether the
-six-component M exists (Phase 6 chunk D, owner's check 2026-10-31).
+"""What memory was, in practice, before candidate extraction: the characterization that decided V13.
 
-Chunk C wired `C` and `E` into the M-score and proved it with rows inserted by hand. These tests
-pin what a real run actually does, so the claim "the six-component M does not exist in practice" is
-checkable, and breaks loudly, to be updated on purpose, the day write-back is built:
+Chunk C wired `C` and `E` into the M-score and proved it with rows inserted by hand. The owner's
+check of 2026-10-31 asked whether any real run produces a six-component M. These tests pinned that
+it did not, for two reasons:
 
-1. A real run writes NO memory item. `writeback_step` passes `candidates=[]`: reading the facts out
-   of an approved campaign is not built (its own docstring says so). With nothing written, the
-   Proposed arm's memory stays empty and there is nothing to recall.
-2. Even an item that IS written (by `commit_memory`, as the tests of the commit half do) gets only a
-   `source_url` string. No `sources` row and no `memory_item_sources` row is written for it, so its
-   `source_score` is NULL, and `E` (source score x confidence) is LEFT OUT of its M.
+1. `writeback_step` passed `candidates=[]`: nothing extracted facts from an approved campaign, so
+   a real run wrote no memory item and campaigns 2 and 3 of a brand saw nothing from campaign 1.
+2. Even an item written by `commit_memory` got only a `source_url` string, no `sources` or
+   `memory_item_sources` row, so its `source_score` was NULL and `E` was left out of its M.
 
-So no M in a real run has six components: today none exists to score, and a written item would have
-five at most (C needs persona rows, which write-back records; E needs sources, which nothing does).
+Both are now addressed (the deterministic proposer, app/memory/proposer.py; evidence recorded by
+`commit_memory`), and tests/db/test_memory_across_campaigns.py shows campaign 2 recalling campaign 1
+with all six components. What remains true, and is pinned here, is the NEGATIVE space: a run whose
+A2 found no memory fact proposes and stages nothing, and an item written WITHOUT evidence still has
+no `E`. Both would be wrong to "fix" by guessing.
 """
 
 from collections.abc import AsyncIterator
@@ -62,7 +62,7 @@ async def pool(db_url: str) -> AsyncIterator[AsyncConnectionPool[AsyncConnection
         await p.close()
 
 
-async def test_an_approved_run_stages_no_new_memory_item(
+async def test_an_approved_run_whose_a2_found_nothing_stages_no_memory_item(
     pool: AsyncConnectionPool[AsyncConnection], seed: Seed
 ) -> None:
     from uuid import uuid4
@@ -78,7 +78,7 @@ async def test_an_approved_run_stages_no_new_memory_item(
     report = GateReport((), (), "footwear", "v1", date(2026, 10, 31))
     step = writeback_step(pool, ENC)
     out = await step(state, MemoryStage(), report, ProductTruth(None, (), ()))  # type: ignore[arg-type]
-    assert out["approved"] is True and out["staged"] == 0, "write-back stages nothing today"
+    assert out["approved"] is True and out["proposed"] == 0 and out["staged"] == 0
 
 
 async def test_an_item_that_is_written_carries_no_evidence_sources_so_e_is_left_out(

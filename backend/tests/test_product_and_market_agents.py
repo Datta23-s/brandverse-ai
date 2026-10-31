@@ -426,3 +426,36 @@ async def test_a6_is_shown_the_derived_summaries_and_never_a_quote_or_a_page() -
     (row,) = ledger.rows.values()
     assert row["prompt"].prompt_version == "v2"
     assert market_notes({}) == "(none)" and market_notes({"agent_outputs": {"A2": {}}}) == "(none)"
+
+
+# ── What A2 hands write-back (threat V13) ────────────────────────────────────────────────────
+
+
+async def test_a2_hands_write_back_only_verified_safe_facts_with_their_page() -> None:
+    gw, _ = gateway(
+        FakeCompletion(
+            market(
+                [
+                    item("s1", "Free returns on every order.", "Sellers make returns easy"),
+                    item(
+                        "s1",
+                        "Hero shoes  keep you dry.".replace("  ", " "),
+                        "Free returns on every order",
+                    ),
+                ],
+                messages=[item("s2", "Compare us with anyone.", "A seller invites comparison")],
+                whitespace=[{"text": "Few mention repair or resale", "basis": ["s1"]}],
+            )
+        )
+    )
+    out = await MarketAnalyst(gw, prompt_library()).run(
+        {"findings": [{"url": A}, {"url": B}]}, with_pages({A: PAGE_A, B: PAGE_B})
+    )
+    facts = [(f.kind, f.text, f.source_url) for f in out.memory_facts]
+    assert facts == [
+        ("insight", "Sellers make returns easy", A),  # a verified quote and its own wording
+        ("competitor", "rival-b.example: A seller invites comparison", B),  # named by its host
+    ]
+    texts = " ".join(f.text for f in out.memory_facts)
+    assert "Few mention repair" not in texts  # whitespace is speculation: never remembered
+    assert "Free returns on every order" not in texts  # copied wording is dropped

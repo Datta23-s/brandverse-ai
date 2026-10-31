@@ -692,14 +692,18 @@ complete (the brands' domains are registered), so A2 skips a brand's own pages a
 Left open: an effect claim mislabelled `verified` is not caught; the fix (the claim's nature as an audited field) is
 deferred.
 
-**V13 — The Proposed arm's memory cannot accumulate (recorded 2026-10-31; found by checking a premise).** Write-back
-stages no candidate (`candidates=[]`): nothing extracts facts from an approved campaign. A real run therefore writes no
-memory item, and campaigns 2 and 3 of a brand see none of campaign 1's memory; the memory arm, as built, runs under the
-same conditions as no memory. Items that are written got no evidence sources, so their `source_score` was NULL and `E`
-was left out; that half is fixed (`commit_memory` records scored sources with `first_party`; `E` arrives, tested through
-the commit path). The extraction is not built, so no real run produces an M and the reuse bands (chunk G), the M-score and
-the memory contrast rest on a mechanism no run exercises. Until it exists, a result about memory is a result about an empty
-store.
+**V13 — The Proposed arm's memory could not accumulate (recorded 2026-10-31; found by checking a premise).**
+**Campaigns 2 and 3 of a brand saw nothing from campaign 1, so until extraction exists the Proposed arm is a no-memory arm
+and no M has ever been computed in a real run.** Write-back staged no candidate (`candidates=[]`), so a real run wrote no
+memory item, and the items that could be written got no evidence sources, so their `source_score` was NULL and `E` was left
+out. *Mitigation, 2026-10-31:* `commit_memory` records scored evidence sources (with `first_party`); a deterministic
+proposer offers A2's quote-verified category conventions (`insight`) and competitor messages (`competitor`), each with the
+scored page behind it; rule 2 of Memory.md 6.1 accepts a scored source for those two kinds. A test takes campaign 1
+through write-back and has campaign 2 recall its items with all six components. Only item kinds that can carry the full
+component set are created, so one reuse band never meets two scores that mean different things. *Still true:* the
+proposer writes two kinds, so `memory_coverage` over the placeholder six-kind slot list cannot exceed 2 of 6; the
+initial confidence and typical freshness are stated defaults; the bands and the reuse decisions rest on a mechanism the
+tests exercise and no full real run yet has. A result about memory is a result about what these two kinds carry.
 
 **V7 — The evaluation's searches can only return evidence about a product's CATEGORY, never about the
 product (recorded 2026-10-28; owner).** The test set's brands and products are pseudonyms, which no search

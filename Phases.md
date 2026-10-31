@@ -740,19 +740,29 @@ instance to act on; a test pins (128 claims, 128 first-party-marked, 0 bound). D
 that fired anywhere: it did not. What the domain work does deliver is first-party MARKING (A2 skips own pages; findings and,
 once evidence is attached, memory sources know whose page they are).
 
-**THE PREMISE CHECK: the six-component M does not exist in practice (owner, 2026-10-31; confirmed).** Two separate facts:
-- `writeback_step` passes `candidates=[]`. Reading the facts out of an approved campaign is not built, so **a real run
-  writes no memory item at all**. The Proposed arm's memory stays empty: campaign 2 and 3 of a brand see nothing from
-  campaign 1. That is not only "E is left out": there is nothing to recall. (Threat V13.)
-- Even an item written by `commit_memory` got only a `source_url` string: no `sources` and no `memory_item_sources` row,
-  so `source_score` was NULL and `E` was left out of its M. Chunk C's guard test inserted its rows by hand.
-`tests/db/test_memory_in_practice.py` pins both. **Built now (the unambiguous half):** `EvidenceSource` on `MemoryWrite`;
-`commit_memory` records the sources (shared per organisation, one link per item and page, `first_party` kept), for new
-items and for the near-duplicates it reinforces; findings now carry their score's components; `evidence_from_finding`.
-`tests/db/test_writeback_evidence.py` goes through `commit_memory` and shows `E` ARRIVING in recall (0.9 x 0.8) and the
-item flagged first-party-only or not. **Not built, and it is the part that matters:** WHICH facts a run proposes from an
-approved campaign (the candidate extraction Memory.md 6.1 leaves to "the agent or step that proposes it") and which page
-backs each. Until that exists, every band, reuse decision and chunk G still rest on an M that no real run produces.
+**THE PREMISE CHECK (owner, 2026-10-31) was right: the six-component M did not exist in practice.** Write-back staged no candidate (`candidates=[]`), so a real run wrote no memory item, and what could be written got no evidence sources (NULL `source_score`, no E); chunk C's guard inserted its rows by hand. **CANDIDATE EXTRACTION (V13), built 2026-10-31, top of chunk D by owner order.** What the design names (Memory.md 2):
+six kinds, `persona`, `competitor`, `insight`, `claim`, `creative`, `sector`; there is no `strategy` kind. 6.1 rule 2
+allows a fact that "passed the claim gate (verified, or deduced with a scored source)"; it does not require claim items.
+Built, deterministic, no model call, no migration:
+- A2 hands write-back structured, quote-verified, safe-derived facts (`MarketOutput.memory_facts`): conventions as `insight`,
+  competitor messages as `competitor` (named by host), each tied to the page it came from. Whitespace never.
+- `app/memory/proposer.py` turns them into candidates with the scored page as evidence (a fixed order; a fact whose page is
+  not among the run's findings, or whose finding lacks components, is skipped and the reason kept in the step's result).
+- Rule 2 accepts "a scored source" for `insight` and `competitor` only; `commit_memory` records the sources; a new item starts
+  at `writeback.evidence_item_confidence` 0.60 and the typical freshness of its kind (365 / 60 days), configured, untuned.
+- `tests/db/test_memory_across_campaigns.py`: campaign 1's write-back, then campaign 2's recall: **both items come back with
+  all six components** (E = 0.8 x 0.60, C = 1.0), nothing inserted by hand.
+**Only kinds that can carry the full component set are created** (owner, 2026-10-31): a claim item would have no E while an
+insight has one, so one reuse band would be applied to two scores that mean different things, invisibly, which is worse than
+the four-component problem. So no claim items (the claim lives in `product_claims`), no persona items (persona rows already
+travel on every item), and A1's positioning is NOT proposed: its basis (verified claims) has no scored page either, and the
+spec has no `strategy` kind. **That contradicts the expectation that A1's positioning becomes a strategy item: by the same
+rule it cannot, unless a ruling adds a `strategy` kind AND gives its evidence a scored page (for example fetching and
+scoring the claims' evidence pages at write-back, which the replay snapshot may not hold).** Pending.
+**Consequences still open:** (a) `required_slots` is a placeholder naming all six kinds, so with two kinds written,
+`memory_coverage` cannot exceed 2 of 6 and the research-necessity step will rarely see memory as enough (D0 on campaign 3
+will not occur by this route); the Research Necessity Engine owns that list. (b) The confidence and freshness are stated
+defaults. (c) No full real run has exercised the whole chain; the tests have.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

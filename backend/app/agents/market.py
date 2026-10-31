@@ -38,7 +38,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.base import AgentContext
-from app.agents.outputs import MarketItem, MarketOutput, Whitespace
+from app.agents.outputs import MarketItem, MarketOutput, MemoryFact, Whitespace
+from app.core.first_party import host_of
 from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
@@ -182,12 +183,24 @@ class MarketAnalyst:
                 unsafe += 1
             elif line not in for_copy:
                 for_copy.append(line)
+        messages = verified(raw.competitor_messages)
+        facts: list[MemoryFact] = []
+        for kind, items in (("insight", conventions), ("competitor", messages)):
+            for item in items:
+                line = safe_derived(item.text, texts)
+                if line is None:
+                    continue  # copied wording, markup or a URL: never remembered
+                content = line if kind == "insight" else f"{host_of(item.source_url)}: {line}"
+                fact = MemoryFact(kind=kind, text=content, source_url=item.source_url)  # type: ignore[arg-type]
+                if fact not in facts:
+                    facts.append(fact)
         return MarketOutput(
             category_conventions=conventions,
-            competitor_messages=verified(raw.competitor_messages),
+            competitor_messages=messages,
             whitespace=whitespace,
             pages_read=len(texts),
             dropped_unverifiable=dropped,
             for_copy=for_copy[:MAX_FOR_COPY],
             dropped_unsafe=unsafe,
+            memory_facts=facts,
         )

@@ -36,6 +36,15 @@ writeback:
   # retrieved and cited as if it were whole. A candidate over this many tokens (the encoder's own
   # count) is refused and the refusal recorded; the author splits it into separate facts upstream.
   max_item_tokens: 400
+  # What the deterministic proposer (backend/app/memory/proposer.py) states for a NEW item that
+  # rests on a scored source page. `confidence` has no default (0025), so something must state it;
+  # this is the one number the proposer chooses. DEFAULT, NOT TUNED: it sets where E = source
+  # score x confidence starts (reuse raises it by reuse_confidence_step, a flag or edit-out lowers
+  # it) and is a parameter of the results, reported with them. Above revoke_below, below the cap.
+  evidence_item_confidence: 0.60
+  # Typical freshness by kind, Memory.md section 2's table (not tuned): how many days a new item of
+  # the kind stays fresh. Only the kinds the proposer writes are listed.
+  typical_freshness_days: {competitor: 60, insight: 365}
 retrieval:
   # HNSW search depth, set per transaction before app.match_memory (backend/app/memory/retrieval.py)
   # and logged with every retrieval. A parameter of the results: evaluation reports retrieval
