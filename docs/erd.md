@@ -100,6 +100,7 @@ erDiagram
     text voice_embedding_model
     text voice_embedding_version
     text sector FK
+    text_array domains
     timestamptz created_at
   }
   products {

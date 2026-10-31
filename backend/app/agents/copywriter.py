@@ -52,6 +52,7 @@ PROBLEM_WORDS: Mapping[FindingKind, str] = {
     "deduced_labelled": "an inference was used (acceptable if clearly labelled as one)",
     "unrepeated_quantity": "a figure was used without repeating exactly what the claim says",
     "citation_lacks_term": "a statement leaned on a claim that does not mention what it says",
+    "first_party_sole_evidence": "a statement leaned on a claim backed only by the brand's page",
     "restricted_claim_in_copy": "the copy states something that must not be claimed",
     "prohibited_phrase": "the copy uses wording that is prohibited in this sector",
     "missing_disclaimer": "a required notice was missing",

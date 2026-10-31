@@ -193,8 +193,9 @@ def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx:
 
 
 def test_audit_writer_has_insert_on_audit_log_and_nothing_else(tx: Tx) -> None:
-    """app_audit_writer's rights ARE app.audit_brand_sector's (0019) and app.audit_brand_domains's (0039): append audit rows, and only
-    the kind its one insert policy admits; read, change or delete nothing."""
+    """app_audit_writer's rights ARE those of app.audit_brand_sector (0019) and
+    app.audit_brand_domains (0039): append audit rows, and only the kinds its one insert policy
+    admits; read, change or delete nothing."""
     attrs = tx.execute(
         "select rolsuper, rolcanlogin, rolbypassrls, rolcreaterole, rolcreatedb, rolinherit "
         "from pg_roles where rolname = 'app_audit_writer'"

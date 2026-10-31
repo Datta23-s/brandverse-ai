@@ -74,6 +74,7 @@ FindingKind = Literal[
     "deduced_labelled",
     "unrepeated_quantity",
     "citation_lacks_term",
+    "first_party_sole_evidence",
     # risk gate: the whole copy
     "restricted_claim_in_copy",
     "prohibited_phrase",
@@ -110,6 +111,7 @@ GATE_OF: Mapping[FindingKind, GateName] = MappingProxyType(
                 "deduced_labelled",
                 "unrepeated_quantity",
                 "citation_lacks_term",
+                "first_party_sole_evidence",
                 "gate_error",
             )
             else "brand_voice"
@@ -278,11 +280,45 @@ def _term_check(s: Statement, claim: Claim, neutral: Collection[str]) -> list[Fi
     ]
 
 
+def _first_party_sole(
+    claim: Claim, truth: ProductTruth, lexicon: "Superlatives | None"
+) -> str | None:
+    """Threat V6, the rule (owner, 2026-10-26): a first-party source is acceptable evidence for a
+    FACTUAL PROPERTY of the brand's own product and NOT the sole evidence for a comparative or
+    efficacy claim. A claim carries one evidence URL, so if it is the brand's own page it is the
+    sole evidence. The triggers are mechanical, so a block cannot fire on a misclassification:
+    COMPARATIVE = the claim's own wording trips the superlative list; EFFICACY = the product's
+    sector is regulated (every claim there carries efficacy weight by construction). Returns why it
+    applies, or None. Unknown first-party status (no brand domain registered) never triggers it."""
+    if truth.first_party_evidence(claim) is not True:
+        return None
+    if truth.sector is not None and truth.sector.regulated:
+        return "the sector is regulated, so every claim carries efficacy weight"
+    if lexicon is not None and any(
+        _as_phrase(p).found_in(claim.text) for p in (*lexicon.block, *lexicon.flag)
+    ):
+        return "the claim is comparative (it trips the superlative list)"
+    return None
+
+
+def _first_party_finding(s: Statement, claim: Claim, why: str) -> Finding:
+    return Finding(
+        "first_party_sole_evidence",
+        f"the cited claim's only evidence is the brand's own page, which cannot stand alone "
+        f"when {why}: {s.text[:80]!r}",
+        (claim.id,),
+        span=" ".join(s.text.split())[:120],
+        statement=s.text,
+        claim_text=claim.text,
+    )
+
+
 def _claim_gate(
     statements: Sequence[Statement],
     copy: str,
     truth: ProductTruth,
     neutral: Collection[str] = (),
+    lexicon: "Superlatives | None" = None,
 ) -> tuple[list[Finding], list[Resolution]]:
     findings: list[Finding] = []
     resolutions: list[Resolution] = []
@@ -359,8 +395,11 @@ def _claim_gate(
         else:
             mismatch = _term_check(s, claim, neutral)
             findings.extend(mismatch)
+            why = _first_party_sole(claim, truth, lexicon)
+            if why is not None:
+                findings.append(_first_party_finding(s, claim, why))
             findings.extend(_quantity_check(s, claim))
-            if not mismatch:
+            if not mismatch and why is None:
                 resolutions.append(Resolution(s.text, "verified", claim.id, claim.evidence_url))
     return findings, resolutions
 
@@ -510,7 +549,7 @@ def evaluate(
     sector = truth.sector.describe() if truth.sector is not None else "no sector"
     try:
         text = _copy_text(copy)
-        claim_findings, resolutions = _claim_gate(statements, text, truth, neutral_terms)
+        claim_findings, resolutions = _claim_gate(statements, text, truth, neutral_terms, lexicon)
         restricted = [
             Finding(
                 "restricted_claim_in_copy",

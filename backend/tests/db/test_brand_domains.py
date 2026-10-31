@@ -1,4 +1,4 @@
-"""A brand's own domains (migration 0039, threat V6): their shape, their audit, and what they do to a
+"""A brand's own domains (migration 0039, threat V6): their shape, their audit and what they do to a
 loaded product truth.
 
 `brands.domains` decides which pages count as the brand's own, so it is a trust-deciding column that
@@ -9,7 +9,7 @@ actor from the JWT, through the REST API as through ours (the pattern of brands.
 import pytest
 from psycopg import errors
 
-from tests.db.conftest import Tx
+from tests.db.conftest import Seed, Tx
 
 pytestmark = pytest.mark.db
 
@@ -26,7 +26,8 @@ def _brand(tx: Tx, domains: str | None = None) -> str:
         )
     else:
         rows = tx.execute(
-            "insert into brands (org_id, name, domains) values (%s, 'dom', %s::text[]) returning id",
+            "insert into brands (org_id, name, domains) "
+            "values (%s, 'dom', %s::text[]) returning id",
             (tx.seed.org_a, domains),
         )
     return str(rows[0][0])
@@ -149,3 +150,30 @@ def test_the_trigger_function_is_owned_by_the_audit_writer_and_is_security_defin
         "where n.nspname = 'app' and p.proname = 'audit_brand_domains'"
     )
     assert row == [("app_audit_writer", True)]
+
+
+# ── The product truth carries the domains ────────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_the_loaded_product_truth_carries_the_brands_domains(db_url: str, seed: Seed) -> None:
+    from psycopg import AsyncConnection
+
+    from app.core.truth import load_product_truth
+
+    async with await AsyncConnection.connect(db_url) as conn:
+        try:
+            none = await load_product_truth(conn, seed.org_a, seed.product_a)
+            await conn.execute(
+                "update brands set domains = '{brand-a.example,shop.brand-a.example}' "
+                "where id = %s",
+                (seed.brand_a,),
+            )
+            some = await load_product_truth(conn, seed.org_a, seed.product_a)
+        finally:
+            await conn.rollback()
+    assert none is not None and none.brand_domains == ()
+    assert some is not None
+    assert some.brand_domains == ("brand-a.example", "shop.brand-a.example")
+    claim = some.claims[0]
+    assert some.first_party_evidence(claim) is not None or claim.evidence_url is None

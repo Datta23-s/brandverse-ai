@@ -1,0 +1,29 @@
+# dry run, rolled back, 2026-10-31 12:23 UTC; commit 04ed865; target aws-0-ap-south-1.pooler.supabase.com
+# 0039_brand_domains.sql sha256 fd0fda4c9c6e0f4b
+recorded migrations (last 3): [('0036',), ('0037',), ('0038',)]
+attempt 1: backend 1714852, started 3.2s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1714855, started 0.1s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0039_brand_domains.sql
+-- scope: app, auth, public
+-- catalog changes inside the transaction
+  functions + ('app', 'audit_brand_domains', '', True, 'app_audit_writer', '{"search_path=\\"\\""}', 'v', None, '496ba4b070e88b1c945881657c3f028c')
+  triggers + ('brands', 'brands_audit_domains', 'CREATE TRIGGER brands_audit_domains AFTER INSERT OR UPDATE OF domains ON public.brands FOR EACH ROW EXECUTE FUNCTION app.audit_brand_domains()')
+  constraints + ('brands', 'brands_domains_check', "CHECK (((cardinality(domains) <= 10) AND ((domains = '{}'::text[]) OR (array_to_string(domains, ','::text) ~ '^(?!www\\.)([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?(,(?!www\\.)([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$'::text))))")
+  columns + ('public', 'brands', 'domains', 'ARRAY', 'NO', "'{}'::text[]")
+  policies - ('public', 'audit_log', 'audit_writer_insert', 'INSERT', '{app_audit_writer}', None, "((action = 'brand.sector_set'::text) AND (entity_type = 'brand'::text))")
+  policies + ('public', 'audit_log', 'audit_writer_insert', 'INSERT', '{app_audit_writer}', None, "((action = ANY (ARRAY['brand.sector_set'::text, 'brand.domains_set'::text])) AND (entity_type = 'brand'::text))")
+  column grants + ('public', 'brands', 'domains', 'anon', 'INSERT')
+  column grants + ('public', 'brands', 'domains', 'anon', 'REFERENCES')
+  column grants + ('public', 'brands', 'domains', 'anon', 'SELECT')
+  column grants + ('public', 'brands', 'domains', 'anon', 'UPDATE')
+  column grants + ('public', 'brands', 'domains', 'authenticated', 'INSERT')
+  column grants + ('public', 'brands', 'domains', 'authenticated', 'REFERENCES')
+  column grants + ('public', 'brands', 'domains', 'authenticated', 'SELECT')
+  column grants + ('public', 'brands', 'domains', 'authenticated', 'UPDATE')
+  column grants + ('public', 'brands', 'domains', 'service_role', 'INSERT')
+  column grants + ('public', 'brands', 'domains', 'service_role', 'REFERENCES')
+  column grants + ('public', 'brands', 'domains', 'service_role', 'SELECT')
+  column grants + ('public', 'brands', 'domains', 'service_role', 'UPDATE')
+-- after rollback: catalog identical to before

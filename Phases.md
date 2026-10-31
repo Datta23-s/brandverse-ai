@@ -709,6 +709,32 @@ where each stands (a closed chunk with named, dispositioned unknowns, not an ope
   obeyed). The one live sample so far is two runs with opposite results (X, z), not attributable to the span.
 Nothing in this list is an intention without a disposition.
 
+**Chunk D (V6 first-party), started 2026-10-31: the mechanism is built; three things are the owner's.**
+Built, tested offline and against the local database, 0039 NOT applied: `brands.domains` (migration 0039, audited like
+`brands.sector`); `app/core/first_party.py` (a label-boundary host match; unknown is `None`, never `False`);
+`ProductTruth.brand_domains` and `first_party_evidence(claim)`, the host check on a verified claim's `evidence_url`;
+`first_party` populated by the research driver on every finding, including under replay (it is computed at read time
+from the brand's domains, so the frozen snapshot, recorded before any domain existed, needs no change); and the sole-
+evidence rule in the claim gate: `first_party_sole_evidence` BLOCKS a statement citing a verified claim whose only
+evidence is the brand's own page when the sector is regulated (efficacy) or the claim's wording trips the superlative
+list (comparative), the owner's mechanical triggers. A factual property from the brand's own page stays acceptable.
+Authority and independence are kept apart: first-party is a fact about each source beside its score, not a term in it.
+- **Measured before building: what the rule does to the evaluation.** Of the 30 requests' 128 verified claims, none
+  trips the superlative list; only `health-supplements` is regulated (brand B07, requests R19-R21, 12 verified claims),
+  and every one of those claims cites the manufacturer's own page. So the rule binds exactly those three requests, and
+  only if B07's real domain is registered.
+- **Decision 1 (owner): register the evaluation brands' real manufacturer domains or not.** The brands are
+  pseudonyms and the evidence is the real manufacturer's page. Registered, first-party detection is honest and R19-R21
+  could state no verified claim (every statement citing one is blocked). Unregistered, the rule is inert across the
+  evaluation and the V6 gap stays open for it. Not decided here.
+- **Decision 2 (owner): the regulated trigger is blunt.** "24 g protein per serving" is a label fact, a factual
+  property, yet in a regulated sector it is treated as efficacy by construction and needs independent evidence. That is
+  the owner's rule, mechanical by design; this records its cost so it is a choice.
+- **Decision 3 (owner): where independence is stored.** Per-source first-party is computed and carried on findings;
+  keeping it with a memory item's evidence (`memory_item_sources`) would need a column (a migration). Not built.
+- **Not built:** the independence column above; applying 0039; the live posture check for it. No model calls were made
+  (the standing 60 is untouched: 12 spent, 48 remaining).
+
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each
 campaign that produced, reinforced or reused an item; `C` is the maximum cosine over the persona pairs
