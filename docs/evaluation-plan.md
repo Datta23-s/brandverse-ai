@@ -268,7 +268,7 @@ components, not a prediction of a live stopwatch.
 
 Reported additionally, broken down by campaign position (1st / 2nd / 3rd per brand), since
 that is where the memory effect is expected: depth distribution (D0/D1/D2), memory hit rate,
-coverage, reuse depth (`Memory.md` §8). Strong-tier calls per arm are reported as a result
+coverage (always "k of 2 slots", insight and competitor: `decision-log.md` 2.9), reuse depth (`Memory.md` §8). Strong-tier calls per arm are reported as a result
 (threat V1, below).
 
 **Memory revocations by kind — named 2026-10-19, before any data exists.** How memory items

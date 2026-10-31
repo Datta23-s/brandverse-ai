@@ -127,3 +127,27 @@ def test_the_weights_must_sum_to_one() -> None:
 
     with pytest.raises(ValidationError, match="sum to 1"):
         Weights(S=0.5, P=0.5, C=0.5, A=0, F=0, E=0)
+
+
+# ── Coverage is "k of N slots", and N is what memory can contain (2026-10-31) ─────────────────
+
+
+def test_memory_slots_reports_filled_of_required_never_the_fraction_alone() -> None:
+    from app.memory.scoring import memory_slots
+
+    assert memory_slots({"insight": [0.82], "competitor": [0.79]}, CFG) == (1, 2)
+    assert memory_slots({"insight": [], "competitor": []}, CFG) == (0, 2)
+    assert memory_slots({}, CFG) == (0, 0)
+
+
+def test_the_required_slots_are_the_kinds_the_system_can_write_with_a_full_component_set() -> None:
+    """required_slots was reduced from six to two on 2026-10-31, before any run: only insight and
+    competitor items rest on a scored page, so only they can carry E. Coverage over a kind that can
+    never be written would be capped by construction (V13 one layer up). This ties the list to
+    what the proposer can write, so adding a slot without a way to fill it fails here."""
+    from app.memory.scoring import load_scoring
+    from app.memory.writeback import EVIDENCE_BASED_KINDS
+
+    slots = load_scoring().retrieval.required_slots
+    assert slots == ("insight", "competitor")
+    assert set(slots) <= EVIDENCE_BASED_KINDS

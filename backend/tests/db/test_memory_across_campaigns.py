@@ -133,6 +133,8 @@ async def test_campaign_two_recalls_what_campaign_one_left_with_all_six_componen
     for item in mine:
         assert set(item.components) == {"S", "P", "C", "A", "F", "E"}, item.left_out
         assert item.left_out == () and item.first_party_only is False
+    # coverage is "k of 2 slots" (insight, competitor), never the fraction alone
+    assert found.slots_total == 2 and 1 <= found.slots_filled <= 2
     insight = next(i for i in mine if i.kind == "insight")
     assert insight.components["E"] == pytest.approx(0.8 * CFG.writeback.evidence_item_confidence)
     assert insight.components["C"] == pytest.approx(1.0)  # campaign 1's persona, same encoder

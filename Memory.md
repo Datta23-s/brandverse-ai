@@ -145,7 +145,7 @@ on this number. The sampled HEAD estimate (`docs/evaluation-plan.md` section 8) 
 | **0.65 – 0.79** | Supporting context | Inject as background only. Cannot be the sole basis for a claim. |
 | **< 0.65** | Perform fresh analysis | Discard. Mark the knowledge slot as a research gap. |
 
-These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`.
+These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`. **Since 2026-10-31 there are two required slots, `insight` and `competitor`** (the only kinds that can carry a full component set), and coverage is always reported as "k of 2 slots"; `decision-log.md` 2.9.
 
 **The bands are PROVISIONAL — recorded 2026-10-25, before anything else touches them.** The
 0.90 / 0.80 / 0.65 bands and the write-back gate at `M ≥ 0.90` (§6.3) were set as defaults and

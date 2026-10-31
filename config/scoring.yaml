@@ -53,8 +53,15 @@ retrieval:
   # are off; a sweep below 60 measures that too.
   hnsw_ef_search: 100                                  # Memory.md §4.3
   # The knowledge slots memory_coverage counts (Memory.md §3.2). PROVISIONAL placeholder: the Research
-  # Necessity Engine (not built) owns this list; until it exists every memory kind is a slot.
-  required_slots: [persona, competitor, insight, claim, creative, sector]
+  # Necessity Engine (not built) owns this list.
+  # CHANGED 2026-10-31, before any run (owner): required_slots was REDUCED FROM SIX TO TWO because only
+  # two kinds can carry a full component set (insight and competitor, each resting on a scored web page,
+  # so each can have E), and coverage is therefore measured over what memory can CONTAIN, not over what
+  # the design enumerates. Left at six, coverage was capped at 2 of 6 by construction, so the
+  # research-necessity step would almost never have found memory sufficient, adaptive depth would never
+  # have fired and the Proposed arm's adaptivity would have contributed nothing: V13 one layer up, a
+  # mechanism that cannot operate. Coverage is reported as "k of 2 slots" wherever it appears.
+  required_slots: [insight, competitor]
 research:
   # How long a cached search result may be reused (backend/app/research/search_cache.py, Rules.md
   # C7). A parameter of the results, not a constant: search results change, the thesis measures

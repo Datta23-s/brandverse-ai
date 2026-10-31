@@ -33,6 +33,10 @@ class ProductContext:
 class MemoryResult:
     hits: list[dict[str, Any]]
     coverage: float  # fraction of required knowledge slots filled at M >= 0.80
+    slots_filled: int = (
+        0  # reported as "k of N slots" (N = len(required_slots), 2 since 2026-10-31)
+    )
+    slots_total: int = 0
 
 
 @dataclass(frozen=True, slots=True)

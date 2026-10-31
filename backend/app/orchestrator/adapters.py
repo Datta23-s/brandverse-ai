@@ -170,7 +170,9 @@ def memory_recaller(
                 now=now,
                 personas=personas,
             )
-        return MemoryResult([i.record() for i in found.items], found.coverage)
+        return MemoryResult(
+            [i.record() for i in found.items], found.coverage, found.slots_filled, found.slots_total
+        )
 
     return run
 

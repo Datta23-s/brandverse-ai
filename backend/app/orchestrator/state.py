@@ -40,6 +40,7 @@ class RunState(TypedDict, total=False):
     blocked: list[dict[str, Any]] | None  # admission's reasons; set => the run ends `blocked`
     memory_hits: list[dict[str, Any]]
     memory_coverage: float  # 0..1; step 4, C left out (no persona yet)
+    memory_slots: dict[str, int]  # {"filled": k, "of": N}: coverage is always "k of N slots"
     memory_coverage_final: float  # step 8, with the personas, when A3 spoke
     memory_persona_scored: bool  # the hits in `memory_hits` were scored with C
     research_score: float  # R

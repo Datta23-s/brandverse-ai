@@ -340,9 +340,18 @@ def score(c: Candidate, ctx: RequestContext, cfg: MemoryScoring) -> Score:
     return Score(m, band(m, cfg.bands), present, left_out)
 
 
+def memory_slots(
+    best_by_slot: Mapping[str, Sequence[float]], cfg: MemoryScoring
+) -> tuple[int, int]:
+    """(slots filled from memory at M ≥ the adapt band (0.80), slots required). Coverage is always
+    reported as "k of N slots": the fraction alone hides what N is."""
+    filled = sum(1 for ms in best_by_slot.values() if ms and max(ms) >= cfg.bands.adapt)
+    return filled, len(best_by_slot)
+
+
 def memory_coverage(best_by_slot: Mapping[str, Sequence[float]], cfg: MemoryScoring) -> float:
     """Fraction of required knowledge slots filled from memory at M ≥ the adapt band (0.80)."""
     if not best_by_slot:
         return 0.0
-    filled = sum(1 for ms in best_by_slot.values() if ms and max(ms) >= cfg.bands.adapt)
-    return filled / len(best_by_slot)
+    filled, total = memory_slots(best_by_slot, cfg)
+    return filled / total

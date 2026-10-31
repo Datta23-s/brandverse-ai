@@ -240,8 +240,10 @@ class Nodes:
         return {
             "memory_hits": found.hits,
             "memory_coverage": found.coverage,
+            "memory_slots": {"filled": found.slots_filled, "of": found.slots_total},
             "memory_persona_scored": False,
-            "_detail": f"{len(found.hits)} hits, coverage {found.coverage:.2f} (no persona yet)",
+            "_detail": f"{len(found.hits)} hits, coverage {found.slots_filled} of "
+            f"{found.slots_total} slots ({found.coverage:.2f}; no persona yet)",
         }
 
     async def assess_research_necessity(self, state: RunState) -> dict[str, Any]:
@@ -317,8 +319,11 @@ class Nodes:
             update.update(
                 memory_hits=found.hits,
                 memory_coverage_final=found.coverage,
+                memory_slots={"filled": found.slots_filled, "of": found.slots_total},
                 memory_persona_scored=True,
-                _detail=f"{len(personas)} personas; memory re-scored with C: {len(found.hits)}",
+                _detail=f"{len(personas)} personas; memory re-scored with C: "
+                f"{len(found.hits)} hits, coverage {found.slots_filled} of "
+                f"{found.slots_total} slots",
             )
         return update
 

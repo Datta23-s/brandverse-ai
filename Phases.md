@@ -759,9 +759,9 @@ travel on every item), and A1's positioning is NOT proposed: its basis (verified
 spec has no `strategy` kind. **That contradicts the expectation that A1's positioning becomes a strategy item: by the same
 rule it cannot, unless a ruling adds a `strategy` kind AND gives its evidence a scored page (for example fetching and
 scoring the claims' evidence pages at write-back, which the replay snapshot may not hold).** Pending.
-**Consequences still open:** (a) `required_slots` is a placeholder naming all six kinds, so with two kinds written,
-`memory_coverage` cannot exceed 2 of 6 and the research-necessity step will rarely see memory as enough (D0 on campaign 3
-will not occur by this route); the Research Necessity Engine owns that list. (b) The confidence and freshness are stated
+**Consequences still open:** (a) `required_slots` was a placeholder naming all six kinds, which capped coverage at 2 of 6 by
+construction; **reduced to `[insight, competitor]` on 2026-10-31 (owner), before any run, and coverage is reported as "k of 2"
+everywhere** (`decision-log.md` 2.9). The engine that reads it is Phase 7 and is not built (V14). (b) The confidence and freshness are stated
 defaults. (c) No full real run has exercised the whole chain; the tests have.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of

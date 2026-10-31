@@ -40,6 +40,7 @@ from app.memory.scoring import (
     RequestContext,
     ScoringConfig,
     memory_coverage,
+    memory_slots,
     score,
 )
 from app.memory.writeback import vector_literal
@@ -90,6 +91,8 @@ class Recall:
     coverage: float
     ef_search: int
     persona_scored: bool  # the request's personas were supplied, so C was attempted
+    slots_filled: int = 0  # coverage is "slots_filled of slots_total", never the fraction alone
+    slots_total: int = 0
 
 
 async def customer_matches(
@@ -182,6 +185,12 @@ async def recall(
     best_by_slot: dict[str, Sequence[float]] = {
         slot: [i.m for i in items if i.kind == slot] for slot in cfg.retrieval.required_slots
     }
+    filled, total = memory_slots(best_by_slot, cfg.memory)
     return Recall(
-        items, memory_coverage(best_by_slot, cfg.memory), found.ef_search, personas is not None
+        items,
+        memory_coverage(best_by_slot, cfg.memory),
+        found.ef_search,
+        personas is not None,
+        filled,
+        total,
     )
