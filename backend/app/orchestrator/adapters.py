@@ -246,6 +246,7 @@ def driver_research(
             extractor=extractor,
             source_cfg=source_cfg,
             today=today(),
+            brand_domains=tuple((state.get("truth") or {}).get("brand_domains") or ()),
         )
         findings = [
             {

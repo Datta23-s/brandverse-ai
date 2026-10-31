@@ -108,6 +108,7 @@ EXPECTED_FUNCTIONS: dict[str, tuple[bool, str, frozenset[str]]] = {
     # 0019: a security definer TRIGGER function (cannot be called directly), owned by the minimal
     # role below; it appends one kind of audit row when a brand's sector really changes.
     "audit_brand_sector": (True, "app_audit_writer", ALL_API),
+    "audit_brand_domains": (True, "app_audit_writer", ALL_API),  # 0039
     # Read-only role checks every RLS policy calls (0003).
     "has_role": (True, "migration", ALL_API),
     "member_org_ids": (True, "migration", ALL_API),
@@ -192,7 +193,7 @@ def test_create_organisation_owner_has_insert_on_two_tables_and_nothing_else(tx:
 
 
 def test_audit_writer_has_insert_on_audit_log_and_nothing_else(tx: Tx) -> None:
-    """app_audit_writer's rights ARE app.audit_brand_sector's (0019): append audit rows, and only
+    """app_audit_writer's rights ARE app.audit_brand_sector's (0019) and app.audit_brand_domains's (0039): append audit rows, and only
     the kind its one insert policy admits; read, change or delete nothing."""
     attrs = tx.execute(
         "select rolsuper, rolcanlogin, rolbypassrls, rolcreaterole, rolcreatedb, rolinherit "
@@ -217,7 +218,8 @@ def test_audit_writer_has_insert_on_audit_log_and_nothing_else(tx: Tx) -> None:
         (
             "audit_writer_insert",
             "INSERT",
-            "((action = 'brand.sector_set'::text) AND (entity_type = 'brand'::text))",
+            "((action = ANY (ARRAY['brand.sector_set'::text, 'brand.domains_set'::text])) "
+            "AND (entity_type = 'brand'::text))",
         )
     ]
     memberships = tx.execute(

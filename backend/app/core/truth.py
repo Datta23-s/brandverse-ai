@@ -12,6 +12,7 @@ from uuid import UUID
 
 from psycopg import AsyncConnection
 
+from app.core.first_party import is_first_party
 from app.core.sector_registry import Sector, SectorConstraint
 
 ClaimType = Literal["verified", "deduced", "restricted"]
@@ -31,6 +32,13 @@ class ProductTruth:
     sector: Sector | None
     claims: tuple[Claim, ...]
     rules: tuple[SectorConstraint, ...]
+    # The brand's own domains (`brands.domains`, 0039). Empty: none registered, so no claim's
+    # evidence can be called first-party OR independent.
+    brand_domains: tuple[str, ...] = ()
+
+    def first_party_evidence(self, claim: "Claim") -> bool | None:
+        """Whether the page behind this claim is the brand's own (threat V6); None if unknown."""
+        return is_first_party(claim.evidence_url, self.brand_domains)
 
     def active(self, claim_type: ClaimType) -> tuple[Claim, ...]:
         return tuple(c for c in self.claims if c.claim_type == claim_type and not c.retired)
@@ -44,7 +52,7 @@ async def load_product_truth(
 ) -> ProductTruth | None:
     """The product's truth, or None if the organisation has no such product."""
     cur = await conn.execute(
-        "select b.sector, s.regulated, s.rules_provenance from products p "
+        "select b.sector, s.regulated, s.rules_provenance, b.domains from products p "
         "join brands b on b.id = p.brand_id and b.org_id = p.org_id "
         "left join sectors s on s.id = b.sector "
         "where p.id = %s and p.org_id = %s",
@@ -53,7 +61,7 @@ async def load_product_truth(
     row = await cur.fetchone()
     if row is None:
         return None
-    sector_id, regulated, provenance = row
+    sector_id, regulated, provenance, domains = row
     sector = None if sector_id is None else Sector(sector_id, bool(regulated), provenance)
 
     cur = await conn.execute(
@@ -78,4 +86,4 @@ async def load_product_truth(
             SectorConstraint(str(i), s, k, eff, ret, mt, pat, dis)
             for i, s, k, eff, ret, mt, pat, dis in await cur.fetchall()
         )
-    return ProductTruth(sector, claims, rules)
+    return ProductTruth(sector, claims, rules, tuple(domains or ()))

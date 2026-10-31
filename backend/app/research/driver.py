@@ -37,12 +37,14 @@ source then served them live or from a snapshot.
 """
 
 import asyncio
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 from typing import Literal
 from urllib.parse import urlsplit
 
+from app.core.first_party import is_first_party
 from app.errors import (
     BrandverseError,
     ExtractionFailed,
@@ -113,7 +115,10 @@ class Finding:
     score: SourceScore
     queries: tuple[int, ...]  # ranks of every planned query that returned this URL
     engines: tuple[str, ...]
-    first_party: bool | None = None  # UNPOPULATED until Phase 6; nothing reads it (V6)
+    # Whether the page is the brand's own domain (V6): populated from the brand's registered
+    # domains, None if it has none. Read by A2 (own pages are not competitors) and the claim gate's
+    # sole-evidence rule; NOT folded into the source score (authority and independence stay apart).
+    first_party: bool | None = None
 
 
 @dataclass(slots=True)
@@ -156,6 +161,14 @@ class ResearchOutcome:
         return dict(sorted(counts.items()))
 
 
+def _first_party(result_url: str, final_url: str, domains: Collection[str]) -> bool | None:
+    """V6: None if the brand registered no domain (unknown is not independent), True if the
+    result or the page it resolved to is the brand's own, else False."""
+    if not domains:
+        return None
+    return bool(is_first_party(result_url, domains) or is_first_party(final_url, domains))
+
+
 @dataclass(slots=True)
 class _Candidate:
     result: SearchResult
@@ -175,6 +188,7 @@ async def research(
     today: date,
     concurrency: int = 8,
     search_limit: int = 50,
+    brand_domains: Collection[str] = (),
 ) -> ResearchOutcome:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -239,7 +253,8 @@ async def research(
             score=score,
             queries=tuple(sorted(cand.ranks)),
             engines=tuple(sorted(cand.engines)),
-            first_party=cand.result.first_party,
+            # the brand's own page by the search result's URL OR where the fetch ended up
+            first_party=_first_party(cand.result.url, extracted.url, brand_domains),
         )
 
     outcome.pages_fetched = len(candidates)

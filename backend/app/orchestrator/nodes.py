@@ -173,6 +173,7 @@ class Nodes:
                 "verified": len(truth.active("verified")),
                 "deduced": len(truth.active("deduced")),
                 "restricted": len(truth.active("restricted")),
+                "brand_domains": list(truth.brand_domains),
             },
         }
 
