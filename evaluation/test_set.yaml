@@ -33,6 +33,7 @@ brands:
     real_brand: boAt
     sector: consumer-electronics
     regulated: false
+    domains: [boat-lifestyle.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Tidewell Loop N2
@@ -74,6 +75,7 @@ brands:
     real_brand: Noise
     sector: consumer-electronics
     regulated: false
+    domains: [gonoise.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Kavira Arc
@@ -108,6 +110,7 @@ brands:
     real_brand: Mokobara
     sector: travel-goods
     regulated: false
+    domains: [mokobara.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Yatrik Glide Cabin
@@ -143,6 +146,7 @@ brands:
     real_brand: Neeman's
     sector: footwear
     regulated: false
+    domains: [neemans.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Pagdandi Stroll Lite
@@ -174,6 +178,7 @@ brands:
     real_brand: Bombay Shaving Company
     sector: personal-care
     regulated: false
+    domains: [bombayshavingcompany.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Ustara Tri-Edge Razor
@@ -209,6 +214,7 @@ brands:
     real_brand: Sleepy Owl Coffee
     sector: food-and-beverage
     regulated: false
+    domains: [sleepyowl.co]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Ember Lane Protein Coffee - Classic
@@ -241,6 +247,7 @@ brands:
     real_brand: Wellbeing Nutrition
     sector: health-supplements
     regulated: true             # Rules.md T4: strong tier + sector constraint registry (RQ3)
+    domains: [wellbeingnutrition.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Verdano Whey Iso+Conc - Chocolate
@@ -280,6 +287,7 @@ brands:
     real_brand: The Indus Valley
     sector: kitchenware
     regulated: false
+    domains: [theindusvalley.in]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Lohaar Cast Iron Fry Pan 25
@@ -317,6 +325,7 @@ brands:
     real_brand: Sleepycat
     sector: home-furnishing
     regulated: false
+    domains: [sleepycat.in]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Dozewell Classic Mattress
@@ -351,6 +360,7 @@ brands:
     real_brand: Atomberg
     sector: home-appliances
     regulated: false
+    domains: [atomberg.com]   # the brand's own site(s): V6, registered 2026-10-31
     products:
       A:
         pseudonym: Hawaa Mini Personal Fan

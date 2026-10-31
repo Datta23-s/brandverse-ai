@@ -77,6 +77,7 @@ class RequestInputs:
     audience: str
     claims: tuple[str, ...]
     evidence_url: str
+    domains: tuple[str, ...] = ()
 
 
 def request_inputs(path: Path = TEST_SET) -> dict[str, RequestInputs]:
@@ -98,6 +99,7 @@ def request_inputs(path: Path = TEST_SET) -> dict[str, RequestInputs]:
             audience=r["audience_hint"],
             claims=tuple(product["verified"]),
             evidence_url=product["evidence_url"],
+            domains=tuple(brand.get("domains") or ()),
         )
     return out
 

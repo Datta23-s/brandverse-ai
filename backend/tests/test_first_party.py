@@ -94,13 +94,21 @@ def test_a_factual_property_from_the_brands_own_page_is_acceptable() -> None:
     assert report.findings == () and len(report.resolutions) == 1
 
 
-def test_in_a_regulated_sector_the_brands_own_page_cannot_stand_alone() -> None:
+def test_in_a_regulated_sector_a_composition_fact_from_the_brands_own_page_is_acceptable() -> None:
+    """The efficacy trigger (regulated sector) was dropped, 2026-10-31: "Contains Velositol" or
+    "24 g protein" is a composition fact whose only correct source is the manufacturer, and the
+    trigger blocked all of B07's verified claims while catching no effect claim."""
     report = gate(truth("Contains Velositol", OWN, regulated=True), "Contains Velositol")
-    assert kinds(report) == ["first_party_sole_evidence"]
-    assert report.outcome == "block" and report.resolutions == ()
-    (f,) = [f for f in report.findings if f.kind == "first_party_sole_evidence"]
-    assert "regulated" in f.message and f.refs == ("c1",)
-    assert f.statement == "Contains Velositol" and f.claim_text == "Contains Velositol"
+    assert kinds(report) == [] and len(report.resolutions) == 1
+
+
+def test_the_gap_the_dropped_trigger_leaves_an_effect_claim_mislabelled_verified_passes() -> None:
+    """Stated, not hidden: an effect claim entered as `verified` (it should be `restricted`) and
+    resting on the brand's own page is not caught by anything here. The principled fix is the
+    claim's nature as an audited field (decision-log V6, option c), deferred."""
+    claim = "Reduces bloating within a week"
+    report = gate(truth(claim, OWN, regulated=True), claim)
+    assert kinds(report) == []  # nothing in this rule objects
 
 
 def test_the_same_claim_on_an_independent_page_is_fine_in_a_regulated_sector() -> None:
@@ -123,12 +131,11 @@ def test_a_comparative_claim_on_an_independent_page_does_not_trip_this_rule() ->
     )
 
 
-def test_with_no_brand_domain_registered_the_rule_does_not_fire_even_in_a_regulated_sector() -> (
-    None
-):
-    t = truth("Contains Velositol", OWN, regulated=True, domains=())
+def test_with_no_brand_domain_registered_first_party_is_unknown_and_nothing_fires() -> None:
+    claim = "The best selling walking shoe in its class"
+    t = truth(claim, OWN, regulated=False, domains=())
     assert t.first_party_evidence(t.claims[0]) is None
-    assert kinds(gate(t, "Contains Velositol")) == []
+    assert "first_party_sole_evidence" not in kinds(gate(t, claim))
 
 
 def test_a_subdomain_of_a_registered_domain_is_the_brands_own() -> None:
@@ -176,3 +183,35 @@ async def test_findings_carry_first_party_from_the_brands_domains() -> None:
     assert by_url == {OWN: True, THEIRS: False}
     unknown = await research(plan(), "D1", **kw)  # type: ignore[arg-type]
     assert {f.first_party for f in unknown.findings} == {None}  # none registered: unknown
+
+
+# ── THE DEFLATING RESULT: on the evaluation's own claims this rule binds nothing ─────────────
+
+
+def test_on_the_evaluations_128_verified_claims_the_sole_evidence_rule_fires_on_none() -> None:
+    """Every one of the 30 requests' verified claims rests on its brand's own page, and the brands'
+    domains are registered, so first-party MARKING is complete (the claim gate, A2 and the findings
+    all see it). But the rule needs a COMPARATIVE claim to act on, none of the 128 trips the
+    superlative list, and the efficacy trigger was dropped. The mechanism exists, is tested above,
+    and has no instance in this evaluation to act on. Do not read the rule's presence as a check
+    that fired anywhere: it did not."""
+    from app.core.gates import _first_party_sole
+    from app.evaluation.test_set import plan_requests, request_inputs
+
+    regulated = {rid: p.regulated for rid, p in plan_requests().items()}
+    marked = bound = total = 0
+    for rid, r in request_inputs().items():
+        t = ProductTruth(
+            Sector(r.sector, regulated=regulated[rid]),
+            tuple(
+                Claim(f"{rid}:{i}", text, "verified", r.evidence_url, False)
+                for i, text in enumerate(r.claims)
+            ),
+            (),
+            r.domains,
+        )
+        for c in t.claims:
+            total += 1
+            marked += t.first_party_evidence(c) is True
+            bound += _first_party_sole(c, t, LEXICON) is not None
+    assert (total, marked, bound) == (128, 128, 0)

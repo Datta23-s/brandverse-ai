@@ -286,14 +286,19 @@ def _first_party_sole(
     """Threat V6, the rule (owner, 2026-10-26): a first-party source is acceptable evidence for a
     FACTUAL PROPERTY of the brand's own product and NOT the sole evidence for a comparative or
     efficacy claim. A claim carries one evidence URL, so if it is the brand's own page it is the
-    sole evidence. The triggers are mechanical, so a block cannot fire on a misclassification:
-    COMPARATIVE = the claim's own wording trips the superlative list; EFFICACY = the product's
-    sector is regulated (every claim there carries efficacy weight by construction). Returns why it
-    applies, or None. Unknown first-party status (no brand domain registered) never triggers it."""
+    sole evidence. The trigger is mechanical, so a block cannot fire on a misclassification:
+    COMPARATIVE = the claim's own wording trips the superlative list. Returns why it applies, or
+    None. Unknown first-party status (no brand domain registered) never triggers it.
+
+    There is deliberately NO efficacy trigger (owner, 2026-10-31). "Efficacy = a regulated sector"
+    conflated the sector with the claim: every verified claim of the evaluation's one regulated
+    brand is a composition fact ("24 g protein") whose only correct source is the manufacturer, and
+    an effect claim is entered as `restricted`, which never reaches a model or the copy. What this
+    leaves open: an effect claim MISLABELLED `verified` would reach the copy resting on the brand's
+    own page and nothing here would catch it. The right fix is the claim's nature as an audited
+    field (decision-log V6, option c), deferred."""
     if truth.first_party_evidence(claim) is not True:
         return None
-    if truth.sector is not None and truth.sector.regulated:
-        return "the sector is regulated, so every claim carries efficacy weight"
     if lexicon is not None and any(
         _as_phrase(p).found_in(claim.text) for p in (*lexicon.block, *lexicon.flag)
     ):

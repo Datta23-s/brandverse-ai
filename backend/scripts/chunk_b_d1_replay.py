@@ -98,6 +98,7 @@ def request_inputs() -> dict[str, object]:
         "evidence_url": r.evidence_url,
         "brief": r.brief,
         "audience": r.audience,
+        "domains": list(r.domains),
     }
 
 
@@ -123,8 +124,9 @@ def seed(url: str, inp: dict[str, object]) -> tuple[UUID, UUID, UUID, UUID]:
             "insert into org_members (org_id, user_id, role) values (%s, %s, 'owner')", (org, user)
         )
         brand = one(
-            "insert into brands (org_id, name, sector) values (%s, %s, %s) returning id",
-            (org, inp["brand"], inp["sector"]),
+            "insert into brands (org_id, name, sector, domains) "
+            "values (%s, %s, %s, %s) returning id",
+            (org, inp["brand"], inp["sector"], inp.get("domains", [])),
         )
         product = one(
             "insert into products (org_id, brand_id, name, category) "
@@ -192,7 +194,11 @@ async def main(args: argparse.Namespace) -> int:
     # Free pre-flight: the research step alone, against the snapshot. A miss spends nothing.
     probe = RunState(
         product={"category": inp["category"]},
-        truth={"sector": inp["sector"], "regulated": False},
+        truth={
+            "sector": inp["sector"],
+            "regulated": False,
+            "brand_domains": inp.get("domains", []),
+        },
         audience=str(inp["audience"]),
     )
     try:
