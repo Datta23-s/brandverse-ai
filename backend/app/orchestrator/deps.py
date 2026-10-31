@@ -46,6 +46,8 @@ class ResearchResult:
 ExtractStatements = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
 # Step 3's check of the brief: the same extraction as step 11, on the brief's own text.
 CheckBrief = Callable[[AgentContext, Mapping[str, str]], Awaitable[list[Statement]]]
+# Step 11: write a BLOCKED gate report to the audit log (Rules.md T2: blocked and logged).
+RecordBlock = Callable[[RunState, GateReport], Awaitable[None]]
 LoadContext = Callable[[UUID, UUID], Awaitable[ProductContext | None]]
 # `personas` is None before A3 has spoken (C left out of every M) and A3's summaries after
 # (app/memory/recall.py).
@@ -72,6 +74,8 @@ class GraphDeps:
     evidence: EvidenceReader | None = None
     # None: the brief is not checked (`brief_check.status` is "skipped").
     check_brief: CheckBrief | None = None
+    # None: blocked reports are kept in the run's state only.
+    record_block: RecordBlock | None = None
 
 
 async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:

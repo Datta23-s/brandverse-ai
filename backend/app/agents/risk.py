@@ -30,7 +30,7 @@ from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 
-A7_RISK = ("a7_risk", "v1")
+A7_RISK = ("a7_risk", "v2")
 
 
 class _RawFlags(BaseModel):

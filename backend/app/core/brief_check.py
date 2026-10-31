@@ -22,12 +22,12 @@ import json
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from app.core.claim_classifier import truth_context
+from app.core.claim_classifier import CLAIM_EXTRACT, truth_context
 from app.core.gates import Statement
 from app.core.sector_registry import verbatim_form
 from app.core.truth import ProductTruth
 
-PROMPT = "claim_extract@v2"
+PROMPT = f"{CLAIM_EXTRACT[0]}@{CLAIM_EXTRACT[1]}"  # the prompt the check is made with
 
 
 def brief_sha256(brief: str) -> str:

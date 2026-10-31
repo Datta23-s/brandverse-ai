@@ -28,7 +28,7 @@ from app.agents.base import AgentContext
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
 from app.core.brief_check import assess, reconcile
 from app.core.citation_terms import neutral_stems
-from app.core.gates import Finding, GateReport, Statement, evaluate
+from app.core.gates import Finding, GateReport, Statement, evaluate, finding_dict
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded
@@ -74,17 +74,7 @@ def report_dict(report: GateReport) -> dict[str, Any]:
         "superlatives_version": report.superlatives_version,
         "checked_on": report.checked_on.isoformat(),
         "rules_applied": list(report.rules_applied),
-        "findings": [
-            {
-                "kind": f.kind,
-                "gate": f.gate,
-                "outcome": f.outcome,
-                "message": f.message,
-                "refs": list(f.refs),
-                "span": f.span,
-            }
-            for f in report.findings
-        ],
+        "findings": [finding_dict(f) for f in report.findings],
     }
 
 
@@ -441,6 +431,10 @@ class Nodes:
                 report = self._gate_error(
                     ctx, f"claim extraction failed, so the copy is unchecked: {type(e).__name__}"
                 )
+            if report.outcome == "block" and self.d.record_block is not None:
+                # Blocked and logged (Rules.md T2): every blocked draft, every round, so the
+                # findings outlive the run's state. A re-executed step may log a draft twice.
+                await self.d.record_block(state, report)
             validation = report_dict(report)
             validation["statements"] = (
                 None

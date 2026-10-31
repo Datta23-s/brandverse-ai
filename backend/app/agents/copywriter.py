@@ -80,7 +80,12 @@ class CopyDraft(BaseModel):
 # so a restricted phrase it wrote is not reinforced; an unbacked property has its own kind and is
 # not that, and a reviser cannot remove a word it was never told (the 2026-10-30 revision
 # reopened with "lightweight").
-REVEALS_SPAN: frozenset[str] = frozenset({"unsourced_claim"})
+REVEALS_SPAN: frozenset[str] = frozenset({"unsourced_claim", "citation_lacks_term"})
+# What the reviser is told to do with the span, per kind.
+REVEAL_ACTION: Mapping[str, str] = {
+    "unsourced_claim": "remove it, do not rephrase it",
+    "citation_lacks_term": "remove it, or keep it only if a listed claim says it in so many words",
+}
 MAX_SPANS = 3
 MAX_SPAN_CHARS = 120
 
@@ -112,7 +117,7 @@ def problems_text(validation: Mapping[str, Any] | None) -> str:
             )[:MAX_SPANS]
             if spans:
                 quoted = "; ".join(f'"{s}"' for s in spans)
-                line += f" (remove it, do not rephrase it): {quoted}"
+                line += f" ({REVEAL_ACTION[k]}): {quoted}"
         lines.append(line)
     return "\n".join(lines)
 

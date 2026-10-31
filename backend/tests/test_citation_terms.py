@@ -91,9 +91,36 @@ def test_the_finding_is_a_block_in_the_claim_gate_and_names_a_reviser_word() -> 
     (finding,) = gate(SAID_ON_DRAFT_2).findings
     assert (finding.gate, finding.outcome) == ("claim", "block")
     assert PROBLEM_WORDS["citation_lacks_term"]
-    # a new kind reveals nothing to the reviser by default (owner, 2026-10-30): no span for this one
-    text = problems_text({"findings": [{"kind": "citation_lacks_term", "span": "lightweight"}]})
-    assert text == f"- {PROBLEM_WORDS['citation_lacks_term']}"
+    # the reviser is shown the span (owner, 2026-10-31), the span only: the same conditions as
+    # `unsourced_claim`, because a citation mismatch is not a restricted phrase
+    text = problems_text(
+        {
+            "findings": [
+                {"kind": "citation_lacks_term", "span": "lightweight walking shoe", "message": "M"}
+            ]
+        }
+    )
+    assert PROBLEM_WORDS["citation_lacks_term"] in text and '"lightweight walking shoe"' in text
+    assert "M" not in text.replace(PROBLEM_WORDS["citation_lacks_term"], "").replace("remove", "")
+
+
+def test_the_finding_records_the_statement_and_the_cited_claim_for_the_review_by_hand() -> None:
+    """Pre-registered (docs/evaluation-plan.md): every citation_lacks_term finding keeps what is
+    needed to judge it later, whether the claim in fact supports the statement."""
+    (finding,) = gate(SAID_ON_DRAFT_2).findings
+    assert finding.statement == "lightweight walking shoe"
+    assert finding.claim_text == "Lace-up, low top, medium width, almond toe, low arch"
+    assert finding.span == "lightweight walking shoe"
+    from app.core.gates import finding_dict
+
+    stored = finding_dict(finding)
+    assert stored["statement"] and stored["claim_text"] and stored["kind"] == "citation_lacks_term"
+
+
+def test_no_other_finding_kind_carries_a_statement_or_claim_text() -> None:
+    report = gate((("lightweight walking shoe", None),))
+    (f,) = report.findings
+    assert (f.kind, f.statement, f.claim_text) == ("unsourced_claim", None, None)
 
 
 # ── What it does, term by term ───────────────────────────────────────────────────────────────
@@ -198,3 +225,60 @@ async def test_a_revision_that_keeps_the_attribute_and_cites_another_claim_is_bl
     assert out.state["revision_round"] == 2
     assert out.state["validation"]["outcome"] == "pass"
     assert out.state["validation"]["findings"] == []
+
+
+async def test_every_blocked_draft_is_handed_to_the_recorder_with_its_round() -> None:
+    """Blocked and logged (T2), in the graph: the review needs the findings of every round."""
+    from app.agents.copywriter import CopyWriter
+    from app.agents.mock import mock_agents
+    from app.agents.outputs import CreativeOutput
+    from app.orchestrator.adapters import classifier_extractor
+    from tests.llm_fakes import FakeCompletion, prompt_library
+    from tests.test_copywriter import draft, gateway
+    from tests.test_orchestrator_graph import Harness
+    from tests.test_v11_audience_and_run_columns import R10_COPY
+
+    completion = FakeCompletion(
+        model_says(("lightweight walking shoe", "c3")),  # draft 1: mis-cited, blocked
+        draft(headline="Step in", body="Discover a lightweight walking shoe."),
+        model_says(("lightweight walking shoe", "c3")),  # draft 2: the same escape, blocked again
+        draft(headline="Step in", body="A knit upper and a rubber and EVA sole."),
+        model_says(("knit upper", "c1"), ("rubber and EVA sole", "c2")),
+    )
+    gw, _ = gateway(completion)
+    prompts = prompt_library()
+
+    class FirstThenReal:
+        id = "A6"
+
+        def __init__(self) -> None:
+            self.real = CopyWriter(gw, prompts)
+
+        async def run(self, state, ctx):  # type: ignore[no-untyped-def]
+            if state.get("creative") is None:
+                return CreativeOutput(copy=R10_COPY)
+            return await self.real.run(state, ctx)
+
+    from tests.test_orchestrator_graph import Harness as H
+
+    h = H(
+        truth=R10_TRUTH,
+        agents={**mock_agents(), "A6": FirstThenReal()},
+        extractor=classifier_extractor(gw, prompts),
+    )
+    seen: list[tuple[int, list[dict[str, object]]]] = []
+
+    async def record_block(state, report):  # type: ignore[no-untyped-def]
+        from app.core.gates import finding_dict
+
+        seen.append((state.get("revision_round", 0), [finding_dict(f) for f in report.findings]))
+
+    h.deps.record_block = record_block
+    out = await h.start()
+    assert out.state["validation"]["outcome"] == "pass" and out.state["revision_round"] == 2
+    assert [r for r, _ in seen] == [0, 1]  # the two blocked drafts, not the passing third
+    for _, findings in seen:
+        (f,) = findings
+        assert f["kind"] == "citation_lacks_term"
+        assert f["statement"] == "lightweight walking shoe" and f["claim_text"]
+    assert Harness is H

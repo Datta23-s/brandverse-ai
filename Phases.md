@@ -651,9 +651,15 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
   a blocked draft with no copy, not a finished campaign.
 - **V12 and the citation check (owner, 2026-10-30).** `citation_lacks_term` is built, tested against the exact
   draft 2, and recorded as its own threat (`docs/decision-log.md`, `docs/evaluation-plan.md`), with V4 now
-  load-bearing. Costs and limits are written there, not only in the test file: it is lexical, it blocks a
-  correct citation that is merely worded differently, it passes a negated or incidental match, and the
-  reviser is told only the kind of finding. Its false-block rate is unmeasured.
+  load-bearing. Costs and limits are written there, not only in the test file: it is lexical, it can block a
+  correct citation that is merely worded differently, and it passes a negated or incidental match. Its
+  false-block rate is unmeasured and the measurement is pre-registered (`docs/evaluation-plan.md`).
+- **Ruled 2026-10-31 (owner):** temperature 0 for the classifier and A7, as part of the LOCKED call
+  configuration (in the prompt file, under the hash: `claim_extract@v3`, `a7_risk@v2`; `decision-log.md` 2.8);
+  the reviser is shown the span of a `citation_lacks_term` finding too; `citation_lacks_term` stays a block, with
+  its false-block rate pre-registered; gate blocks are now logged to `audit_log` in the graph (they were not).
+  Re-examined: of the two V4 tests that now block, "Lasts all week" (V4's original example) is a TRUE block, the
+  mitigation working; "We think it lasts for years" (a labelled inference) is the one arguably wrong block.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

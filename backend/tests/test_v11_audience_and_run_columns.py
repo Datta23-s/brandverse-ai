@@ -95,7 +95,7 @@ async def test_a_property_cited_to_an_unrelated_claim_is_no_longer_a_pass() -> N
 
 
 def test_v2_is_the_classifier_prompt_and_asks_for_properties_in_noun_phrases() -> None:
-    assert CLAIM_EXTRACT == ("claim_extract", "v2")
+    assert CLAIM_EXTRACT == ("claim_extract", "v3")  # v3 = v2 at temperature 0
     library = prompt_library()
     v2 = library.get(*CLAIM_EXTRACT)
     system = v2.system or ""

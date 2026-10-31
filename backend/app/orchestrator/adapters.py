@@ -22,7 +22,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from app.agents.base import AgentContext
 from app.core.claim_classifier import extract_statements
-from app.core.gates import GateReport, Statement
+from app.core.gates import GateReport, Statement, record_gate_block
 from app.core.truth import ProductTruth, load_product_truth
 from app.errors import ExtractionFailed, FetchError
 from app.llm.gateway import LLMGateway
@@ -38,6 +38,7 @@ from app.orchestrator.deps import (
     LoadContext,
     MemoryResult,
     ProductContext,
+    RecordBlock,
     Research,
     ResearchResult,
     Retrieve,
@@ -85,6 +86,24 @@ def classifier_extractor(gateway: LLMGateway, prompts: PromptLibrary) -> Extract
 
     async def run(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
         return await extract_statements(gateway, prompts, ctx.call_context("A7"), copy, ctx.truth)
+
+    return run
+
+
+def gate_block_recorder(pool: AsyncConnectionPool[AsyncConnection]) -> RecordBlock:
+    """Step 11's blocked reports into audit_log, with the round they came from. Every draft a gate
+    blocks is kept, not only the last: the evaluation counts findings (for example the false-block
+    rate of `citation_lacks_term`, pre-registered) over all of them."""
+
+    async def run(state: RunState, report: GateReport) -> None:
+        await record_gate_block(
+            pool,
+            org_id=UUID(state["org_id"]),
+            product_id=UUID(state["product_id"]),
+            run_id=UUID(state["run_id"]),
+            report=report,
+            extra={"revision_round": state.get("revision_round", 0)},
+        )
 
     return run
 

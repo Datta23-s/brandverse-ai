@@ -196,9 +196,10 @@ def test_v4_a_resolved_citation_that_drops_the_claims_quantity_is_flagged_not_bl
     # so before this the gate passed it. 60 hours is 2.5 days; a week is 7.
     t = ProductTruth(FOOTWEAR, (PLAYBACK,), ())
     report = evaluate({"body": TIDEWELL}, (Statement("Lasts all week.", "60h"),), t, LEXICON, TODAY)
-    # Changed 2026-10-30 (V12): "Lasts all week" shares no term with "Up to 60 hours playback
-    # (at 60% volume)", so the lexical citation check now BLOCKS it as well. That is the check's
-    # known false block on a paraphrase (docs/decision-log.md, V12); the V4 numeric flag reports.
+    # Changed 2026-10-30 (V12). This is a TRUE block, not a false one: "all week" is 7 days and
+    # the claim says up to 60 hours (2.5 days) at 60% volume, so the statement overstates it. The
+    # lexical citation check catches it too, though for a lexical reason that happens to coincide
+    # with the real one (the statement shares no word with the claim). The V4 numeric flag reports.
     assert [(f.kind, f.outcome, f.refs) for f in report.findings] == [
         ("citation_lacks_term", "block", ("60h",)),
         ("unrepeated_quantity", "flag", ("60h",)),
@@ -221,7 +222,11 @@ def test_a_labelled_deduction_dropping_its_claims_quantity_is_flagged_for_both()
     t = ProductTruth(FOOTWEAR, (claim,), ())
     copy = {"body": "We think it lasts for years."}
     statement = Statement("it lasts for years", "d60", labelled_deduction=True)
-    # V12: the paraphrase also fails the lexical citation check ("years" is not in the claim)
+    # V12: this is the one observed block that is arguably WRONG. "We think it lasts for years" is
+    # an inference the copy labels as one, drawn from a claim that is itself a deduction ("About
+    # 300 charge cycles"); the design lets a labelled deduction through as a flag. The lexical check
+    # blocks it only because the inference is worded unlike the claim, which a deduction usually is.
+    # Whether labelled deductions should be exempt is an open ruling (docs/decision-log.md, V12).
     assert kinds(copy, (statement,), t) == [
         "deduced_labelled",
         "citation_lacks_term",

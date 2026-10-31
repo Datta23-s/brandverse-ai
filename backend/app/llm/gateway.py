@@ -147,7 +147,14 @@ class LLMGateway:
         messages = [{"role": "system", "content": prompt.system}] if prompt.system else []
         messages.append({"role": "user", "content": prompt.user})
         first = await self._attempt(
-            schema, messages, tier, prompt.ref, ctx, route_reason, max_output_tokens
+            schema,
+            messages,
+            tier,
+            prompt.ref,
+            ctx,
+            route_reason,
+            max_output_tokens,
+            prompt.temperature,
         )
         parsed, errors = _parse(schema, first.content)
         await self._finish(first, "ok" if parsed is not None else "invalid_output")
@@ -171,6 +178,7 @@ class LLMGateway:
             ctx,
             f"{repair_prompt.ref} after invalid output of {prompt.ref}: {route_reason}",
             max_output_tokens,
+            prompt.temperature,  # the repair of a temperature-0 call is a temperature-0 call
         )
         parsed, errors = _parse(schema, second.content)
         await self._finish(second, "ok" if parsed is not None else "invalid_output")
@@ -223,6 +231,7 @@ class LLMGateway:
         ctx: CallContext,
         route_reason: str,
         max_output_tokens: int,
+        temperature: float | None = None,
     ) -> _Attempt:
         model = self._registry.model(tier)
         if tier is Tier.STRONG:
@@ -267,6 +276,8 @@ class LLMGateway:
                         # No hidden retries: LiteLLM's and the HTTP client's are both off.
                         num_retries=0,
                         max_retries=0,
+                        # Only when the locked prompt sets one; otherwise the provider's default.
+                        **({} if temperature is None else {"temperature": temperature}),
                     )
                     latency_ms = int((self._clock() - started) * 1000)
                     break

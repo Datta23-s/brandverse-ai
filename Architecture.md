@@ -327,6 +327,10 @@ unset: nothing is enabled until the tuning runs are scheduled.
   or missing. A change is a new version file, a new lock line and a caller naming it. Stated
   limitation: someone could edit a file *and* its lock line; that is a deliberate act visible in
   the diff, not an accident.
+- **The call configuration is locked with the text.** A prompt file may set `temperature:` (the
+  classifier and A7 run at 0, `decision-log.md` 2.8); it is a field of the file, so it is under the
+  same hash, and a changed temperature is a new version. The gateway passes it to the provider and to
+  the repair of that prompt; a prompt that sets none is called at the provider's default.
 - **Every `llm_calls` row records `prompt_id` and `prompt_version`** (migration 0014, NOT NULL),
   refusals included. A repair call records the repair template; its `route_reason` names the
   prompt it repaired.

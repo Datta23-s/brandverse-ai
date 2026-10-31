@@ -111,7 +111,7 @@ async def test_the_unbacked_property_is_listed_and_the_run_is_not_blocked() -> N
         1,
     )
     assert (
-        check["prompt"] == "claim_extract@v2" and check["brief_sha256"] and check["claims_sha256"]
+        check["prompt"] == "claim_extract@v3" and check["brief_sha256"] and check["claims_sha256"]
     )
     assert [(c.step, c.run_id) for c in seen] == [(3, h.run_id)]
 
@@ -169,7 +169,7 @@ async def test_the_real_checker_logs_as_admission_at_step_3_on_the_standard_tier
     assert row["tier"] == "standard" and "brief check at admission" in row["route_reason"]
     (seen,) = ledger.contexts
     assert (seen.agent_id, seen.step) == ("ADMISSION", 3)
-    assert row["prompt"].prompt_id == "claim_extract" and row["prompt"].prompt_version == "v2"
+    assert row["prompt"].prompt_id == "claim_extract" and row["prompt"].prompt_version == "v3"
 
 
 # ── 3. The span, for unsourced_claim only ────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ def finding(kind: str, span: str | None = None, message: str = "m") -> dict[str,
 
 
 def test_only_unsourced_claim_reveals_a_span() -> None:
-    assert REVEALS_SPAN == {"unsourced_claim"}
+    assert REVEALS_SPAN == {"unsourced_claim", "citation_lacks_term"}
     assert REVEALS_SPAN <= set(get_args(FindingKind))
 
 
@@ -210,7 +210,10 @@ def test_a_restricted_claim_finding_still_reveals_nothing() -> None:
     assert text == f"- {PROBLEM_WORDS['restricted_claim_in_copy']}"
 
 
-@pytest.mark.parametrize("kind", [k for k in get_args(FindingKind) if k != "unsourced_claim"])
+@pytest.mark.parametrize(
+    "kind",
+    [k for k in get_args(FindingKind) if k not in ("unsourced_claim", "citation_lacks_term")],
+)
 def test_every_other_kind_reveals_nothing_even_with_a_span_set(kind: str) -> None:
     text = problems_text({"findings": [finding(kind, "SOMETHING THE MODEL WROTE")]})
     assert "SOMETHING THE MODEL WROTE" not in text

@@ -728,8 +728,9 @@ no rate): the classifier reported the attribute with no claim in four judgments 
 claim in a fifth (V12); with A1 v2 and the brief check in place, A1's positioning and A6's first draft did not
 contain the word and the classifier's eight statements were all cited to claims that mention them. *Not
 shown:* v2's recall on other attributes (unmeasured), any rate across the 30 requests (the precompute is not
-yet run), and that the classifier is stable (it sets no temperature; the same call gave 48 and 28 output
-tokens on near-identical input). A model that extracts nothing passes the copy as before.
+yet run), and that the classifier is stable (it set no temperature until 2026-10-31; the same call gave 48 and 28 output
+tokens on near-identical input; the classifier and A7 now run at temperature 0, part of the locked call
+configuration, `docs/decision-log.md` 2.8). A model that extracts nothing passes the copy as before.
 
 **V12 — Under a revision loop an unsourced-claim finding is satisfiable by citing any active claim (recorded
 2026-10-30; found by a real run).** The gate verifies that a citation RESOLVES, not that the claim ENTAILS the
@@ -746,13 +747,16 @@ its category and its name, are removed); a short statement (up to three terms, t
 needs EVERY term in the claim, a longer one needs at least ONE in common. On the exact draft 2 it blocks the
 one citation and passes the other eight statements. *It is a word-overlap test, not entailment, and it does not
 catch:* (a) paraphrase and synonymy, in both directions: a claim saying "light" does not contain "lightweight",
-so a correct citation can be BLOCKED; two existing V4 tests, including V4's own original example ("Lasts all
-week" cited to "Up to 60 hours playback"), now block as well as flag, and the false-block rate on real copy is
-unmeasured; (b) a property word the claim negates ("not lightweight") or uses in another sense, which passes;
+so a correct citation can be BLOCKED. Two existing V4 tests now block, and they differ: "Lasts all week" cited to
+"Up to 60 hours playback (at 60% volume)" is V4's original example and a TRUE block (7 days against 2.5; it
+overstates the claim), caught here for a lexical reason that coincides with the real one, so the mitigation is
+working; "We think it lasts for years", a labelled inference from the deduced claim "About 300 charge cycles",
+is the one observed block that is arguably wrong, because the design lets a labelled deduction through as a flag.
+Whether labelled deductions should be exempt is an open ruling. The false-block rate on real copy is unmeasured;
+its measurement is pre-registered below; (b) a property word the claim negates ("not lightweight") or uses in another sense, which passes;
 (c) in a long statement a single shared incidental word is enough, so a mis-cited sentence that also names a
-real feature passes; (d) anything the extractor never extracts (V11); (e) the reviser is told only the KIND
-of this finding (a finding kind reveals nothing by default), so where it blocks the loop cannot say what to
-remove. *Still refused:* a model-based entailment check, on the highest-volume path against a 20-a-day tier.
+real feature passes; (d) anything the extractor never extracts (V11); and (e) since 2026-10-31 the reviser is shown the span of this finding (the span only, as for `unsourced_claim`),
+so a re-citation to another claim fails unless that claim's own text contains the term. *Still refused:* a model-based entailment check, on the highest-volume path against a 20-a-day tier.
 *Untried live:* whether a revision under this check repairs the copy: the last live run needed none.
 
 ### A defect found and fixed: a throttled search was indistinguishable from no evidence — 2026-10-26
@@ -1330,6 +1334,33 @@ flagging should ever become blocking; blocking is not adopted, because it would 
 whose brief mentions an attribute the claims lack, and how many that is was not known. It is a model
 extraction, not a detector: its recall is unmeasured, and a brief that carries an attribute the
 model does not extract is recorded as clean.
+
+### The false-block rate of `citation_lacks_term` is measured after the evaluation — PRE-REGISTERED 2026-10-31
+
+**The decision, made in advance.** `citation_lacks_term` (V12) **BLOCKS**, for the whole evaluation. It is not
+downgraded to a flag on an unmeasured rate, which would leave V12 open on a guess; and neither the check nor its
+constants (`app/core/citation_terms.py`: the function-word list, `SHORT_STATEMENT_TERMS = 3`) change during the
+evaluation. If the rate turns out high, that is reported as a limitation of a decision taken before the data, not
+repaired afterwards.
+
+**What is recorded.** Every `citation_lacks_term` finding keeps the STATEMENT and the TEXT OF THE CLAIM it cited
+(and the claim's id), in the finding itself and, for every blocked draft of every round, in `audit_log`
+(`output.blocked`, details: findings and `revision_round`). Blocked drafts are logged in the graph from
+2026-10-31; before that a step-11 block lived only in the run's state.
+
+**The review.** After the evaluation, the distinct (statement, claim text) pairs are collected over all runs and
+arms. If there are 100 or fewer, all are reviewed; otherwise a simple random sample of 100 pairs is drawn with the
+seed 20261031. A person, not an arm, reviews each pair blind to arm, request and round, asking one question:
+*does the cited claim, as written, support the statement?* Labels: **true block** (it does not), **false block**
+(it does, and only the wording differs), **unclear**. Statements the copy labels as an inference (a labelled
+deduction) are a separate stratum, reported on their own, because whether they should be exempt is an open ruling.
+
+**What is reported.** The number of findings per arm; the counts of each label; the false-block rate, false /
+(true + false), with a 95% Wilson interval, and the bounds if every "unclear" were counted each way.
+
+**What this cannot show.** It reads only the pairs the check BLOCKED. It does not measure the check's misses (a
+mis-citation that shares a word and passes, a negated match, anything the extractor never extracted: V11), so a low
+false-block rate is not evidence that the check is good, only that it was not often wrong when it fired.
 
 ### How long the recording phase takes — MEASUREMENT RUNNING, figure not yet available (2026-10-26)
 

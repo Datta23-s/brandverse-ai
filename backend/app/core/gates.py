@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 from uuid import UUID
 
 import yaml
@@ -205,6 +205,10 @@ class Finding:
     # (copywriter.REVEALS_SPAN). Set only where a finding names a statement that is not a
     # restricted phrase; every other kind leaves it None.
     span: str | None = None
+    # For `citation_lacks_term` only: the statement and the text of the claim it cited, so the
+    # false-block rate can be counted by hand afterwards (pre-registered, docs/evaluation-plan.md).
+    statement: str | None = None
+    claim_text: str | None = None
 
     @property
     def gate(self) -> GateName:
@@ -266,6 +270,9 @@ def _term_check(s: Statement, claim: Claim, neutral: Collection[str]) -> list[Fi
             f"the cited claim does not mention {', '.join(repr(t) for t in lacking)}: "
             f"{s.text[:80]!r}",
             (claim.id,),
+            span=" ".join(s.text.split())[:120],
+            statement=s.text,
+            claim_text=claim.text,
         )
     ]
 
@@ -530,6 +537,20 @@ def voice_scoring_text(copy: Mapping[str, str], truth: ProductTruth, on: date) -
     return verbatim_form(text)
 
 
+def finding_dict(f: Finding) -> dict[str, Any]:
+    """A finding as it is stored: in the run's state and in audit_log."""
+    return {
+        "kind": f.kind,
+        "gate": f.gate,
+        "outcome": f.outcome,
+        "message": f.message,
+        "refs": list(f.refs),
+        "span": f.span,
+        "statement": f.statement,
+        "claim_text": f.claim_text,
+    }
+
+
 async def record_gate_block(
     pool: AsyncConnectionPool[AsyncConnection],
     *,
@@ -537,6 +558,7 @@ async def record_gate_block(
     product_id: UUID,
     run_id: UUID | None,
     report: GateReport,
+    extra: Mapping[str, Any] | None = None,
 ) -> None:
     """Append a blocked report to audit_log (actor: the validation engine), and log it."""
     details = {
@@ -544,12 +566,9 @@ async def record_gate_block(
         "sector": report.sector,
         "superlatives_version": report.superlatives_version,
         "checked_on": report.checked_on.isoformat(),
-        "findings": [
-            {"kind": f.kind, "gate": f.gate, "outcome": f.outcome, "message": f.message,
-             "refs": list(f.refs)}
-            for f in report.findings
-        ],
-    }  # fmt: skip
+        "findings": [finding_dict(f) for f in report.findings],
+        **(extra or {}),
+    }
     log.warning(
         "output blocked by the validation engine",
         extra={

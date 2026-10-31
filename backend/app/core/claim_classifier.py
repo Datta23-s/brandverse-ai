@@ -49,7 +49,7 @@ from app.llm.registry import Tier
 
 log = logging.getLogger(__name__)
 
-CLAIM_EXTRACT = ("claim_extract", "v2")
+CLAIM_EXTRACT = ("claim_extract", "v3")
 
 
 class ExtractedStatement(BaseModel):

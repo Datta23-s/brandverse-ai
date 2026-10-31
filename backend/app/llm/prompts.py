@@ -51,6 +51,8 @@ class RenderedPrompt:
     ref: PromptRef
     system: str | None
     user: str
+    # Part of the locked unit (it is in the hash-locked file). None: the provider's default.
+    temperature: float | None = None
 
 
 class PromptTemplate(BaseModel):
@@ -62,6 +64,10 @@ class PromptTemplate(BaseModel):
     variables: tuple[str, ...]
     system: str | None
     user: str = Field(min_length=1)
+    # The sampling temperature this prompt is called at, or None for the provider's default. It is
+    # part of the file, so part of the hash: a prompt called at another temperature is another
+    # version.
+    temperature: float | None = Field(default=None, ge=0, le=2)
 
     @model_validator(mode="after")
     def _placeholders_are_the_declared_variables(self) -> "PromptTemplate":
@@ -88,7 +94,9 @@ class PromptTemplate(BaseModel):
         if set(values) != set(self.variables):
             raise ValueError(f"{self.ref}: takes {sorted(self.variables)}, given {sorted(values)}")
         system = Template(self.system).substitute(values) if self.system is not None else None
-        return RenderedPrompt(self.ref, system, Template(self.user).substitute(values))
+        return RenderedPrompt(
+            self.ref, system, Template(self.user).substitute(values), self.temperature
+        )
 
 
 def file_sha256(path: Path) -> str:
