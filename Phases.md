@@ -626,10 +626,34 @@ Chunk B stays open on those decisions. All 10 approved calls are used.
   citation once. `LLMGateway` sets no temperature, so the provider default applies to the classifier and to
   every other call. Proposed, not made: temperature 0 for the classifier (and A7), then re-measure agreement on
   the same copy. Until then step 11's verdict on a borderline statement is one draw.
-- **Run Y (the full fix) did not complete.** It made its one precompute call (the brief check, 648 in / 48 out)
-  and was stopped by the system for low memory before reporting; its output was lost with the process. So what
-  `a1_positioning@v2` does with the brief, and what the brief check flags on R10, are still unobserved. Rerunning
-  Y costs 4 calls if the first draft is clean and 6 with one revision, which is all that remains.
+- **Run Y, rerun (4 calls), 2026-10-31: what A1 v2, the brief check and the citation check each did, on one request.**
+  The first Y was stopped by the system for low memory after one call; its output was lost. The rerun
+  completed to approval with no revision.
+  - *Brief check* (made once, handed to the run as the request's record; admission made no call): flagged
+    "lightweight walking shoe" as unbacked, `backed` 0. ONE request: it gives no rate across the 30.
+  - *A1 `a1_positioning@v2`:* the positioning ("For office workers walking to and from transit, these low-top
+    walking shoes feature a knit upper, lace-up design, and a rubber and EVA sole.") does not contain the word,
+    though the brief does. One sample.
+  - *A6's first draft*, with the brief still saying "lightweight": no "lightweight" in it. One sample.
+  - *Classifier `claim_extract@v2` and the citation check:* eight statements, each cited to a claim that
+    mentions it ("low-top walking shoes" and "lace-up design" to the lace-up claim); `citation_lacks_term`
+    raised nothing, so it did not block anything legitimate here (8 of 8). The gate passed the draft. It had
+    nothing to catch: no mis-citation occurred, so its effect on a real model's mis-citation is untried.
+  - Calls: 649/28, 634/208, 751/94, 711/458 tokens, $0.0028 at list price. **10 of the 12 approved calls are
+    used; 2 remain.** No revision round ran, so a revision under the citation check is untried live.
+- **The 503 on the revision call is forced-failure evidence, unplanned.** In run X's first attempt a real
+  provider returned `503 UNAVAILABLE` ("high demand") on A6's revision call. The graph handled it as designed:
+  A6 was recorded as failed (`LLMCallFailed`, step 10) in the run's errors, the run did not abort, creative was
+  absent, step 11's gate blocked it with `no_creative`, and the run parked at approval. That is the "one failing
+  agent does not abort the run" criterion on a real provider failure. It is partial evidence for the exit
+  criterion "a forced failure yields a campaign with a declared gap": that run never ended, so the end-of-run
+  `declared_gaps` row was not written in it (the database tests cover that write); and what the approver saw was
+  a blocked draft with no copy, not a finished campaign.
+- **V12 and the citation check (owner, 2026-10-30).** `citation_lacks_term` is built, tested against the exact
+  draft 2, and recorded as its own threat (`docs/decision-log.md`, `docs/evaluation-plan.md`), with V4 now
+  load-bearing. Costs and limits are written there, not only in the test file: it is lexical, it blocks a
+  correct citation that is merely worded differently, it passes a negated or incidental match, and the
+  reviser is told only the kind of finding. Its false-block rate is unmeasured.
 
 **Chunk C (2026-10-29): `C` and `E` enter the M-score.** `app/memory/recall.py` is the first caller of
 `score()`; migration 0037 (`memory_item_personas`, append-only, backend-written) stores the persona of each

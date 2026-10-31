@@ -629,6 +629,11 @@ words: "Lasts 60 hours." citing "Up to 60 hours playback" repeats the number and
 person, not a finding: flags are counted per arm and reported as flags, never as a count of
 overstatements.
 
+*Status changed 2026-10-30: V4 is LOAD-BEARING.* It was a stated limitation, true by construction. A real run
+(V12 below) showed the revision loop's apparent success depends on it: a statement flagged for citing no claim
+was made to pass by citing another, and nothing in the gate could tell. A lexical check now blocks the
+unrelated-citation case (`citation_lacks_term`, V12); it is not entailment, and V4 stays open.
+
 *Considered and rejected: a model-based entailment check.* Asking a model, per statement, whether
 the cited claim entails the statement would cover the non-numeric cases. It was rejected for three
 reasons: it adds a call for every statement, on the highest-volume path in the system; with the
@@ -705,6 +710,50 @@ hashed manifest line in the repository (so what was captured is checkable, not r
 certificate records `same_disk: true`; and the condition closes the day an external drive is attached and the
 same tool is run. The retention condition of the zero-retention exception (`Architecture.md` section 6) is
 therefore PARTIALLY MET.
+
+**V11 — A claim-worthy assertion that is never extracted is judged by no gate (recorded 2026-10-30;
+found by a real run).** Request R10's brief says "lightweight walking shoe". The attribute travelled brief,
+A1's positioning, A6's headline ("Make your commute easier with a lightweight walking shoe") and no claim
+backs it. The claim classifier extracted four statements and none for it: the attribute sits inside a noun
+phrase, not a sentence-level assertion. So no gate judged it and the copy passed. This is not V4 (a statement
+judged and judged wrongly); an unexamined statement is worse. A leak in the project's own prompt let it in:
+`a1_positioning@v1` said the positioning was "built only from the listed claims and the brief", which
+permitted a property that only the brief carried. *Mitigations (owner, 2026-10-30).* `a1_positioning@v2` reads
+the brief for the objective and the audience and forbids taking product properties from it;
+`claim_extract@v2` asks for property assertions inside noun phrases (a model instruction, deliberately no
+word list: a deterministic adjective lexicon would be a brittle detector, T5); the reviser is told the
+offending span for `unsourced_claim` findings only; and the brief itself is checked once per request
+(below, "The brief check is computed once per request"). *What the live runs showed* (R10, one request, so
+no rate): the classifier reported the attribute with no claim in four judgments and cited it to an unrelated
+claim in a fifth (V12); with A1 v2 and the brief check in place, A1's positioning and A6's first draft did not
+contain the word and the classifier's eight statements were all cited to claims that mention them. *Not
+shown:* v2's recall on other attributes (unmeasured), any rate across the 30 requests (the precompute is not
+yet run), and that the classifier is stable (it sets no temperature; the same call gave 48 and 28 output
+tokens on near-identical input). A model that extracts nothing passes the copy as before.
+
+**V12 — Under a revision loop an unsourced-claim finding is satisfiable by citing any active claim (recorded
+2026-10-30; found by a real run).** The gate verifies that a citation RESOLVES, not that the claim ENTAILS the
+statement (V4). Under a revision loop that is exploitable without anyone intending it: a statement flagged
+for citing no claim can be made to pass by citing any active claim. The model is not deceiving anyone; it is
+optimising against the check it was given. *The instance* (R10, run X, 2026-10-30): "lightweight walking
+shoe" was reported with no claim on draft 1; told the span, the reviser kept it in draft 2; the classifier then
+cited it to "Lace-up, low top, medium width, almond toe, low arch"; the gate passed the draft with the
+unbacked attribute in it. *Consequence:* V4 is no longer only a stated limitation; the loop's apparent success
+depends on it. *Mitigation, partial and mechanical* (`backend/app/core/citation_terms.py`, finding
+`citation_lacks_term`, a block; no model call): the cited claim's own text must contain what the statement
+asserts. The statement is reduced to its content terms (function words, and the words that name the product,
+its category and its name, are removed); a short statement (up to three terms, the shape of a property span)
+needs EVERY term in the claim, a longer one needs at least ONE in common. On the exact draft 2 it blocks the
+one citation and passes the other eight statements. *It is a word-overlap test, not entailment, and it does not
+catch:* (a) paraphrase and synonymy, in both directions: a claim saying "light" does not contain "lightweight",
+so a correct citation can be BLOCKED; two existing V4 tests, including V4's own original example ("Lasts all
+week" cited to "Up to 60 hours playback"), now block as well as flag, and the false-block rate on real copy is
+unmeasured; (b) a property word the claim negates ("not lightweight") or uses in another sense, which passes;
+(c) in a long statement a single shared incidental word is enough, so a mis-cited sentence that also names a
+real feature passes; (d) anything the extractor never extracts (V11); (e) the reviser is told only the KIND
+of this finding (a finding kind reveals nothing by default), so where it blocks the loop cannot say what to
+remove. *Still refused:* a model-based entailment check, on the highest-volume path against a 20-a-day tier.
+*Untried live:* whether a revision under this check repairs the copy: the last live run needed none.
 
 ### A defect found and fixed: a throttled search was indistinguishable from no evidence — 2026-10-26
 
@@ -1271,6 +1320,10 @@ hashes of the brief and the claims, the prompt and the model); each run's own co
 `runs.brief_check` (migration 0038), written by the backend with the terminal status, so the
 evaluation reads how many briefs carried unbacked properties, and which, from the run rows and from
 the one frozen file, never from checkpointed state.
+
+**Evidence that the variation is real.** The same brief-check call on near-identical input (648 and 649
+tokens in) produced 48 output tokens once and 28 another time (2026-10-30), and the classifier sets no
+temperature. Two classifications of one brief are not guaranteed to agree; one record per request is.
 
 **What it decides, and does not.** The number of briefs with unbacked properties decides whether
 flagging should ever become blocking; blocking is not adopted, because it would refuse every request
