@@ -823,6 +823,12 @@ as N1/N2. Two defects found by the first attempt and fixed: the script ran on Wi
 documented selector-loop rule), and a worker sharing the API's loop starves its pool while the encoder loads (hence the separate process).
 **Chunk F still to do:** the killed-worker run and the forced-failure run on REAL models; per-step latency with and without rate-limit
 waits (N1, N2) over more than one run; `s` on the tuning organisation (needs the STRONG tier: asking first). Budget 19 of 60 spent.
+*2026-11-02 (owner rulings, built and pushed as e798802; CI green; 0044 applied live, posture 141 of 141):* strong tier approved for
+SIX calls, tuning organisation only, **but not yet made**: the billing check (`Architecture.md` section 4.4) needs the owner to confirm
+that no billing account is linked to the Cloud project. Built first, in the order given: `tuning_org_id` split from
+`llm_strong_tier_org_id`; a strong-tier cap enforced in `CallLedger.admit` and tested to the limit; the latency decomposition
+(`runs.timings`, 0044) with a signed residual; the LR figure ruled (2.12); the budget arithmetic (2.13); V22; the selector-loop
+assertion and the Edit-only hook (Rules.md 1.5 and 1.6). **No latency samples until the decomposition is read on a real run.**
 
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
 (`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One
