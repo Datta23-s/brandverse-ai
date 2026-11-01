@@ -3,7 +3,8 @@
 Same class as 0029 and 0030 for memory_items. `campaigns.status` and `approved_by` and
 `approvals.outcome` decide what counts as approved; the API roles held Supabase's default
 table-level INSERT and UPDATE on them since 0007 and 0009, blocked only by the absence of a
-row-level-security policy. Now the grant is gone, so a policy added in error would still admit nothing.
+row-level-security policy. Now the grant is gone, so a policy added in error would still admit
+nothing.
 """
 
 import pytest
