@@ -20,7 +20,7 @@ from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 import app.orchestrator  # noqa: F401  (sets the strict-msgpack switch before LangGraph is used)
-from app.agents.base import Agent
+from app.agents.base import Agent, EvidenceReader
 from app.agents.copywriter import CopyWriter
 from app.agents.market import MarketAnalyst
 from app.agents.mock import lexical_extractor, mock_agents
@@ -36,18 +36,24 @@ from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
 from app.llm.registry import registry_from
 from app.memory.embeddings import HashingEncoder, default_encoder
+from app.memory.scoring import load_scoring
 from app.orchestrator.adapters import (
+    PageEvidence,
     brief_checker,
     classifier_extractor,
+    driver_research,
     gate_block_recorder,
+    memory_recaller,
     pool_context_loader,
     writeback_step,
 )
 from app.orchestrator.checkpoint import open_checkpointer
-from app.orchestrator.deps import EventSink, GraphDeps, ResearchResult, no_memory
+from app.orchestrator.deps import EventSink, GraphDeps, Research, ResearchResult, no_memory
 from app.orchestrator.graph import build_graph, build_regate
 from app.orchestrator.runner import Pipeline, PoolRunLedger
 from app.orchestrator.state import Depth, RunState
+from app.research.extraction import Extractor, trafilatura_extract
+from app.research.snapshot import SnapshotPages, SnapshotSearch, SnapshotStore
 
 
 class LiveResearchNotEnabled(BrandverseError):
@@ -127,17 +133,45 @@ async def open_pipeline(
             "A6": CopyWriter(gateway, prompts),
             "A7": RiskReader(gateway, prompts),
         }
+        # The local encoder (loaded here, 37 s): recall scores with it and items written to memory
+        # carry its real vectors.
+        encoder = default_encoder()
+        scoring = load_scoring()
+        research: Research = _refuse_live_research
+        evidence: EvidenceReader | None = None
+        if settings.research_snapshot_dir is not None:
+            # REPLAY: the evaluation snapshot answers every search and page, so a real run can
+            # research without a single live request (it cannot touch the recording).
+            store = SnapshotStore(settings.research_snapshot_dir)
+            cfg = scoring.research
+            extractor = Extractor(
+                trafilatura_extract,
+                min_chars=cfg.extraction_min_chars,
+                max_chars=cfg.extraction_max_chars,
+            )
+            pages = SnapshotPages(store)
+            research = driver_research(
+                SnapshotSearch(store, cfg.declared_engines),
+                pages,
+                extractor,
+                scoring.source,
+                queries_per_facet=cfg.planner_queries_per_facet,
+                locale=cfg.planner_locale,
+                max_pages_per_query=cfg.max_pages_per_query,
+                today=today,
+            )
+            evidence = PageEvidence(pages, extractor)
         deps = GraphDeps(
             events=events,
             load_context=pool_context_loader(pool),
-            retrieve=no_memory,
-            research=_refuse_live_research,
+            retrieve=memory_recaller(pool, encoder, scoring, today=today),
+            research=research,
             agents=agents,
-            # The local encoder (loaded here, 37 s): items written to memory carry its real vectors.
-            write_memory=writeback_step(pool, default_encoder()),
+            write_memory=writeback_step(pool, encoder),
             extract_statements=classifier_extractor(gateway, prompts),
             lexicon=load_superlatives("v1"),
             today=today,
+            evidence=evidence,
             check_brief=brief_checker(gateway, prompts),
             record_block=gate_block_recorder(pool),
             max_revisions=settings.max_revision_rounds,

@@ -258,12 +258,13 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-31 03:43 | `scripts/chunk_b_revision_run.py --mode y --cap 6` (rerun; completed) | local `brandverse_chunk_b` | 0 | 4 | 0 |
 | 2026-10-31 03:5x | `scripts/precompute_brief_checks.py --requests all --max-calls 30` (approved: 30 standard) | local `brandverse_chunk_b` | 0 | 30 | 0 |
 | 2026-10-31 04:19 | `scripts/chunk_b_revision_run.py --mode z --cap 6` (approved: 6 standard; 2 used) | local `brandverse_chunk_b` | 0 | 2 | 0 |
-| **Total** | | | **4** | **57** | **10** |
+| 2026-11-01 | `scripts/chunk_f_first_campaign.py --max-calls 10` (chunk F, the first real campaign: R10 at D1, research REPLAYED from the snapshot, through `POST /api/v1/runs`, the real worker and an approver's `POST .../approve`; 7 of the 10 capped, all `ok`) | local `brandverse_chunk_f` | 0 | 7 | 0 |
+| **Total** | | | **4** | **64** | **10** |
 
 **Standing budget (owner, 2026-10-31): 60 Standard-tier calls in the tuning organisation for Phase 6 chunks D, E and F;
 no strong tier without asking; the running tally is reported in every report.** Counted against the 60 so far: the V11
-re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2) = **12 of 60 spent,
-48 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
+re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) = **19 of 60 spent,
+41 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
 before the standing budget (chunk B's earlier live runs: the rows through the first full D1 run and its first forced
 revision). The 4 unused calls of z's approval are folded in with no separate accounting. The table counts calls made.
 

@@ -490,9 +490,9 @@ recording is finished or deliberately paused, and the owner rules on the pause. 
 organisation.
 
 **Standing budget for live model calls (owner, 2026-10-31).** 60 Standard-tier calls in the tuning organisation for
-chunks D, E and F; no strong tier without asking; the running tally is reported in every report. *Spent: 12 of the 60*
+chunks D, E and F; no strong tier without asking; the running tally is reported in every report. *Spent: 19 of the 60 (12, plus 7 on chunk F's first real campaign, 2026-11-01)*
 (10 on the forced-revision re-runs X and Y of the V11 follow-up, 2 on the revision test z; the call-by-call lines are in
-`Architecture.md` section 4). *Remaining: 48.* The 30 calls of the brief-check precompute were approved separately and
+`Architecture.md` section 4). *Remaining: 41.* The 30 calls of the brief-check precompute were approved separately and
 are NOT counted against the 60; the calls made before the standing budget (chunk B's earlier live runs, 15 Standard
 calls up to and including the first full D1 run and its first forced revision) are not counted either: 15 + 12 + 30 = 57, the tally's total. The 4 calls of
 z's approval that went unused are folded into the 60 with no separate accounting.
@@ -808,6 +808,21 @@ identical through 0043; live posture 141 of 141; chain heads read (no chained ro
 recording, live model calls do not). The tuning organisation is created in a throwaway local database by
 `scripts/tuning_org.py` (owner + editor + approver); `LLM_STRONG_TIER_ORG_ID` is NOT set (strong tier needs asking). *Standing call budget:* 12 of 60 Standard calls spent, 48 remaining,
 none this chunk; no strong tier.
+
+**Chunk F, first real campaign (2026-11-01): PRODUCED AND APPROVED through the product's own path** (`scripts/chunk_f_first_campaign.py`).
+R10 at D1, research REPLAYED from the evaluation snapshot (zero live requests), real models, STANDARD tier only: `POST /api/v1/runs`
+(audience carried) -> the real worker (own process, local encoder, `pipeline_factory` real composition + new setting
+`research_snapshot_dir`) -> parked -> `GET .../campaign` -> an approver's `POST .../approve` -> continuation -> write-back. **7 Standard
+calls, all `ok`, none refused, no rate-limit wait** (ADMISSION 651/28, A1 636/325, A3 712/236, A2 3919/852, A6 779/100, A7 719/444 then
+462/9; $0.0073 list price). Gates `pass` on the first draft; no declared gaps; the advisory is not in the campaign view; the decision row is
+chained; write-back stored 5 or more `insight`/`competitor` items, each with `source_score` 0.7761 and confidence 0.60 (first real
+write-back through the proposer: V13's path has now run end to end on real output). **Observed, not concluded:** `runs.latency_ms` is
+297 s (the 2.3 s approval wait already removed) against about 11 s of model latency in total, so on this machine the replayed research
+and the encoder, not the model calls, dominate the wall time of one D1 run; one sample, to be broken down per step before it is quoted
+as N1/N2. Two defects found by the first attempt and fixed: the script ran on Windows' Proactor loop (psycopg refuses it; the
+documented selector-loop rule), and a worker sharing the API's loop starves its pool while the encoder loads (hence the separate process).
+**Chunk F still to do:** the killed-worker run and the forced-failure run on REAL models; per-step latency with and without rate-limit
+waits (N1, N2) over more than one run; `s` on the tuning organisation (needs the STRONG tier: asking first). Budget 19 of 60 spent.
 
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
 (`scripts/chunk_b_live.py`, `scripts/chunk_b_a7_probe.py`; tally in `Architecture.md` section 4). One

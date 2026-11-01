@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     pipeline_agents: Literal["real", "mock"] = "real"
     # Regeneration rounds an approver may ask for after the first draft (Phases.md chunk B).
     max_revision_rounds: int = Field(default=2, ge=0, le=5)
+    # Where a REAL run's research step reads from. Set: the evaluation snapshot, REPLAYED (zero
+    # live searches or fetches, so it cannot touch the recording; owner, 2026-11-01). Unset: a real
+    # run at D1 or D2 refuses to search, because live research waits for the recording to finish.
+    research_snapshot_dir: Path | None = None
 
     # Supabase Auth. Access tokens are ES256 JWTs verified locally against the project's JWKS
     # (Architecture.md §11, "Authentication"); the API never asks Supabase per request.
