@@ -612,6 +612,14 @@ undefined if a rater scores every campaign the same).
    "adaptive agent selection" as a limitation. Model routing is a limitation: the Cheap tier is unused, the strong model is close to Standard, so a routing effect is
    unmeasurable here whatever is built.
 
+### 2.20 The freeze-gate check on R FAILED its registered prediction (1 November 2026): Phase 7 build stopped
+Registered before the run: campaign 1 -> D2, campaign 2 -> D1, campaign 3 -> D0. Produced (brand B04, real memory, real recall, no model call):
+**D2, D1, D1**. Campaigns 2 and 3 have `R` 0.449 and 0.453: the same decision. Cause: `N` does not discriminate (0.21, 0.22), and no recalled item reaches `M >= 0.80` (best 0.715
+and 0.771), so `U` is 1 for both even for the same product; the reuse bands are provisional and are calibrated in chunk G, after Phase 7. By the owner's rule ("if the three campaigns
+do not separate, say so and stop; change `R` before building on it"), **the Phase 7 build is not started** and the options are in `docs/phase7-first-decision.md`.
+Limit of the check: ONE brand has real memory; the other nine need their campaign 1 run (about 63 Standard calls) and have not been, so whether the failure is general is not shown,
+though nothing in the mechanism suggests brand B04 is special.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's

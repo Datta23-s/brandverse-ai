@@ -1,0 +1,115 @@
+{
+ "round": "2026-11-08 rater agreement (pre-Phase-7 system, depth D0, A2 skipped)",
+ "campaigns": [
+  {
+   "id": "P01",
+   "run_id": "c44f53a9-d0d3-4bac-827e-c3e3f10b04b7",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Streamline your routine with a reliable aluminium body featuring a 3 litre capacity. Designed with an induction-compatible base and a safety valve with pressure release, this appliance supports your cooking goals. Enjoy peace of mind with a 5 year warranty on the body.",
+    "headline": "Discover the 3 litre pressure cooker for your kitchen",
+    "call_to_action": "Explore the 3 litre pressure cooker today"
+   }
+  },
+  {
+   "id": "P02",
+   "run_id": "d906bb8f-5961-4aec-9548-cb592510bfaf",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 1,
+   "copy": {
+    "body": "Wind down your evening with a blend made with ginger, turmeric and tulsi. Each box contains 25 tea bags. You will enjoy a tea that is caffeine-free and has no added sugar. For environmentally conscious tea lovers, the tea bags are compostable.",
+    "headline": "Discover a thoughtful blend of ginger, turmeric, and tulsi",
+    "call_to_action": "Explore the blend"
+   }
+  },
+  {
+   "id": "P03",
+   "run_id": "962c2363-7ce5-4f9d-beb1-63f9cfe0475e",
+   "gate_outcome": "flag",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Bring functionality to your room with a study table designed for your everyday needs. Featuring a sheesham wood top measuring 120 cm by 60 cm, it holds up to 25 kg. When you need to clear the room, it folds down to 12 cm thick.",
+    "headline": "Maximize your space with a practical study table",
+    "call_to_action": "Discover the folding table today"
+   }
+  },
+  {
+   "id": "P04",
+   "run_id": "8b683cb8-f5a9-4306-bfaa-fdf6f7b47af9",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Choose our fragrance-free lip balm made with shea butter and beeswax. Each stick is 4.5 g.",
+    "headline": "Winter protection for your lips",
+    "call_to_action": "Discover more"
+   }
+  },
+  {
+   "id": "P05",
+   "run_id": "672a6113-78ec-4585-8506-2f2df9fdf735",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Discover a reliable power bank built with a 20000 mAh capacity and a 22.5 W maximum output to keep your devices charged while you travel. It features two USB-C ports and one USB-A port for versatile connectivity. Weighing 420 g, this device is backed by a 1 year warranty.",
+    "headline": "Power your daily commute with confidence",
+    "call_to_action": "Explore the power bank today"
+   }
+  },
+  {
+   "id": "P06",
+   "run_id": "88f6f413-3e89-4715-a937-542d487eccd9",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 1,
+   "copy": {
+    "body": "Prepare for wet days with footwear designed for your daily routine. Featuring a closed-cell EVA construction, these clogs are washable with water for easy maintenance. Find your fit in sizes 6 to 11 and choose your look from three available colours.",
+    "headline": "Step into the season with practical monsoon footwear",
+    "call_to_action": "Discover your pair today"
+   }
+  },
+  {
+   "id": "P07",
+   "run_id": "b813156e-c595-4f35-9bbb-0232dd23da19",
+   "gate_outcome": "flag",
+   "system_revision_rounds": 1,
+   "copy": {
+    "body": "Bring efficiency to your daily routine with an appliance designed to fit your lifestyle. This electric kettle features a 1500 W heating element and a 1.5 litre capacity. Enjoy the convenience of a stainless steel inner body alongside automatic shut-off once the water boils. Peace of mind comes included with a 2 year warranty.",
+    "headline": "Discover the Electric Kettle",
+    "call_to_action": "Explore the kettle today"
+   }
+  },
+  {
+   "id": "P08",
+   "run_id": "a0e1a43f-caec-4d4a-8f71-fe6b723ad7f0",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Prepare for your journey with a duffel bag featuring a 30 litre capacity and polyester ripstop fabric. Weighing 900 g, it includes a padded shoulder strap for carrying comfort. When you need to pack it away, it conveniently folds into its own pouch.",
+    "headline": "Discover the convenient duffel bag for your next trip",
+    "call_to_action": "Explore the duffel bag today"
+   }
+  },
+  {
+   "id": "P09",
+   "run_id": "26c6a0fa-793e-4733-b1a7-e43edc778cf9",
+   "gate_outcome": "flag",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Streamline your morning routine while keeping your pantry stocked. Each 500 ml bottle makes about 25 cups and features a six months shelf life unopened. Remember to refrigerate after opening.",
+    "headline": "Enjoy a blend that contains ginger, cardamom and black tea",
+    "call_to_action": "Stock up today"
+   }
+  },
+  {
+   "id": "P10",
+   "run_id": "bb3ff73f-5990-4508-ace4-96acc8638839",
+   "gate_outcome": "pass",
+   "system_revision_rounds": 0,
+   "copy": {
+    "body": "Bring hydration wherever your day takes you with a double-wall stainless steel design. This jug features a 2 litre capacity to support your daily routine. Enjoy convenience with a body that is dishwasher safe, and a lid that is BPA-free. Based on manufacturer tests, it keeps drinks cold for 12 hours.",
+    "headline": "Discover the Insulated Jug",
+    "call_to_action": "Explore the insulated jug today"
+   }
+  }
+ ]
+}

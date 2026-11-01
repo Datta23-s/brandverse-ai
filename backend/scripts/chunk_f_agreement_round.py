@@ -41,7 +41,6 @@ from pydantic import SecretStr
 
 from app.api.main import create_app
 from app.core.config import get_settings
-from app.evaluation.llm_attempts import llm_calls_by_attempt, totals
 from scripts.chunk_f_first_campaign import wait_for_campaign
 from scripts.e2e_prepare_db import main as prepare_database
 from tests.auth_keys import TestIssuer
@@ -263,15 +262,16 @@ async def main(args: argparse.Namespace) -> int:
     (OUT / "campaigns.json").write_text(
         json.dumps(record, indent=1) + "\n", encoding="utf-8", newline="\n"
     )
+    # The evaluation read excludes practice organisations by design (this is one), so the log is
+    # read directly: every call that was not refused is spend.
     async with await psycopg.AsyncConnection.connect(url) as conn:
-        rows = await llm_calls_by_attempt(conn, [org])
-    t = totals([r for r in rows if r.run_id in set(runs.values())])
-    standard = sum(1 for r in rows if r.outcome != "refused")
-    print(f"\nparked {len(views)} of {len(items)}; model calls made (spend): {t.spend_calls}")
-    print(
-        f"work {t.work_calls}, re-executions {t.resume_duplicate_calls}, "
-        f"orphaned {t.orphaned_calls}"
-    )
+        cur = await conn.execute(
+            "select count(*) from public.llm_calls where org_id = %s and outcome <> 'refused'",
+            (org,),
+        )
+        counted = await cur.fetchone()
+    standard = int(counted[0]) if counted else 0
+    print(f"\nparked {len(views)} of {len(items)}; model calls made (spend): {standard}")
     print(f"TALLY for Architecture.md section 4: cheap 0, standard {standard}, strong 0")
     return 0 if len(views) == len(items) else 1
 

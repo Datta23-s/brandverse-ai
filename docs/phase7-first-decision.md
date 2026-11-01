@@ -176,6 +176,36 @@ prediction is stated first and the check reports what happened, whichever way.
 * **What would falsify it:** campaigns 2 and 3 landing in the same band for more than a few brands, or all three the same. Then `R` is changed before anything is built on it.
   *Known weak point:* campaign 2 falls to D0 if memory fills even one of the two slots for it (`R` about 0.26), and the 0.35 threshold decides that more than any weight.
 
+## RESULT of the freeze-gate check, stage 1 (1 November 2026): THE PREDICTION FAILED
+
+`scripts/phase7_r_check.py`, real memory, no model call: brand B04's real items after its campaign 1 (4 insights, 1 competitor, from chunk F's first
+campaign), recalled for its campaigns 2 and 3 with the real step-4 recall and the real encoder.
+
+| Campaign | `N` | `U` (slots filled) | best `M` | `R` | depth | predicted |
+|---|---|---|---|---|---|---|
+| R10 (1) | 1.000 | 1.000 (0 of 2, cold start) | n/a | 0.786 | **D2** | D2 |
+| R11 (2, other product) | 0.214 | 1.000 (0 of 2) | 0.715 | 0.449 | **D1** | D1 |
+| R12 (3, same product) | 0.223 | 1.000 (0 of 2) | 0.771 | 0.453 | **D1** | **D0** |
+
+**Campaigns 2 and 3 land in the same band, and `R` for them differs by 0.004.** Campaign 3 does not reach D0. Said plainly: with `R` as
+registered, on the one brand that has real memory, the third campaign is decided exactly like the second, so the mechanism does not separate
+them, and the experiment as designed would not show the memory effect. This is a stop: **`R` is changed before anything is built on it.**
+
+*Why, from the numbers.* (1) `N` is 0.21 and 0.22 for campaigns 2 and 3: no discrimination, as the earlier measurement warned. (2) `U` carries the
+rest and is 1.0 for both, because **no recalled item reaches `M >= 0.80`** (best 0.715 and 0.771), so coverage is 0 of 2 even for the SAME product. A new item starts at
+confidence 0.60 (stated default, untuned) and its source score is 0.78, so its `E` is about 0.47, and a text match against a brief rarely scores `S`
+above 0.7: an `M` of 0.80 is close to unreachable for a one-campaign memory. The reuse bands are PROVISIONAL and calibrated in chunk G, **after** Phase 7;
+`R` cannot be tested before the bands are, and the bands are calibrated against the system `R` drives.
+
+*Options (none chosen; each is a design change).* (a) **Count a slot as filled at the support band (`M >= 0.65`) instead of 0.80**: both campaigns then
+fill both slots, `U` 0, `R` about 0.09, **both D0**: still no separation, and campaign 2 loses its D1. (b) **Place the coverage threshold between the two observed
+values (0.72 to 0.77)**: it separates these two numbers, from one brand, and is a threshold fitted to the data it is then tested on: not defensible without more brands. (c) **Raise the
+starting confidence or the source-score weight in `E`** so a good one-campaign item can reach 0.80: a tuning of `M`, again before the bands are calibrated. (d) **Define coverage
+on the top item's `S` (semantic match) rather than `M`**, which does not carry confidence and freshness: closer to "does memory hold what this request needs", a change of definition.
+(e) **Calibrate the bands first on the ten-brand structure** (chunk G's work, brought before Phase 7's `R`), using approver judgement: right in principle, and it moves the calendar. *My view:* (d) or (e);
+(a) and (b) fix the symptom. **Stage 2** (the other nine brands, about 7 Standard calls each, about 63 in all, to see whether the failure is general) is NOT run: it needs a ruling on the budget
+and on whether to change `R` first.
+
 ## What the owner is asked to rule
 
 1. `N`: N-a (after the free measurement), N-b or N-c.

@@ -260,11 +260,13 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-31 04:19 | `scripts/chunk_b_revision_run.py --mode z --cap 6` (approved: 6 standard; 2 used) | local `brandverse_chunk_b` | 0 | 2 | 0 |
 | 2026-11-01 | `scripts/chunk_f_first_campaign.py --max-calls 10` (chunk F, the first real campaign: R10 at D1, research REPLAYED from the snapshot, through `POST /api/v1/runs`, the real worker and an approver's `POST .../approve`; 7 of the 10 capped, all `ok`) | local `brandverse_chunk_f` | 0 | 7 | 0 |
 | 2026-11-01 | `scripts/chunk_f_killed_worker.py --max-calls 14` (chunk F, the killed-worker run: R10 at D1, replayed research; worker 1 force-killed after 2 calls with A3 and A2 in flight, worker 2's start-up sweep recovered the run; 12 rows: 10 `ok` + 2 abandoned `pending`, counted as spent because they may have reached the provider) | local `brandverse_chunk_f_kill` | 0 | 12 | 0 |
-| **Total** | | | **4** | **76** | **10** |
+| 2026-11-01 | `scripts/chunk_f_agreement_round.py --max-calls 12` (the 10 campaigns for the 8 November rater-agreement round: fictional products, depth D0, no research; 70 rows: 69 `ok` and 1 `invalid_output` that was repaired; ADMISSION 10, A1 10, A3 11, A6 13, A7 26; list price $0.043) | local `brandverse_agreement` | 0 | 70 | 0 |
+| **Total** | | | **4** | **146** | **10** |
 
 **Standing budget (owner, 2026-10-31): 60 Standard-tier calls in the tuning organisation for Phase 6 chunks D, E and F;
 no strong tier without asking; the running tally is reported in every report.** Counted against the 60 so far: the V11
-re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) and the killed-worker run (12, counting 2 abandoned reservations) = **31 of 60 spent,
+re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) and the killed-worker run (12, counting 2 abandoned reservations) = **31 of 60 spent**; the agreement round's 70 calls (ordered by the owner
+on 2026-11-01, outside the original chunk D/E/F scope) take the project's development total to 101, **over the 60, which now needs a new ceiling from the owner**; of the 60, **31 spent,
 29 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
 before the standing budget (chunk B's earlier live runs: the rows through the first full D1 run and its first forced
 revision). The 4 unused calls of z's approval are folded in with no separate accounting. The table counts calls made.
