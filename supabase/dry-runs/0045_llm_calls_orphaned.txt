@@ -1,0 +1,16 @@
+# dry run, rolled back, 2026-11-01 06:25 UTC; commit 1549772; target aws-0-ap-south-1.pooler.supabase.com
+# 0045_llm_calls_orphaned.sql sha256 a76f1fa739e26f61
+recorded migrations (last 3): [('0042',), ('0043',), ('0044',)]
+attempt 1: backend 1791533, started 0.6s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1791534, started 0.0s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0045_llm_calls_orphaned.sql
+-- scope: app, public
+-- catalog changes inside the transaction
+  constraints - ('llm_calls', 'llm_calls_outcome_check', "CHECK ((outcome = ANY (ARRAY['pending'::text, 'ok'::text, 'invalid_output'::text, 'error'::text, 'rate_limited'::text, 'refused'::text])))")
+  constraints + ('llm_calls', 'llm_calls_outcome_check', "CHECK ((outcome = ANY (ARRAY['pending'::text, 'ok'::text, 'invalid_output'::text, 'error'::text, 'rate_limited'::text, 'refused'::text, 'orphaned'::text])))")
+-- exercise
+llm_calls_outcome_check: ("CHECK ((outcome = ANY (ARRAY['pending'::text, 'ok'::text, 'invalid_output'::text, 'error'::text, 'rate_limited'::text, 'refused'::text, 'orphaned'::text])))",)
+existing rows still satisfy the constraint: (0,)
+-- after rollback: catalog identical to before

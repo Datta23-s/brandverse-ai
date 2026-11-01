@@ -1,0 +1,145 @@
+# Ten practice products for the 8 November RATER AGREEMENT round (owner, 1 November 2026).
+#
+# Hand-written for this round, with fictional brands and products. NOT in evaluation/test_set.yaml,
+# NOT in evaluation/tuning_brands.yaml, NOT in docs/rating/familiarisation-copy.html: the raters
+# must not meet evaluation copy, or copy they practised on, before rating. Non-regulated sectors
+# only (the regulated sector's rules are synthetic and are not what this round is about).
+#
+# Every claim below is a verified claim of its product (the "product brief" a rater is shown).
+# Every claim is invented for the exercise; none describes a real product. ASCII only.
+
+campaigns:
+  - id: P01
+    brand: Brindle Kitchenware
+    product: Brindle 3 Litre Pressure Cooker
+    sector: kitchenware
+    category: pressure cooker
+    objective: Launch awareness for the 3 litre pressure cooker
+    audience: First-time home cooks living on their own
+    claims:
+      - "3 litre capacity"
+      - "Aluminium body"
+      - "Induction-compatible base"
+      - "Safety valve with pressure release"
+      - "5 year warranty on the body"
+
+  - id: P02
+    brand: Saffrona Foods
+    product: Saffrona Ginger Turmeric Tea
+    sector: food-and-beverage
+    category: herbal tea
+    objective: Drive consideration for the ginger turmeric tea
+    audience: Office workers who want a warm drink in the evening
+    claims:
+      - "25 tea bags per box"
+      - "Caffeine-free"
+      - "Made with ginger, turmeric and tulsi"
+      - "No added sugar"
+      - "Compostable tea bags"
+
+  - id: P03
+    brand: Neemwood Living
+    product: Neemwood Folding Study Table
+    sector: home-furnishing
+    category: folding table
+    objective: Launch awareness for the folding study table
+    audience: Students living in rented rooms
+    claims:
+      - "Sheesham wood top"
+      - "Top measures 120 cm by 60 cm"
+      - "Folds down to 12 cm thick"
+      - "Holds up to 25 kg"
+
+  - id: P04
+    brand: Aarna Skincare
+    product: Aarna Shea Lip Balm
+    sector: personal-care
+    category: lip balm
+    objective: Winter push for the shea lip balm
+    audience: Daily commuters in dry weather
+    claims:
+      - "Made with shea butter and beeswax"
+      - "Fragrance-free"
+      - "4.5 g stick"
+
+  - id: P05
+    brand: Kestrel Electronics
+    product: Kestrel 20000 mAh Power Bank
+    sector: consumer-electronics
+    category: power bank
+    objective: Launch awareness for the power bank
+    audience: Frequent train travellers
+    claims:
+      - "20000 mAh capacity"
+      - "22.5 W maximum output"
+      - "Two USB-C ports and one USB-A port"
+      - "Weighs 420 g"
+      - "1 year warranty"
+
+  - id: P06
+    brand: Trailhead Footwear
+    product: Trailhead Monsoon Clog
+    sector: footwear
+    category: rubber clogs
+    objective: Seasonal push for the monsoon clog
+    audience: Parents who walk children to school in the rains
+    claims:
+      - "Closed-cell EVA construction"
+      - "Sizes 6 to 11"
+      - "Available in three colours"
+      - "Washable with water"
+
+  - id: P07
+    brand: Karigar Appliances
+    product: Karigar 1.5 Litre Electric Kettle
+    sector: home-appliances
+    category: electric kettle
+    objective: Drive consideration for the electric kettle
+    audience: Hostel residents who cook with one socket
+    claims:
+      - "1.5 litre capacity"
+      - "1500 W heating element"
+      - "Stainless steel inner body"
+      - "Automatic shut-off once the water boils"
+      - "2 year warranty"
+
+  - id: P08
+    brand: Vayu Travel Goods
+    product: Vayu 30 Litre Foldable Duffel
+    sector: travel-goods
+    category: foldable duffel bag
+    objective: Launch awareness for the foldable duffel
+    audience: Weekend trekkers
+    claims:
+      - "30 litre capacity"
+      - "Folds into its own pouch"
+      - "Polyester ripstop fabric"
+      - "Padded shoulder strap"
+      - "Weighs 900 g"
+
+  - id: P09
+    brand: Chaiwala Co
+    product: Chaiwala Masala Chai Concentrate
+    sector: food-and-beverage
+    category: chai concentrate
+    objective: Drive repeat purchase of the chai concentrate
+    audience: People who miss the chai from home
+    claims:
+      - "500 ml bottle makes about 25 cups"
+      - "Contains ginger, cardamom and black tea"
+      - "Six months shelf life unopened"
+      - "Refrigerate after opening"
+
+  - id: P10
+    brand: Tarang Kitchenware
+    product: Tarang 2 Litre Insulated Jug
+    sector: kitchenware
+    category: insulated jug
+    objective: Launch awareness for the insulated jug
+    audience: Families in hot cities
+    claims:
+      - "2 litre capacity"
+      - "Double-wall stainless steel"
+      - "Keeps drinks cold for 12 hours (manufacturer test)"
+      - "Lid is BPA-free"
+      - "Body is dishwasher safe"
