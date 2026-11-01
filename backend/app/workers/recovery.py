@@ -30,6 +30,24 @@ order by r.created_at
 """
 
 
+# A call row is 'pending' from admission until the provider answers. With ONE worker (above), a
+# worker that has just started means no call is in flight, so every 'pending' row is the remains
+# of a dead process: it may have reached the provider, so it stays in SPEND, but it is not WORK.
+ORPHAN_PENDING_SQL = """
+update public.llm_calls set outcome = 'orphaned', finished_at = now()
+where outcome = 'pending'
+"""
+
+
+async def orphan_pending_calls(pool: AsyncConnectionPool[AsyncConnection]) -> int:
+    """Move every `pending` call to the terminal `orphaned` state (0045). Returns how many.
+    Spend keeps them (quota, call caps, the cost report); work excludes them
+    (`app/evaluation/llm_attempts.py`), so a crash cannot inflate ARR."""
+    async with pool.connection() as conn:
+        cur = await conn.execute(ORPHAN_PENDING_SQL)
+        return cur.rowcount
+
+
 async def orphaned_runs(pool: AsyncConnectionPool[AsyncConnection]) -> list[UUID]:
     async with pool.connection() as conn:
         cur = await conn.execute(ORPHANED_RUNS_SQL)

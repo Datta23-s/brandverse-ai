@@ -68,7 +68,7 @@ def test_a_strong_tier_scope_needs_its_cap_and_naming_the_tuning_org_enables_not
         make_settings(llm_strong_tier_org_id=org)
     ok = make_settings(llm_strong_tier_org_id=org, llm_strong_tier_max_calls=6)
     assert ok.llm_strong_tier_max_calls == 6
-    # Identity is not permission (owner, 2026-11-02): the tuning organisation can be named with the
+    # Identity is not permission (owner, 2026-11-01): the tuning organisation can be named with the
     # strong tier still off and unscoped.
     named = make_settings(tuning_org_id=org)
     assert named.tuning_org_id == org
@@ -77,7 +77,7 @@ def test_a_strong_tier_scope_needs_its_cap_and_naming_the_tuning_org_enables_not
 
 def test_an_approvals_kind_follows_the_tuning_organisation_not_the_strong_tier() -> None:
     """A practice organisation's decisions are `tuning` only for THE tuning organisation, and
-    `calibration` otherwise, whatever the strong tier is doing (split 2026-11-02)."""
+    `calibration` otherwise, whatever the strong tier is doing (split 2026-11-01)."""
     from types import SimpleNamespace
 
     from app.api.campaigns import _kind

@@ -65,6 +65,8 @@ class Settings(BaseSettings):
 
     # ARQ worker. Concurrency kept low: one small shared Supabase instance (Architecture.md §11).
     worker_max_jobs: int = Field(default=2, ge=1)
+    # The port the single worker holds as its lease (app/workers/lease.py).
+    worker_lease_port: int = Field(default=47631, ge=1024, le=65535)
     worker_job_timeout_s: int = Field(default=600, ge=1)
 
     # Run-progress event streams in Redis.
@@ -130,14 +132,14 @@ class Settings(BaseSettings):
     # organisation can measure the strong calls a run takes without any other organisation, or any
     # evaluation read, being able to spend or see them. Set, it overrides `llm_allow_strong_tier`.
     llm_strong_tier_org_id: UUID | None = None
-    # A hard cap on the strong calls that organisation may ever make (owner, 2026-11-02): the 21st
+    # A hard cap on the strong calls that organisation may ever make (owner, 2026-11-01): the 21st
     # call of the 20-a-day tier is not the only limit; this one is the measurement's own. Counted
     # from `llm_calls` (never a counter, Rules.md A1): every strong call that was not refused,
     # by any run of the organisation. Required whenever `llm_strong_tier_org_id` is set.
     llm_strong_tier_max_calls: int | None = Field(default=None, ge=1)
 
     # WHICH organisation is the tuning organisation, apart from whether the strong tier is live
-    # (owner, 2026-11-02). Its approvals are `kind = 'tuning'` (migration 0032); every other
+    # (owner, 2026-11-01). Its approvals are `kind = 'tuning'` (migration 0032); every other
     # practice organisation's are `calibration`. Setting it enables NOTHING: it is identity, not
     # permission, so the real calibration record is written at `calibration` with no strong spend.
     tuning_org_id: UUID | None = None

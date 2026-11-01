@@ -1,5 +1,5 @@
 """psycopg's async mode needs the selector loop on Windows; this makes the rule a refusal, not a
-reminder (owner, 2026-11-02, after a script came up on the Proactor loop despite Architecture.md
+reminder (owner, 2026-11-01, after a script came up on the Proactor loop despite Architecture.md
 section 11 saying not to)."""
 
 import asyncio

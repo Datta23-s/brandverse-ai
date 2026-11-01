@@ -91,28 +91,37 @@ class CallRow:
 
 @dataclass(frozen=True, slots=True)
 class CallTotals:
+    """spend = work + resume duplicates + orphaned, exactly (`test_orphan_accounting.py`)."""
+
     spend_calls: int
     spend_cost_usd: float
     work_calls: int
     work_cost_usd: float
     resume_duplicate_calls: int
     resume_duplicate_cost_usd: float
+    # Calls a dead worker left `pending` and the sweep marked `orphaned` (migration 0045): in
+    # spend (they may have reached the provider), never in work.
+    orphaned_calls: int = 0
+    orphaned_cost_usd: float = 0.0
 
 
 def totals(rows: Iterable[CallRow]) -> CallTotals:
     """Spend counts every call the provider may have been asked for (a refused call never reached
-    it); work counts the last attempt's; the difference is reported, not dropped."""
+    it); work counts the last attempt's, and never an orphaned row; the difference is reported in
+    two named parts (re-executions, orphans), not dropped."""
     spend = [r for r in rows if r.outcome != "refused"]
-    work = [r for r in spend if r.last_attempt]
-    spend_cost = _cost(spend)
-    work_cost = _cost(work)
+    orphaned = [r for r in spend if r.outcome == "orphaned"]
+    work = [r for r in spend if r.last_attempt and r.outcome != "orphaned"]
+    duplicates = [r for r in spend if not r.last_attempt and r.outcome != "orphaned"]
     return CallTotals(
         spend_calls=len(spend),
-        spend_cost_usd=spend_cost,
+        spend_cost_usd=_cost(spend),
         work_calls=len(work),
-        work_cost_usd=work_cost,
-        resume_duplicate_calls=len(spend) - len(work),
-        resume_duplicate_cost_usd=round(spend_cost - work_cost, 6),
+        work_cost_usd=_cost(work),
+        resume_duplicate_calls=len(duplicates),
+        resume_duplicate_cost_usd=_cost(duplicates),
+        orphaned_calls=len(orphaned),
+        orphaned_cost_usd=_cost(orphaned),
     )
 
 

@@ -146,6 +146,36 @@ campaigns for the agreement round (about 72 Standard calls: **that is beyond the
 on the budget**, though well inside the 500 a day), and the freeze of the rubric amendment. That is tight, with about one day of slack
 if nothing slips, and a slip moves the freeze to the 10th or 11th, where the brand-cutting rule applies.
 
+## The two proposals, one paragraph each, with my call (asked 1 November 2026)
+
+**Dynamic agent selection: a limitation, apart from one rule that comes free.** The pool is A1, A2, A3, A6, A7. A1, A6 and A7 always
+run, and A3 must run because its persona feeds the customer-match term `C` and the write-back's persona rows. That leaves one variable
+agent, A2, and A2 is already skipped at D0 (it has no pages to read). So "adaptive agent selection" is the rule "A2 runs unless depth is
+D0", a consequence of the engine, not a mechanism that could show its own effect: ARR would equal the D0 share divided by five and move
+exactly with depth. Build the rule and persist its rationale; **record adaptive agent selection as a limitation (the design's 3 to 7 agents is 4 or 5 here)**.
+It is not load-bearing for "adaptive memory reduces work".
+
+**Model routing: a limitation.** Routing is a separate contribution from memory, and here it cannot be measured whatever is built: every
+agent runs Standard, the Cheap tier is used by no call, the strong tier is a Flash model close to Standard (`Architecture.md` section 4.1), so a
+tier difference is a narrow one, and the strong tier is reserved for T4 and high-risk calls by rule and already routed by function. Building
+`complexity`, `is_structural` or `prior_failures` escalation would add code with no source for its inputs and no measurable effect. **Record it as a
+limitation; keep T4-by-function routing as built.**
+
+## Registered prediction for the freeze gate (written BEFORE the check is run)
+
+*Rule (owner, 1 November 2026):* if `R` gives the same decision for campaigns 1, 2 and 3 of a brand, the adaptive mechanism is inert. The
+prediction is stated first and the check reports what happened, whichever way.
+
+* **Campaign 1 (cold start): D2** for every brand. `N` = 1 (no earlier request) and `U` = 1 (no memory), so `R` = 0.43 + 0.36 = 0.79 (plus 0.21 for a regulated
+  brand, where `S` = 1); 0.79 >= 0.70.
+* **Campaign 2 (a different product of the same brand): D1** for most brands. `N` about 0.20 (measured), and I predict `U` = 1: campaign 1's
+  items describe the first product's category and a second product's recall should not reach `M >= 0.80` against them (`P` is 0.7 for the same brand,
+  the text differs). Then `R` is about 0.44, in [0.35, 0.70).
+* **Campaign 3 (the first product again, a new objective): D0** for most brands. `N` about 0.16, and I predict `U` <= 0.5 (the same product's items reach
+  `M >= 0.80`). Then `R` is at most about 0.25, below 0.35.
+* **What would falsify it:** campaigns 2 and 3 landing in the same band for more than a few brands, or all three the same. Then `R` is changed before anything is built on it.
+  *Known weak point:* campaign 2 falls to D0 if memory fills even one of the two slots for it (`R` about 0.26), and the 0.35 threshold decides that more than any weight.
+
 ## What the owner is asked to rule
 
 1. `N`: N-a (after the free measurement), N-b or N-c.

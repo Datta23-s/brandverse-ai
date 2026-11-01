@@ -35,8 +35,9 @@ from app.workers.jobs import (
     run_fake_pipeline,
     run_pipeline,
 )
+from app.workers.lease import LEASE_HELD_EXIT, LeaseHeld, acquire_worker_lease
 from app.workers.pipeline_factory import open_pipeline
-from app.workers.recovery import orphaned_runs
+from app.workers.recovery import orphan_pending_calls, orphaned_runs
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,11 @@ async def queue_recoveries(ctx: dict[str, Any], pool: Any) -> None:
     """A worker that has just started takes the previous one to have died (one worker: see
     app/workers/recovery.py) and queues a `recover_pipeline` job for each run it left behind."""
     try:
+        orphaned_calls = await orphan_pending_calls(pool)
+        if orphaned_calls:
+            log.warning(
+                "pending calls of a dead worker marked orphaned", extra={"n": orphaned_calls}
+            )
         orphans = await orphaned_runs(pool)
         boot = uuid4().hex[:8]
         for run_id in orphans:
@@ -151,5 +157,15 @@ def main() -> None:
             "db_pool_max_size": settings.db_pool_worker_max_size,
         },
     )
-    # Selector loop: psycopg's async mode refuses Windows' default Proactor loop.
-    asyncio.run(run(settings), loop_factory=asyncio.SelectorEventLoop)
+    # ONE worker (app/workers/lease.py): the recovery sweep takes a starting worker to mean the
+    # previous one died, so a second live worker is refused here, before it can touch anything.
+    try:
+        lease = acquire_worker_lease(settings.worker_lease_port)
+    except LeaseHeld as e:
+        log.error(str(e))
+        raise SystemExit(LEASE_HELD_EXIT) from e
+    try:
+        # Selector loop: psycopg's async mode refuses Windows' default Proactor loop.
+        asyncio.run(run(settings), loop_factory=asyncio.SelectorEventLoop)
+    finally:
+        lease.close()

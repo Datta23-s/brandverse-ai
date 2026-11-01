@@ -573,7 +573,7 @@ def strong_ledger(
 async def test_the_strong_tier_cap_refuses_the_call_after_the_last_one_approved(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:
-    """Owner, 2026-11-02: six strong calls, tuning organisation only, enforced where the call is
+    """Owner, 2026-11-01: six strong calls, tuning organisation only, enforced where the call is
     made. Driven to the limit: six are admitted, the seventh is refused, and stays refused."""
     from app.errors import StrongTierCapReached
 

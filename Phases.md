@@ -823,7 +823,7 @@ as N1/N2. Two defects found by the first attempt and fixed: the script ran on Wi
 documented selector-loop rule), and a worker sharing the API's loop starves its pool while the encoder loads (hence the separate process).
 **Chunk F still to do:** the killed-worker run and the forced-failure run on REAL models; per-step latency with and without rate-limit
 waits (N1, N2) over more than one run; `s` on the tuning organisation (needs the STRONG tier: asking first). Budget 19 of 60 spent.
-*2026-11-02 (owner rulings, built and pushed as e798802; CI green; 0044 applied live, posture 141 of 141):* strong tier approved for
+*2026-11-01 (owner rulings, built and pushed as e798802; CI green; 0044 applied live, posture 141 of 141):* strong tier approved for
 SIX calls, tuning organisation only, **but not yet made**: the billing check (`Architecture.md` section 4.4) needs the owner to confirm
 that no billing account is linked to the Cloud project. Built first, in the order given: `tuning_org_id` split from
 `llm_strong_tier_org_id`; a strong-tier cap enforced in `CallLedger.admit` and tested to the limit; the latency decomposition

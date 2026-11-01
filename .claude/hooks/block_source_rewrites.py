@@ -1,6 +1,6 @@
 """PreToolUse hook for Bash: refuse a command that REWRITES a source or document file from a script.
 
-Rules.md section 1.5 (owner, 2026-11-02): files are edited with the Edit tool only, never by a
+Rules.md section 1.5 (owner, 2026-11-01): files are edited with the Edit tool only, never by a
 script or a heredoc that rewrites them. A script rebuilds a file from what the model BELIEVES the
 file contains, which may be truncated or stale, and lint passing does not prove the surviving
 content is what was there before. This pattern mangled three files; a reminder did not stop a

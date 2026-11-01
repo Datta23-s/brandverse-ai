@@ -59,7 +59,7 @@ class RunLatency:
         return max(0, self.wall_ms - self.waited_ms)
 
     def components(self) -> dict[str, float | None]:
-        """The run's active time in parts (owner, 2026-11-02), each recorded by what measured it:
+        """The run's active time in parts (owner, 2026-11-01), each recorded by what measured it:
 
         - `model_ms`: the model latency SUMMED over the run's calls (`llm_calls`). Agents that run
           at the same time overlap, so this can exceed the wall time they took together.

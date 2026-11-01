@@ -1,4 +1,4 @@
-"""The event loop psycopg needs on Windows, enforced instead of remembered (owner, 2026-11-02).
+"""The event loop psycopg needs on Windows, enforced instead of remembered (owner, 2026-11-01).
 
 psycopg's async mode refuses Windows' default `ProactorEventLoop` (Architecture.md section 11). The
 rule was written down and a script still started on the Proactor loop: the error surfaced only as

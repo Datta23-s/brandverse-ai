@@ -292,7 +292,7 @@ def scoped_gateway(
 
 
 def test_a_strong_tier_scope_without_a_cap_cannot_be_built() -> None:
-    """Owner, 2026-11-02: a limit approved verbally is not a limit. The scope and its cap travel
+    """Owner, 2026-11-01: a limit approved verbally is not a limit. The scope and its cap travel
     together or the gateway is refused at construction."""
     org = uuid4()
     for cap in (None, (uuid4(), 6)):  # none, or a cap for ANOTHER organisation

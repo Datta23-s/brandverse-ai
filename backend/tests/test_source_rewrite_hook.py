@@ -1,4 +1,4 @@
-"""The Edit-only rule is a refusal, not a reminder (Rules.md section 1.5; owner, 2026-11-02).
+"""The Edit-only rule is a refusal, not a reminder (Rules.md section 1.5; owner, 2026-11-01).
 
 The heredoc-and-script pattern rebuilds a file from what the model believes it contains and has
 mangled three files; a written rule did not stop it, so `.claude/hooks/block_source_rewrites.py`

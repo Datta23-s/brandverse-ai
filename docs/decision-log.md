@@ -472,7 +472,7 @@ Phase 7 (used-items record; correction staging). Item 17: specified, not impleme
 named limitations V15 to V20 in section 8, not phased. Item 21: moved to Phase 6 chunk E. Items 12 to 14: the first decision
 of Phase 7, each input brought to the owner with options; not resolved on 2026-10-31.
 
-### 2.12 Which latency figure the evaluation reports as LR — **RULED 2026-11-02 (owner proposed, recorded)**
+### 2.12 Which latency figure the evaluation reports as LR — **RULED 2026-11-01 (owner proposed, recorded)**
 `runs.latency_ms` is one wall figure, and on this machine it is not comparable across arms (V22). A run's active time is
 now recorded in parts (migration 0044, `app/evaluation/latency.py`): `model_ms` (summed over `llm_calls`), `search_ms`
 (the search provider's calls; about zero under replay, recorded anyway so a live run is comparable), `research_other_ms`
@@ -502,7 +502,7 @@ with ARR and with SRR across the requests beside it; **LR is not presented as a 
 Extraction time (about 0.41 s a page, the same whether 32 or 319 pages were fetched) is local compute, not web time, and is in
 neither part (V22).
 
-### 2.13 Budget arithmetic for the evaluation (2026-11-02, before Phase 7)
+### 2.13 Budget arithmetic for the evaluation (2026-11-01, before Phase 7)
 *What the "60 calls" is.* An **owner-set standing development budget** for Phase 6 chunks D, E and F, spent in the tuning
 organisation. It is per project, covers development only, does not refill, and is not a provider limit. **31 of 60 spent** (19 when this was written; the killed-worker run added 12).
 *What the provider limits are.* Free tier, per Google Cloud project (so development calls share it): Standard and Cheap are
@@ -580,8 +580,46 @@ and **brand consistency, which is UNOBSERVABLE as written: no brand has a stated
 is empty, the copywriter is given none). Ten campaigns also cannot estimate a kappa (one disagreement moves it by 0.1 or more; it is
 undefined if a rater scores every campaign the same).
 
-### 2.14 The 2026-11-02 sitting with the two raters is a FAMILIARISATION session, NOT the D3 calibration record
-**Recorded 2026-11-02 (owner).** The two human raters met for a familiarisation sitting. **It is not the calibration round of
+### 2.18 Second set of rulings, 1 November 2026 (rater scope, R as implemented, accounting, supervision)
+1. **Rater scope.** Efficiency metrics (ARR, SRR, CR, LR) use all 30 requests across all three arms. **Human quality rating uses a random
+   subset of 15 requests, all three arms each: 45 campaigns per rater, blind to arm and interleaved; both raters score the same 45;
+   kappa per dimension is computed on those 45.** The subset is drawn at random, the selection frozen before 16 November, the seed
+   recorded. *Reason:* a paired quality comparison needs every arm of a chosen request, so the sample shrinks in requests, not in arms, and human
+   capacity is the binding constraint. **The quality sample size (15 requests, 45 campaigns per rater) is declared wherever a quality result is reported.**
+2. **The 8 November round needs no blinding**: every campaign that day comes from the one current system, so there is no arm to conceal
+   and both raters score identical items. It needs the campaigns in readable form and the scoring sheets. The blind presentation harness is
+   needed only for 16 November and is built after the Phase 7 freeze.
+3. **`R` is described in the write-up AS IMPLEMENTED, not as designed.** Two design changes, with their reasons: (a) **`F` is dropped**: the 30
+   requests are all one kind (campaign briefs), so `F` would be near-constant, and the only way to give it values is a request-type map the
+   design never specified; (b) **`E` is dropped**: "claims needing external proof" has no definition, every option gives about zero in the evaluation, and the
+   research available cannot prove a specific product's claims (V7). `N` is the cosine novelty against the organisation's earlier approved requests (N-a).
+   `R = 0.43 N + 0.36 U + 0.21 S`. **FREEZE GATE:** `N` spans about 0.16 to 0.20 between campaigns 2 and 3 against a 0.35 threshold, so `N` does not discriminate within
+   an organisation; if `R` gives the same decision for campaigns 1, 2 and 3 the adaptive mechanism is inert and the experiment measures nothing.
+   Before Phase 7 freezes the prediction is registered (`docs/phase7-first-decision.md`, "Registered prediction") and tested over the
+   10-brand structure with real memory counts; if the three campaigns do not separate, the work stops and `R` is changed before anything is built on it.
+4. **Orphaned and duplicate calls: spend versus work.** A crash must not contaminate ARR. The recovery sweep moves `pending` rows orphaned
+   by a dead worker to a terminal `orphaned` state (migration 0045). **Orphaned rows count toward SPEND and are excluded from WORK;
+   a re-executed attempt counts once in work and every time in spend.** Tested by killing a worker and asserting both tallies.
+5. **Supervisor.** Recovery fires only when a worker starts and nothing started a dead one. A supervisor restarts the worker process,
+   written down with its assumption: **one worker, held by a lease**; built before the batch.
+6. **Revision rate is measured, not assumed.** The seven-sitting estimate holds only if no more than about 15 of 60 pipeline-arm campaigns are revised. The rate is measured on
+   the ten campaigns generated for 8 November, then the sitting count is re-derived from the real rate before 9 November. (The measurement is the HUMAN
+   approver's: see 2.19.)
+7. **Dates** are aligned to the system clock: today is 1 November 2026; records that said 2 November were wrong.
+8. **The forced-failure deferral stands**: run X's real `503` plus mocked failure isolation is enough for Phase 7 to build on.
+9. **Two proposals, one paragraph each, with a call** (`docs/phase7-first-decision.md`): dynamic agent selection reduces to the single rule "A2 runs
+   unless depth is D0", which is a consequence of the engine and not a separate mechanism (ARR then equals the D0 share over five and is collinear with depth): build the rule, record
+   "adaptive agent selection" as a limitation. Model routing is a limitation: the Cheap tier is unused, the strong model is close to Standard, so a routing effect is
+   unmeasurable here whatever is built.
+
+### 2.19 Who approves the ten campaigns for 8 November
+The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
+`approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
+revision rate, which is the quantity the sitting estimate needs. The assistant generates the ten campaigns and prepares them in readable form; the revision rate is
+Kundan's own decisions on them, recorded in the tuning organisation's `approvals`. An assistant pre-read against the rubric may be offered, labelled as that, and is not a count.
+
+### 2.14 The 2026-11-01 sitting with the two raters is a FAMILIARISATION session, NOT the D3 calibration record
+**Recorded 2026-11-01 (owner).** The two human raters met for a familiarisation sitting. **It is not the calibration round of
 `docs/approval-rubric.md` section 6, and no score produced in it is recorded as data.** Reasons, both factual: (1) **only one
 real campaign exists** (chunk F's first, 2026-11-01), against the ten practice campaigns calibration needs, on brands in
 neither the evaluation nor the tuning set; (2) **blind presentation is not built** (arm labels stripped, constrained
@@ -591,7 +629,7 @@ not in `evaluation/test_set.yaml` and are not the output of any arm, so the rate
 blind. The scoring sheets from the sitting are not entered into `approvals` (`kind = 'calibration'` rows are the calibration
 record, and none is written); the calibration round remains booked for 8 November and the main rating round for 16 November.
 
-### 2.15 What the rubric sheet could not fill in (found 2026-11-02, building it)
+### 2.15 What the rubric sheet could not fill in (found 2026-11-01, building it)
 The sheet was to give, for each scoring dimension, a definition copied from the rubric and a documented scale. **Two
 corrections and one finding.** *Correction 1:* S, P, C, A, F and E are the **memory score's** components (`Memory.md` section
 3.1), computed by software for a memory item against a query; no person scores them, so they are not on the sheet. *Correction 2:*
@@ -1131,8 +1169,8 @@ is present in the first commit of that code.
 | V19 | **No latency budget in code.** Architecture 4.3 says a rate-limit wait that would push a run past its latency budget ends the step as a partial result; no budget exists, so a long wait just waits. Out of scope: latency is measured and reported with and without waits (Phase 6 chunk F), not enforced | Deferred 2026-10-31 |
 | V20 | **Organisation rate limits are not enforced.** `rate_limit_runs_per_hour` and `rate_limit_requests_per_minute` exist as columns; only the monthly spend cap is enforced (`app/llm/ledger.py`). Out of scope: a multi-tenant product concern; the evaluation has one user and the free-tier model limits already bound throughput | Deferred 2026-10-31 |
 | V21 | **The design needs two humans besides the builder, and the project has one.** Found 2026-11-01 by asking who the second calibration scorer is. **Instance 1, D3 (`docs/evaluation-plan.md`, `docs/approval-rubric.md` section 6):** before run 1 the approver scores 10 practice campaigns and "a second team member independently scores the same 10"; the rubric is amended until they agree on at least 8 of 10 (a raw count of campaigns whose two approve / revise / reject outcomes match, `calibration_agreement`, not a statistic). **Instance 2, D2 (evaluation plan section 6, `PRD.md` 7.1, `Phases.md` Phase 10):** two human raters **who did not build the agents** rate all 30 requests' outputs in every arm, blind to arm, with Cohen's kappa per rubric dimension. Neither the second scorer nor the raters are named anywhere ("not yet named"); Kundan is the only human, and directed the build (AI wrote the code), so Kundan is a doubtful candidate for either role and cannot be two raters. `Memory.md` does not mention approver calibration, but chunk G calibrates the reuse bands "against approver judgement", so it rests on a calibrated approver too. **Options (owner, 2026-11-01).** (a) **Recruit two people**: two raters, blind to arm, rating 30 campaigns against the rubric with Cohen's kappa; one of them is also the second calibration scorer on the 10 practice campaigns, so it is one recruitment problem, not two. Rough cost per person: the 10 calibration campaigns plus 30 evaluation campaigns, three to four hours over two sittings. **Recruitment is being attempted first.** (b) **One rater, no kappa, limitation stated**: the single rater directed the system's construction, so the bias direction is known and favourable; every quality figure is reported with that caveat attached. (c) **Drop the human quality rating**: considered and REJECTED, because it leaves the efficiency claims (ARR, SRR, CR, LR) with no quality control: a cheaper campaign that is worse would read as a win. **Nothing is implemented for this.** Until a ruling, the calibration and every human quality score are blocked, and chunk G's band calibration depends on the calibrated approver | Stated 2026-11-01; recruitment under way; options (a) first, (b) fallback, (c) rejected |
-| V22 | **Wall-clock latency is not a fair arm comparison on this hardware.** Under replayed research, a run's wall time is dominated by LOCAL encoder time on consumer hardware (first real campaign, one sample: 297 s of active time against about 11 s of summed model latency, 2026-11-01; not yet decomposed), and the Proposed arm embeds more than either baseline (recall at steps 4 and 8, and write-back embedding), so total wall-clock LR favours the baselines for a reason unrelated to the hypothesis. The comparable figures are the model-latency and search-latency components (2.12). Wall clock is reported separately and caveated, with the four components and the signed residual beside it (migration 0044). The decomposition is built; the one-sample figure above stays unquoted as N1/N2 until it is measured in parts over several runs | Stated 2026-11-02; decomposition built, measurement pending |
-| V23 | **The quality rubric's human-rated dimensions are undefined.** `PRD.md` section 7.1 names product relevance, customer relevance, brand consistency, originality and feasibility (and "trustworthiness: hallucination audit, manual") with weights and a "scored by", but gives **no definition and no scale** for any of them, and `campaigns.quality_scores` (jsonb, "blind raters only") has no documented shape. D2's "Cohen's kappa per rubric dimension" therefore cannot be computed for them as written. The approval rubric (gates, checks, outcome) is fully documented and does have categories. Found 2026-11-02 building the rater sheets (2.15). Defining each dimension and a scale is the owner's and the raters' decision, to be recorded as a rubric amendment before the calibration round (booked 8 November) | Stated 2026-11-02; resolved in draft by amendment A1 (V24), not yet frozen |
+| V22 | **Wall-clock latency is not a fair arm comparison on this hardware.** Under replayed research, a run's wall time is dominated by LOCAL encoder time on consumer hardware (first real campaign, one sample: 297 s of active time against about 11 s of summed model latency, 2026-11-01; not yet decomposed), and the Proposed arm embeds more than either baseline (recall at steps 4 and 8, and write-back embedding), so total wall-clock LR favours the baselines for a reason unrelated to the hypothesis. The comparable figures are the model-latency and search-latency components (2.12). Wall clock is reported separately and caveated, with the four components and the signed residual beside it (migration 0044). The decomposition is built; the one-sample figure above stays unquoted as N1/N2 until it is measured in parts over several runs | Stated 2026-11-01; decomposition built, measurement pending |
+| V23 | **The quality rubric's human-rated dimensions are undefined.** `PRD.md` section 7.1 names product relevance, customer relevance, brand consistency, originality and feasibility (and "trustworthiness: hallucination audit, manual") with weights and a "scored by", but gives **no definition and no scale** for any of them, and `campaigns.quality_scores` (jsonb, "blind raters only") has no documented shape. D2's "Cohen's kappa per rubric dimension" therefore cannot be computed for them as written. The approval rubric (gates, checks, outcome) is fully documented and does have categories. Found 2026-11-01 building the rater sheets (2.15). Defining each dimension and a scale is the owner's and the raters' decision, to be recorded as a rubric amendment before the calibration round (booked 8 November) | Stated 2026-11-01; resolved in draft by amendment A1 (V24), not yet frozen |
 | V24 | **The quality rubric's definitions and scales are the advisor's own, not a validated instrument.** Amendment A1 (1 November 2026) defines six human-rated dimensions on a 0 / 1 / 2 scale; the anchors were authored by the project's advisor, are not derived from a published instrument, and have not been validated, so inter-rater agreement on them shows that two raters can apply THESE anchors alike, not that the anchors measure what their names say. Every quality figure from this rubric is reported with that caveat. A second limitation travels with it: the agreement round of 8 November uses 10 campaigns, which cannot estimate a kappa (it can only find ambiguous anchors) | Stated 1 November 2026; the amendment is a draft until frozen |
 
 Additional stated limitations: tests run as a database superuser, so privilege failures appearing

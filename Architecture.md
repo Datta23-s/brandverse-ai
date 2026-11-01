@@ -326,7 +326,7 @@ and without the global flag; unflagged refused; cheap tier unaffected), with eac
 removed, and `tests/db/test_llm_ledger.py`. The tuning organisation does not exist yet and the setting is
 unset: nothing is enabled until the tuning runs are scheduled.
 
-**Split and capped (owner, 2026-11-02).** `llm_strong_tier_org_id` decided both which organisation derives `tuning` approvals
+**Split and capped (owner, 2026-11-01).** `llm_strong_tier_org_id` decided both which organisation derives `tuning` approvals
 and whether the strong tier is live. They are two settings now: `tuning_org_id` is IDENTITY (it enables nothing, so the real
 calibration record is written at `kind = 'calibration'` with no strong-tier spend), and `llm_strong_tier_org_id` is PERMISSION.
 A permission carries a cap, enforced where the call is made and not remembered: `llm_strong_tier_max_calls` is required with
@@ -336,7 +336,7 @@ organisation's lock, and refuses the call after the last one (`StrongTierCapReac
 `tests/db/test_llm_ledger.py` (six admitted, the seventh and the eighth refused and recorded; ten concurrent calls with a cap
 of three admit exactly three).
 
-**Strong-tier billing check (2026-11-02), written before any strong call.** *Verified from Google's documentation
+**Strong-tier billing check (2026-11-01), written before any strong call.** *Verified from Google's documentation
 ([billing](https://ai.google.dev/gemini-api/docs/billing), [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)):*
 a paid tier exists only when a billing account is linked and prepaid credit added (a minimum of $5), the API serves paid
 requests only with a positive prepay balance, and a linked billing account makes usage chargeable irrespective of earlier free
@@ -997,7 +997,7 @@ is missing from this table, listed twice, out of order, or listed but absent.
 | `supabase/migrations/0041_one_decision_per_round.sql` | `4798108` | `5fae67b` | `campaigns.revision_round`, one campaign per run (`unique (run_id)`), `approvals.revision_round` and a unique index on (campaign, round) for EVALUATION decisions other than `undecided` (calibration and tuning rows are append-only: two scorers, and a re-score is a new row, rubric section 6): a decision is written once however often it is submitted (Phase 6 chunk E). Dry run recorded in `supabase/dry-runs/` |
 | `supabase/migrations/0042_hash_chain.sql` | `4798108` | | Hash chain on `approvals` and `audit_log`: `chain_seq`, `prev_hash`, `row_hash` stamped by the security definer trigger `app.chain_stamp` under an advisory lock, and `app.chain_verify(table)` (service role only) recomputing every hash and link. Detection, not prevention; rows before the migration are not chained and are counted (`scripts/chain_head.py` prints the heads to anchor). Moved into chunk E from Phase 10 (owner, 2026-10-31). Dry run recorded in `supabase/dry-runs/` |
 | `supabase/migrations/0043_campaigns_approvals_revoke_api_writes.sql` | `5fae67b` | | `anon` and `authenticated` lose table-level INSERT and UPDATE on `campaigns` and INSERT on `approvals`, held since 0007 and 0009 and blocked only by row-level security: same class as 0029 and 0030, the exemption made impossible rather than defended in depth (owner, 2026-11-01). Dry run recorded in `supabase/dry-runs/` |
-| `supabase/migrations/0044_runs_timings.sql` | `4352202` | | `runs.timings` (jsonb object or null), written by the backend with the terminal status from the run's state like `declared_gaps` (0035) and `brief_check` (0038): `search_ms`, `research_other_ms`, `encoder_recall_ms`, `encoder_writeback_ms`, so a run's latency is recorded in parts (model latency and waits are derived from `llm_calls` and `run_waits`) with a signed residual computed by `app/evaluation/latency.py`; `app.runs_initial_state()` replaced to force it null for an API role (owner, 2026-11-02). Dry run recorded in `supabase/dry-runs/` |
+| `supabase/migrations/0044_runs_timings.sql` | `4352202` | | `runs.timings` (jsonb object or null), written by the backend with the terminal status from the run's state like `declared_gaps` (0035) and `brief_check` (0038): `search_ms`, `research_other_ms`, `encoder_recall_ms`, `encoder_writeback_ms`, so a run's latency is recorded in parts (model latency and waits are derived from `llm_calls` and `run_waits`) with a signed residual computed by `app/evaluation/latency.py`; `app.runs_initial_state()` replaced to force it null for an API role (owner, 2026-11-01). Dry run recorded in `supabase/dry-runs/` |
 A new migration adds its row here in the same commit, by direct edit.
 
 ---
