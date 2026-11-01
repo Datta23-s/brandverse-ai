@@ -490,9 +490,9 @@ recording is finished or deliberately paused, and the owner rules on the pause. 
 organisation.
 
 **Standing budget for live model calls (owner, 2026-10-31).** 60 Standard-tier calls in the tuning organisation for
-chunks D, E and F; no strong tier without asking; the running tally is reported in every report. *Spent: 19 of the 60 (12, plus 7 on chunk F's first real campaign, 2026-11-01)*
+chunks D, E and F; no strong tier without asking; the running tally is reported in every report. *Spent: 31 of the 60 (12, plus 7 on chunk F's first real campaign and 12 on its killed-worker run, 2026-11-01)*
 (10 on the forced-revision re-runs X and Y of the V11 follow-up, 2 on the revision test z; the call-by-call lines are in
-`Architecture.md` section 4). *Remaining: 41.* The 30 calls of the brief-check precompute were approved separately and
+`Architecture.md` section 4). *Remaining: 29.* The 30 calls of the brief-check precompute were approved separately and
 are NOT counted against the 60; the calls made before the standing budget (chunk B's earlier live runs, 15 Standard
 calls up to and including the first full D1 run and its first forced revision) are not counted either: 15 + 12 + 30 = 57, the tally's total. The 4 calls of
 z's approval that went unused are folded into the 60 with no separate accounting.
@@ -861,6 +861,29 @@ arms are identical in memory terms, and ARR, SRR, CR and LR would show no differ
 the hypothesis; such a run would produce a null result that means nothing. Phase 7 is therefore on the critical path ahead of
 Phase 10, not beside it. This binds the recording-dependent live runs too: a run made before the freeze is a tuning or
 practice run and is never counted as evaluation.
+
+**Killed-worker run, on real models (2026-11-01): the run finished by itself, but only because recovery was wired first.** Finding
+before the run: `Pipeline.recover` existed and was tested, and **nothing called it**; a worker killed at campaign 60 would have left
+that run `queued` for ever. Built: `app/workers/recovery.py` (a start-up sweep for runs that have a checkpoint and no ending) and a
+`recover_pipeline` job (assumption stated: one worker; a second needs a lease). The run (`scripts/chunk_f_killed_worker.py`): R10 at D1,
+worker 1 **force-killed** after 2 model calls with A3 and A2 in flight; worker 2 started; its sweep queued the recovery; the run
+re-ran the interrupted step, parked, was approved, **completed**, wrote 7 memory items, no declared gaps. **What it showed:** (1) recovery needs a
+worker to START: nothing restarts a dead one, so an unattended batch needs a supervisor or a person; (2) at-least-once is visible:
+A3 and A2 each ran twice, and the killed execution left **2 `pending` reservations** that no completion will ever close
+(they stop counting toward caps after 900 s but stay in the log, and `runs.llm_call_count` counted them: 12 against 10 completed
+calls), so the count and the cost of a recovered run include calls that may have reached the provider; (3) the run took a revision
+round of its own (the first draft was blocked by the gates; round 1 passed): unrelated to the kill; (4) the wall time of
+a recovered run includes the second worker's start-up (about the 40 s encoder load) and is not a latency figure. Budget: 31 of 60.
+
+**The freeze date is 9 November 2026 (owner, 2026-11-01), and the order of work is reset around it.** The calibration round is booked
+for 8 November and the main rating round for 16 November, which is fixed; the evaluation runs and the approval sittings
+(`docs/decision-log.md` 2.16) must fit between the freeze and the 15th. In order: (1) the Phase 7 options brief on `R`'s inputs
+(`docs/phase7-first-decision.md`) is the first decision and is ruled before the build; (2) the Phase 7 build starts next,
+ahead of the chunk F remainder; (3) **the killed-worker run stays before Phase 7** (recovery of a real run killed mid-campaign
+must be known to work before a long unattended batch: and see the finding below, the trigger for recovery does not exist yet);
+(4) **the forced-failure run on real models is deferred until after the freeze**: it is resilience evidence, not a prerequisite, and a real one
+already exists (run X's `503`, handled as designed: A6 recorded as failed, no abort, a declared gap); the failure-isolation code Phase 7
+builds on is tested with mocks and was shown once on a real provider error.
 
 | Deliverable | Done when |
 |---|---|

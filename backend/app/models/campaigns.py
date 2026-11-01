@@ -100,6 +100,12 @@ class DecisionJob(Contract):
     reason: str | None
 
 
+class RecoverJob(Contract):
+    """The ARQ payload that continues a run a dead worker left, from its last checkpoint."""
+
+    run_id: UUID
+
+
 class EditOutJob(Contract):
     run_id: UUID
     statement: str

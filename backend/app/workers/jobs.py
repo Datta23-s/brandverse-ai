@@ -8,10 +8,10 @@ from uuid import UUID
 from app.core.campaigns import audit
 from app.core.logging import bind_run_id, set_run_id
 from app.core.run_events import RunEventLog
-from app.models.campaigns import DecisionJob, EditOutJob, PipelineRunJob
+from app.models.campaigns import DecisionJob, EditOutJob, PipelineRunJob, RecoverJob
 from app.models.jobs import PingJob, PingResult
 from app.models.runs import FakeRunJob, RunFailed
-from app.orchestrator.runner import EditOutRefused, NotAwaitingApproval, Pipeline
+from app.orchestrator.runner import EditOutRefused, NotAwaitingApproval, NotRecoverable, Pipeline
 from app.workers.fake_run import execute_fake_run
 
 log = logging.getLogger(__name__)
@@ -21,13 +21,21 @@ RUN_FAKE_PIPELINE = "run_fake_pipeline"
 RUN_PIPELINE = "run_pipeline"
 RESUME_PIPELINE = "resume_pipeline"
 EDIT_OUT_PIPELINE = "edit_out_pipeline"
+RECOVER_PIPELINE = "recover_pipeline"
 
 # A run's job ID carries its run ID, so the worker can bind run_id before ARQ logs anything.
 _FAKE_RUN_JOB_PREFIX = "fake-run:"
 _RUN_JOB_PREFIX = "pipeline-run:"
 _RESUME_JOB_PREFIX = "resume:"
 _EDIT_OUT_JOB_PREFIX = "edit-out:"
-_PREFIXES = (_FAKE_RUN_JOB_PREFIX, _RUN_JOB_PREFIX, _RESUME_JOB_PREFIX, _EDIT_OUT_JOB_PREFIX)
+_RECOVER_JOB_PREFIX = "recover:"
+_PREFIXES = (
+    _FAKE_RUN_JOB_PREFIX,
+    _RUN_JOB_PREFIX,
+    _RESUME_JOB_PREFIX,
+    _EDIT_OUT_JOB_PREFIX,
+    _RECOVER_JOB_PREFIX,
+)
 
 
 def fake_run_job_id(run_id: UUID) -> str:
@@ -46,6 +54,11 @@ def resume_job_id(run_id: UUID, revision_round: int) -> str:
 
 def edit_out_job_id(run_id: UUID, nonce: str) -> str:
     return f"{_EDIT_OUT_JOB_PREFIX}{run_id}:{nonce}"
+
+
+def recover_job_id(run_id: UUID, boot: str) -> str:
+    """One recovery per (run, worker start): a sweep that sees the same run twice queues it once."""
+    return f"{_RECOVER_JOB_PREFIX}{run_id}:{boot}"
 
 
 def run_id_from_job_id(job_id: str) -> UUID | None:
@@ -152,3 +165,17 @@ async def edit_out_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dic
                 details={"statement": job.statement, "gate_outcome": validation.get("outcome")},
             )
     return {"run_id": str(job.run_id), "status": "edited"}
+
+
+async def recover_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    """Continue a run a dead worker left, from its last checkpoint (app/workers/recovery.py).
+    Steps that finished are not run again; the step that was running is (at-least-once)."""
+    job = RecoverJob.model_validate(payload)
+    pipeline: Pipeline = ctx["pipeline"]
+    with bind_run_id(str(job.run_id)):
+        try:
+            outcome = await pipeline.recover(job.run_id)
+        except NotRecoverable as e:
+            log.warning("recovery found nothing to continue", extra={"reason": str(e)})
+            return {"run_id": str(job.run_id), "status": "not_recoverable", "reason": str(e)}
+    return {"run_id": str(job.run_id), "status": outcome.status}

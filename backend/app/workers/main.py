@@ -9,6 +9,7 @@ import logging
 import signal
 from contextlib import AsyncExitStack
 from typing import Any
+from uuid import uuid4
 
 from arq.worker import Worker, func
 
@@ -17,20 +18,25 @@ from app.core.db import create_db_pool, ping_database
 from app.core.logging import configure_logging
 from app.core.redis import arq_redis_settings, json_deserializer, json_serializer
 from app.core.run_events import RunEventLog
+from app.models.campaigns import RecoverJob
 from app.workers.jobs import (
     EDIT_OUT_PIPELINE,
     PING,
+    RECOVER_PIPELINE,
     RESUME_PIPELINE,
     RUN_FAKE_PIPELINE,
     RUN_PIPELINE,
     bind_job_run_id,
     edit_out_pipeline,
     ping,
+    recover_job_id,
+    recover_pipeline,
     resume_pipeline,
     run_fake_pipeline,
     run_pipeline,
 )
 from app.workers.pipeline_factory import open_pipeline
+from app.workers.recovery import orphaned_runs
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +72,27 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     except Exception:
         # Real runs fail visibly (no `pipeline` in ctx); the fake run and ping keep working.
         log.exception("pipeline could not be built at worker startup")
+        return
+    await queue_recoveries(ctx, pool)
+
+
+async def queue_recoveries(ctx: dict[str, Any], pool: Any) -> None:
+    """A worker that has just started takes the previous one to have died (one worker: see
+    app/workers/recovery.py) and queues a `recover_pipeline` job for each run it left behind."""
+    try:
+        orphans = await orphaned_runs(pool)
+        boot = uuid4().hex[:8]
+        for run_id in orphans:
+            await ctx["redis"].enqueue_job(
+                RECOVER_PIPELINE,
+                RecoverJob(run_id=run_id).model_dump(mode="json"),
+                _job_id=recover_job_id(run_id, boot),
+            )
+        if orphans:
+            log.warning("queued recovery for runs a dead worker left", extra={"runs": len(orphans)})
+    except Exception:
+        # A failed sweep must not stop the worker serving the queue; it is an error to see.
+        log.exception("the recovery sweep failed")
 
 
 async def on_shutdown(ctx: dict[str, Any]) -> None:
@@ -88,6 +115,7 @@ def build_worker(settings: Settings, *, burst: bool = False) -> Worker:
             func(run_pipeline, name=RUN_PIPELINE, max_tries=1),
             func(resume_pipeline, name=RESUME_PIPELINE, max_tries=1),
             func(edit_out_pipeline, name=EDIT_OUT_PIPELINE, max_tries=1),
+            func(recover_pipeline, name=RECOVER_PIPELINE, max_tries=1),
         ],
         redis_settings=arq_redis_settings(settings),
         on_startup=on_startup,

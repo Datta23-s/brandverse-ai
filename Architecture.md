@@ -259,12 +259,13 @@ therefore tallied here by hand, and every live-verification call is added to thi
 | 2026-10-31 03:5x | `scripts/precompute_brief_checks.py --requests all --max-calls 30` (approved: 30 standard) | local `brandverse_chunk_b` | 0 | 30 | 0 |
 | 2026-10-31 04:19 | `scripts/chunk_b_revision_run.py --mode z --cap 6` (approved: 6 standard; 2 used) | local `brandverse_chunk_b` | 0 | 2 | 0 |
 | 2026-11-01 | `scripts/chunk_f_first_campaign.py --max-calls 10` (chunk F, the first real campaign: R10 at D1, research REPLAYED from the snapshot, through `POST /api/v1/runs`, the real worker and an approver's `POST .../approve`; 7 of the 10 capped, all `ok`) | local `brandverse_chunk_f` | 0 | 7 | 0 |
-| **Total** | | | **4** | **64** | **10** |
+| 2026-11-01 | `scripts/chunk_f_killed_worker.py --max-calls 14` (chunk F, the killed-worker run: R10 at D1, replayed research; worker 1 force-killed after 2 calls with A3 and A2 in flight, worker 2's start-up sweep recovered the run; 12 rows: 10 `ok` + 2 abandoned `pending`, counted as spent because they may have reached the provider) | local `brandverse_chunk_f_kill` | 0 | 12 | 0 |
+| **Total** | | | **4** | **76** | **10** |
 
 **Standing budget (owner, 2026-10-31): 60 Standard-tier calls in the tuning organisation for Phase 6 chunks D, E and F;
 no strong tier without asking; the running tally is reported in every report.** Counted against the 60 so far: the V11
-re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) = **19 of 60 spent,
-41 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
+re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) and the killed-worker run (12, counting 2 abandoned reservations) = **31 of 60 spent,
+29 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
 before the standing budget (chunk B's earlier live runs: the rows through the first full D1 run and its first forced
 revision). The 4 unused calls of z's approval are folded in with no separate accounting. The table counts calls made.
 
@@ -347,6 +348,14 @@ a figure for the cost report and not a charge if the project is on the free tier
 the answer:* **whether a billing account is linked to Cloud project `brandverse-ai` today.** The two readings above are dated
 weeks ago. If one is linked, a single request is billable and the answer is no. The strong-tier calls are therefore NOT made until
 the owner confirms, from AI Studio or the Cloud console, that no billing account is linked to the project.
+
+**If billing turns out to be linked, the damage is retroactive and is recorded here now, before the answer.** Google's documentation
+says a linked billing account makes usage chargeable irrespective of earlier free limits, so every model call this project has
+made since the account was linked was billable, not only the strong-tier calls to come: the **31 Standard calls of the standing
+budget (12 + the 7 of chunk F's first real campaign + the 12 of its killed-worker run), the 30 brief-check precompute calls, the 15 earlier chunk B calls, and the 4
+Cheap and 10 Strong calls of the earlier probes (the tally above, 76 Standard, 4 Cheap, 10 Strong in all)**, at list prices that put
+the whole tally well under one US dollar. The zero-budget constraint (`Rules.md` C0) would then have been breached retroactively, by
+an amount the tally can state and the billing account would show. The owner is checking (2026-11-01).
 
 #### Prompts — versioned templates, recorded per call (Phase 2 chunk B, 2026-10-17)
 

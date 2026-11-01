@@ -486,9 +486,25 @@ Proposed share the same fan-out, so the sum is comparable between them; it is no
 (2) *Under replay `search_ms` is about zero for every arm*, so the search half of LR compares nothing until a run is live; the
 recording's own per-query latencies could stand in for it, but that substitution is a separate decision and is not made here.
 
+**Amended 2026-11-01 (owner): the collinearity, and the fix that was already registered.** Under replay `search_ms` is about zero
+for every arm, so "model latency plus search latency" collapses to `model_ms`, which is roughly proportional to the number of calls,
+which is ARR: two headline metrics measuring one quantity. The snapshot DOES hold what is needed to avoid it: each recorded search
+carries `elapsed_s` (the search alone, pacing wait outside the timer) and each request carries `fetch_wall_s` and
+`pages_fetched_live` (`app/research/snapshot.py`, `docs/evaluation-plan.md` "LR is reported as counts and derived as time",
+registered 2026-10-28 before any data). So **LR is reported in TWO PARTS, as registered**: (1) an **observed** model-time
+reduction (`model_ms`, from `llm_calls`); (2) a **derived** web-time reduction = (count difference of searches and of live page
+fetches) x (the recorded unit cost: seconds per search, and `fetch_wall_s` per live page at the recorded concurrency), shown with
+its inputs and never as an observed latency. Any combined figure is labelled derived. The replay timer `search_ms` stays recorded
+(about zero) so a live run is comparable, and is NOT part of LR under replay. *What this does and does not buy:* LR is then a
+combination of call counts (ARR) and search and fetch counts (SRR) weighted by unit costs, plus the part of model time that varies
+with tokens per call. It is **not independent of ARR and SRR**, and the report states that plainly and prints the correlation of LR
+with ARR and with SRR across the requests beside it; **LR is not presented as a separate finding if that correlation is near 1**.
+Extraction time (about 0.41 s a page, the same whether 32 or 319 pages were fetched) is local compute, not web time, and is in
+neither part (V22).
+
 ### 2.13 Budget arithmetic for the evaluation (2026-11-02, before Phase 7)
 *What the "60 calls" is.* An **owner-set standing development budget** for Phase 6 chunks D, E and F, spent in the tuning
-organisation. It is per project, covers development only, does not refill, and is not a provider limit. **19 of 60 spent.**
+organisation. It is per project, covers development only, does not refill, and is not a provider limit. **31 of 60 spent** (19 when this was written; the killed-worker run added 12).
 *What the provider limits are.* Free tier, per Google Cloud project (so development calls share it): Standard and Cheap are
 separate models at **500 requests/day each**, 15/min, 250K tokens/min; Strong is **20/day**, 5/min. The day resets in full at
 midnight Pacific (`rpd_resets_at`); there is no rolling refill.
@@ -517,6 +533,37 @@ the 10 calibration ones need at least 7 approval sittings of at most 15; and the
 (V21). With 23 days left, Phase 7 frozen by about 12 November leaves a workable window; frozen after about 18 November it does not,
 and the fix is then a design change (fewer requests per arm, or a cheaper Baseline B), which has to be taken before Phase 7 is
 built, not after. The binding constraints are the schedule and the people, not the model quota.
+
+### 2.16 The approval sittings between the freeze and the rating round (schedule, 2026-11-01)
+*Fixed dates (owner):* calibration round 8 November; **Phase 7 freeze 9 November**; main rating round 16 November. *What was
+measured and what was not.* One real campaign has been generated (chunk F, 2026-11-01): **297 s of active time (about 5 minutes) per
+pipeline run**, replayed research, local encoder. **No human approval time has been measured**: that campaign's decision was
+recorded by a script (`seconds_spent` 30, a scripted value). The only documented human figures are `docs/evaluation-plan.md`'s
+planning ones: about 6 minutes a campaign typical, the rubric's 10-minute box as the cap, at most 15 campaigns in a sitting; so a sitting of
+15 is **about 90 minutes typical, 150 at the cap**, plus breaks.
+
+*Decisions to take.* 30 requests x 3 arms = 90 first decisions. Each approver "revise" adds a second decision on the regenerated
+draft. Seven sittings of 15 hold 105 decisions, so **seven suffice only if no more than about 15 of the 60 pipeline-arm campaigns (25%) are
+revised by the approver**; at 40% (24) it is eight sittings. That rate is unmeasured (the one real campaign passed first time).
+
+| Day | Machine (worker on mains power, nothing else heavy running) | Sittings | Decisions |
+|---|---|---|---|
+| Freeze day (9 Nov, evening) | Generate Baseline A (30 runs, about 30 min) and Baseline B (30 runs, about 150 min) for ALL three rounds; Proposed round 1 (10 runs, about 50 min). About 4 hours, unattended | none | none |
+| Day 1 | Regenerate any revised round-1 drafts; then Proposed round 2 (about 50 min), once ALL round-1 Proposed campaigns are decided (write-back needs approval) | **S1 + S2** back to back (morning, afternoon): round 1, 30 campaigns (10 brands x 3 arms, shuffled, a brand's N and N+1 never adjacent) | 30 |
+| Day 2 | Revised drafts, then Proposed round 3 (about 50 min) | **S3 + S4**: round 2, 30 campaigns | 30 |
+| Day 3 | Revised drafts | **S5 + S6**: round 3, 30 campaigns | 30 |
+| Day 4 | Final revised drafts; export the logs; verify the hash chain | **S7**: the remaining revised drafts, up to 15 | up to 15 |
+| Day 5 | Buffer: a rerun for an infrastructure failure, a sitting that overran | spare | |
+
+*Batching.* Sittings S1+S2, S3+S4 and S5+S6 are pairs that can sit in ONE session each (a morning and an afternoon with a break, never
+past the 15-campaign cap per sitting); the three Proposed rounds cannot be generated in advance, because round N+1 waits for the
+approval of round N; the Baselines can, and are. Total approver time about 10 to 11 hours typical (105 x 6 minutes), up to about 17 at the cap.
+*Calendar if the freeze is 9 November:* Day 1 to Day 4 are 10 to 13 November, the buffer is the 14th, the 15th is free, rating on the 16th. *The latest freeze
+that still fits* is the 10th, with the buffer eaten; later than that the main rating round moves or the experiment shrinks.
+*Not yet on the calendar and on this critical path:* **the blind presentation harness** (arm labels stripped, constrained
+randomisation, logged seed) is not built and is needed for the 8 November calibration and the 16 November round; and the
+raters' scope is unsettled: D2 says all 30 requests in every arm (90 campaigns each), the owner's estimate and `PRD.md` say 30
+campaigns in all.
 
 ### 2.14 The 2026-11-02 sitting with the two raters is a FAMILIARISATION session, NOT the D3 calibration record
 **Recorded 2026-11-02 (owner).** The two human raters met for a familiarisation sitting. **It is not the calibration round of
