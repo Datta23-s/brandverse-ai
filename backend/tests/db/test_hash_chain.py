@@ -120,6 +120,26 @@ def test_one_decision_per_round_is_a_database_rule(tx: Tx) -> None:
     tx.execute(sql.replace(", 9,", ", 10,"), (*base, "approve"))
 
 
+def test_calibration_rows_are_append_only_re_scores_not_one_per_round(tx: Tx) -> None:
+    """Rubric section 6: two scorers decide one campaign, and after an amendment a scorer's
+    RE-SCORE is a new row for the same campaign and round. The one-decision key is for evaluation
+    organisations only; an index that refused these rows would block the rubric's own procedure."""
+    s: Seed = tx.seed
+    sql = (
+        "insert into approvals (campaign_id, org_id, approver_id, outcome, reason, seconds_spent, "
+        "revision_round, is_calibration, kind) values (%s, %s, %s, %s, 'r', 1, 0, true, "
+        "'calibration')"
+    )
+    for scorer, outcome in [
+        ("approver_a", "reject"),
+        ("second_scorer", "approve"),
+        ("approver_a", "approve"),  # the re-score after the rubric was amended
+        ("approver_a", "approve"),
+    ]:
+        tx.execute(sql, (s.campaign_practice, s.org_practice, s.users[scorer], outcome))
+    assert verify(tx, "approvals")[5]
+
+
 def test_concurrent_inserts_make_one_valid_chain(db_url: str) -> None:
     with psycopg.connect(db_url, autocommit=True) as c:
         before = c.execute("select coalesce(max(chain_seq), 0) from audit_log").fetchone()

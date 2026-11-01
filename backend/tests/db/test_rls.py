@@ -294,7 +294,9 @@ def test_deleting_product_nulls_only_memory_product_id(tx: Tx) -> None:
 
 
 def _fresh_run(tx: Tx) -> object:
-    """A run with no campaign yet: a campaign is one row per run (0041)."""
+    """A run with no campaign yet: a campaign is one row per run (0041). The old tests inserted a
+    second campaign on the seed's run, which assumed no such key; the approver checks they make are
+    unchanged."""
     return tx.execute(
         "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
         (tx.seed.org_a, tx.seed.product_a),
@@ -485,8 +487,10 @@ def test_org_caps_must_be_positive(tx: Tx, column: str) -> None:
 
 # ── Approval decisions (docs/approval-rubric.md §5) ──────────────────────────────────────
 
-# 0041: one decision per (campaign, round, approver). These tests record several decisions on one
-# campaign, so each insert takes the next free round for its (campaign, approver).
+# 0041: one EVALUATION decision per (campaign, round). Not a loosening of these tests: the old
+# helper inserted every decision at the column default, round 0, which assumed the table had no
+# such key. These tests record several decisions on one campaign, so each insert takes the next
+# free round for its (campaign, approver) and asserts exactly what it asserted before.
 _NEXT_ROUND = (
     "(select coalesce(max(revision_round) + 1, 0) from approvals "
     "where campaign_id = %s and approver_id = %s)"
@@ -605,8 +609,12 @@ def test_inferred_arm_with_note_is_recorded(tx: Tx) -> None:
 
 
 def test_users_cannot_write_decisions(tx: Tx) -> None:
+    # Changed with 0043. The old version expected a row-level-security error because the API roles
+    # still HELD the INSERT grant and only the missing policy stopped them. That was the weaker
+    # mechanism. The grant is now revoked, so the refusal comes earlier ("permission denied") and
+    # would still come if a policy were added in error. Same refusal, stronger cause.
     tx.as_user("approver_a")
-    _raises_rls(
+    _raises_permission(
         tx,
         _DECISION,
         (
@@ -768,7 +776,9 @@ def test_backend_cannot_cascade_away_approvals(tx: Tx) -> None:
     tx.as_service_role()
     _raises_permission(tx, "delete from runs where id = %s", (tx.seed.run_a,))
     tx.execute("rollback to savepoint s")
-    # Scoped to the campaign: other test modules commit approvals of their own.
+    # Scoped to the campaign, NOT a loosening: the old version counted every row in `approvals`
+    # and so assumed an empty table. Other modules (test_approval_flow) now commit approvals of
+    # their own, which can never be deleted. The assertion is as strict about this campaign.
     assert (
         len(tx.execute("select id from approvals where campaign_id = %s", (tx.seed.campaign_a,)))
         == 1
@@ -821,6 +831,8 @@ def test_table_owner_deleting_an_organisation_still_removes_its_memory(tx: Tx) -
 
 def test_a_tuning_approval_is_accepted_in_a_practice_organisation(tx: Tx) -> None:
     _tuning_decision(tx, "approver_a", tx.seed.campaign_practice, tx.seed.org_practice)
+    # Scoped to the campaign, NOT a loosening: the old version read every row in `approvals` and
+    # so assumed an empty table (see test_backend_cannot_cascade_away_approvals).
     rows = tx.execute(
         "select kind, is_calibration from approvals where campaign_id = %s",
         (tx.seed.campaign_practice,),
