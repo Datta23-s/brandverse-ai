@@ -536,6 +536,85 @@ def test_the_database_refuses_a_call_without_a_well_formed_prompt(
         )
 
 
+def fresh_run_ctx(db_url: str, org: UUID) -> CallContext:
+    """A run of its own in `org`, which has a product and brand of its own."""
+    with psycopg.connect(db_url, autocommit=True) as c:
+        brand = c.execute(
+            "insert into brands (org_id, name, sector) values (%s, 'B', 'footwear') returning id",
+            (org,),
+        ).fetchone()
+        product = c.execute(
+            "insert into products (org_id, brand_id, name) values (%s, %s, 'P') returning id",
+            (org, brand[0] if brand else None),
+        ).fetchone()
+        run = c.execute(
+            "insert into runs (org_id, product_id, request) values (%s, %s, '{}') returning id",
+            (org, product[0] if product else None),
+        ).fetchone()
+    assert run is not None
+    return CallContext(org_id=org, run_id=run[0], agent_id="test")
+
+
+def strong_ledger(
+    pool: AsyncConnectionPool[AsyncConnection], org: UUID, cap: int
+) -> tuple[CallLedger, ModelRegistry]:
+    registry = make_registry(strong_rpd=1000)  # the day's quota is not what is under test
+    led = CallLedger(
+        pool,
+        registry,
+        max_calls_per_run=100,
+        max_cost_per_run_usd=100.0,
+        pending_expiry_s=900,
+        strong_cap=(org, cap),
+    )
+    return led, registry
+
+
+async def test_the_strong_tier_cap_refuses_the_call_after_the_last_one_approved(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    """Owner, 2026-11-02: six strong calls, tuning organisation only, enforced where the call is
+    made. Driven to the limit: six are admitted, the seventh is refused, and stays refused."""
+    from app.errors import StrongTierCapReached
+
+    org = fresh_org(db_url)
+    ctx = fresh_run_ctx(db_url, org)
+    led, _ = strong_ledger(pool, org, 6)
+    for _ in range(6):
+        admission = await led.admit(ctx, Tier.STRONG, P, "test", 0.0001)
+        assert admission.call_id is not None
+    for _ in range(2):  # refused, and refused again: a refusal is not a place taken
+        with pytest.raises(StrongTierCapReached, match="6 of the 6"):
+            await led.admit(ctx, Tier.STRONG, P, "test", 0.0001)
+    with psycopg.connect(db_url, autocommit=True) as c:
+        rows = c.execute(
+            "select outcome, count(*) from llm_calls where org_id = %s and tier = 'strong' "
+            "group by outcome order by outcome",
+            (org,),
+        ).fetchall()
+    assert rows == [("pending", 6), ("refused", 2)]
+
+
+async def test_the_cap_holds_under_concurrent_calls_and_ignores_other_tiers_and_orgs(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    from app.errors import StrongTierCapReached
+
+    org, other = fresh_org(db_url), fresh_org(db_url)
+    ctx, other_ctx = fresh_run_ctx(db_url, org), fresh_run_ctx(db_url, other)
+    led, _ = strong_ledger(pool, org, 3)
+    results = await asyncio.gather(
+        *(led.admit(ctx, Tier.STRONG, P, "test", 0.0001) for _ in range(10)),
+        return_exceptions=True,
+    )
+    assert sum(1 for r in results if not isinstance(r, Exception)) == 3
+    assert sum(1 for r in results if isinstance(r, StrongTierCapReached)) == 7
+    # The Standard tier of the same organisation is not capped; nor is another organisation's
+    # strong call at THIS ledger (the gateway's own scope refuses it before it gets here).
+    assert (await led.admit(ctx, Tier.STANDARD, P, "test", 0.0001)).call_id is not None
+    assert (await led.admit(other_ctx, Tier.STRONG, P, "test", 0.0001)).call_id is not None
+
+
 async def test_the_ledger_reports_whether_an_organisation_is_flagged_practice(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:

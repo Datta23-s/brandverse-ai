@@ -48,6 +48,14 @@ Build exactly the phase in `Phases.md`. Do not build Phase 7 while implementing 
 
 When summarising work, state what was built, what was stubbed, and what was not attempted. Never describe intended behaviour as achieved behaviour.
 
+### 1.5 Edit files with the Edit tool only (added 2026-11-02, after the third occurrence)
+
+Source and document files are changed with the Edit tool (or created with Write). They are **never** rewritten by a script, a `python -`/`node -` heredoc, `sed -i`, `perl -i`, a redirect or `Set-Content`. A script rebuilds a file from what the model *believes* the file contains, which may be truncated or stale, and a passing linter does not prove the surviving content is what was there before. The heredoc pattern mangled three files; the written rule did not stop a fourth, so the rule is **enforced**: `.claude/hooks/block_source_rewrites.py` is a `PreToolUse` hook on Bash (wired in `.claude/settings.json`) that refuses such a command, or a scratch script that contains such a write, with exit status 2. It is tested in `backend/tests/test_source_rewrite_hook.py`. Scratch files (the scratchpad, temp directories) and the assistant's own memory are exempt; running a script that is part of the repository is not a rewrite. Bulk mechanical changes across many files are the one case for a reviewed, committed script, and it is committed to the repository first.
+
+### 1.6 The event loop on Windows is enforced, not remembered (added 2026-11-02)
+
+psycopg's async mode refuses Windows' `ProactorEventLoop` (`Architecture.md` section 11). `app/core/event_loop.py` raises `WrongEventLoop` at once where a database connection is made (`create_db_pool`, `open_checkpointer`), and `backend/tests/test_event_loop.py` fails if any `asyncio.run(` in `app/` or `scripts/` does not pass `loop_factory=asyncio.SelectorEventLoop`.
+
 ---
 
 ## 2. Hard prohibitions

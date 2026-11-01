@@ -30,6 +30,7 @@ from app.agents.risk import RiskReader
 from app.core.campaigns import PoolCampaignStore
 from app.core.config import Settings
 from app.core.gates import load_superlatives
+from app.core.timing import TimedEncoder, TimedSearch
 from app.errors import BrandverseError
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallLedger
@@ -95,7 +96,9 @@ async def open_pipeline(
             retrieve=no_memory,
             research=_mock_research,
             agents=agents,
-            write_memory=writeback_step(pool, HashingEncoder()),
+            write_memory=writeback_step(
+                pool, TimedEncoder(HashingEncoder(), "encoder_writeback_ms")
+            ),
             extract_statements=lexical_extractor,
             lexicon=load_superlatives("v1"),
             today=today,
@@ -113,6 +116,12 @@ async def open_pipeline(
             max_calls_per_run=settings.max_llm_calls_per_run,
             max_cost_per_run_usd=settings.max_cost_per_run_usd,
             pending_expiry_s=settings.llm_pending_expiry_s,
+            strong_cap=(
+                (settings.llm_strong_tier_org_id, settings.llm_strong_tier_max_calls)
+                if settings.llm_strong_tier_org_id is not None
+                and settings.llm_strong_tier_max_calls is not None
+                else None
+            ),
         )
         gateway = LLMGateway(
             registry,
@@ -151,7 +160,7 @@ async def open_pipeline(
             )
             pages = SnapshotPages(store)
             research = driver_research(
-                SnapshotSearch(store, cfg.declared_engines),
+                TimedSearch(SnapshotSearch(store, cfg.declared_engines)),
                 pages,
                 extractor,
                 scoring.source,
@@ -164,10 +173,14 @@ async def open_pipeline(
         deps = GraphDeps(
             events=events,
             load_context=pool_context_loader(pool),
-            retrieve=memory_recaller(pool, encoder, scoring, today=today),
+            # Recall and write-back embed with the same model; each is timed on its own
+            # (`encoder_recall_ms`, `encoder_writeback_ms`: migration 0044).
+            retrieve=memory_recaller(
+                pool, TimedEncoder(encoder, "encoder_recall_ms"), scoring, today=today
+            ),
             research=research,
             agents=agents,
-            write_memory=writeback_step(pool, encoder),
+            write_memory=writeback_step(pool, TimedEncoder(encoder, "encoder_writeback_ms")),
             extract_statements=classifier_extractor(gateway, prompts),
             lexicon=load_superlatives("v1"),
             today=today,

@@ -24,7 +24,10 @@ select r.id, r.arm, r.depth, r.status,
                 filter (where w.resumed_at is not null), 0)::bigint as waited_ms,
        count(w.id) filter (where w.resumed_at is null)::int as open_waits,
        count(w.id)::int as waits,
-       r.latency_ms
+       r.latency_ms,
+       (select coalesce(sum(c.latency_ms), 0) from public.llm_calls c
+        where c.run_id = r.id and c.outcome <> 'refused')::bigint as model_ms,
+       r.timings
 from public.runs r
 join public.organisations o on o.id = r.org_id
 left join public.run_waits w on w.run_id = r.id
@@ -48,10 +51,47 @@ class RunLatency:
     open_waits: int
     waits: int
     recorded_ms: int | None
+    model_ms: int = 0
+    timings: dict[str, float] | None = None
 
     @property
     def active_ms(self) -> int:
         return max(0, self.wall_ms - self.waited_ms)
+
+    def components(self) -> dict[str, float | None]:
+        """The run's active time in parts (owner, 2026-11-02), each recorded by what measured it:
+
+        - `model_ms`: the model latency SUMMED over the run's calls (`llm_calls`). Agents that run
+          at the same time overlap, so this can exceed the wall time they took together.
+        - `search_ms`: the time inside the search provider's calls (about zero under replay;
+          recorded anyway so a live run is comparable).
+        - `research_other_ms`: the rest of the research step (replayed fetches, extraction,
+          scoring).
+        - `encoder_recall_ms`, `encoder_writeback_ms`: local embedding, measured separately.
+        - `waits_ms`: the waits for a person (`run_waits`), already outside the active time.
+        - `residual_ms`: active time minus the five parts above. SIGNED and never clamped: a
+          positive residual is time nothing measured (database round trips, graph overhead, other
+          local compute); a negative one is the overlap of concurrent model calls. It is named, not
+          folded into any other figure.
+
+        A run with no `timings` (before migration 0044, or a run that ended before it was written)
+        has None for every local part and for the residual: unknown, not zero."""
+        t = self.timings
+        parts: dict[str, float | None] = {
+            "model_ms": float(self.model_ms),
+            "search_ms": None if t is None else t.get("search_ms", 0.0),
+            "research_other_ms": None if t is None else t.get("research_other_ms", 0.0),
+            "encoder_recall_ms": None if t is None else t.get("encoder_recall_ms", 0.0),
+            "encoder_writeback_ms": None if t is None else t.get("encoder_writeback_ms", 0.0),
+            "waits_ms": float(self.waited_ms),
+        }
+        active = self.recorded_ms if self.recorded_ms is not None else self.active_ms
+        if t is None:
+            parts["residual_ms"] = None
+        else:
+            named = sum(v or 0.0 for k, v in parts.items() if k not in ("waits_ms", "residual_ms"))
+            parts["residual_ms"] = float(active) - named
+        return parts
 
 
 async def run_latencies(conn: AsyncConnection, org_ids: list[UUID]) -> list[RunLatency]:

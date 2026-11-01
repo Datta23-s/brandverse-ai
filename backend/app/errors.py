@@ -62,6 +62,12 @@ class StrongTierDisabled(CallRefused):
     20 requests/day."""
 
 
+class StrongTierCapReached(CallRefused):
+    """The organisation has made all the strong-tier calls it was approved for
+    (llm_strong_tier_max_calls). Refused at admission, under the organisation's lock, so two
+    concurrent calls cannot both take the last place."""
+
+
 # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────────
 
 

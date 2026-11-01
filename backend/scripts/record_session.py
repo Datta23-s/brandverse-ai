@@ -316,4 +316,4 @@ def _count(items) -> dict[str, int]:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop)

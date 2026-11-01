@@ -88,6 +88,9 @@ class FakeLedger:
 
     refused_prompts: list[PromptRef] = field(default_factory=list)
     practice_orgs: set[Any] = field(default_factory=set)  # organisations flagged is_practice
+    # (organisation, most strong calls it may ever make): the real ledger enforces it in `admit`
+    # (tests/db/test_llm_ledger.py); the gateway only requires that it is set for a scope.
+    strong_cap: tuple[Any, int] | None = None
 
     async def organisation_is_practice(self, org_id: Any) -> bool:
         return org_id in self.practice_orgs

@@ -22,6 +22,8 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from app.core.event_loop import require_selector_loop
+
 SCHEMA = "graph_checkpoints"
 LIBRARY_VERSION = len(saver_base.BasePostgresSaver.MIGRATIONS) - 1
 
@@ -44,6 +46,7 @@ async def assert_checkpoint_schema(conn: AsyncConnection[dict[str, Any]]) -> Non
 
 @asynccontextmanager
 async def open_checkpointer(database_url: str) -> AsyncIterator[AsyncPostgresSaver]:
+    require_selector_loop()
     conn = await AsyncConnection.connect(
         database_url,
         autocommit=True,

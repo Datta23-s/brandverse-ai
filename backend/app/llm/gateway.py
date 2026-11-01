@@ -129,6 +129,14 @@ class LLMGateway:
         self._max_wait_s = max_rate_limit_wait_s
         self._allow_strong = allow_strong_tier
         self._strong_org = strong_tier_org_id
+        if strong_tier_org_id is not None and (
+            ledger.strong_cap is None or ledger.strong_cap[0] != strong_tier_org_id
+        ):
+            # A scope with no cap is a hole: refuse to build a gateway that has one.
+            raise ValueError(
+                "strong_tier_org_id needs the ledger's strong_cap for the same organisation "
+                "(llm_strong_tier_max_calls)"
+            )
         self._completion = completion
         self._sleep = sleep
         self._clock = clock

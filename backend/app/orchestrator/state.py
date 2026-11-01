@@ -13,6 +13,8 @@ them, parallel writes to the same key raise `InvalidUpdateError` (Architecture.m
 from operator import add
 from typing import Annotated, Any, Literal, TypedDict
 
+from app.core.timing import merge_timings
+
 Depth = Literal["D0", "D1", "D2"]
 Decision = Literal["approve", "revise", "reject"]
 
@@ -60,6 +62,10 @@ class RunState(TypedDict, total=False):
     memory: dict[str, Any] | None
     budget: dict[str, Any]
     errors: Annotated[list[dict[str, Any]], add]
+    # Where the run's LOCAL time went, by name (app/core/timing.py; migration 0044). Figures of the
+    # same name add: a node that runs twice (step 4 and step 8 recall, a re-run from a checkpoint)
+    # spent the time twice.
+    timings: Annotated[dict[str, float], merge_timings]
 
 
 class AgentTask(TypedDict):

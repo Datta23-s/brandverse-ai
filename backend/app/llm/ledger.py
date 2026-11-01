@@ -37,7 +37,7 @@ from uuid import UUID
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from app.errors import BudgetExceeded, CallRefused, QuotaExhausted
+from app.errors import BudgetExceeded, CallRefused, QuotaExhausted, StrongTierCapReached
 from app.llm.prompts import PromptRef
 from app.llm.registry import ModelRegistry, Tier
 
@@ -131,6 +131,13 @@ select
 from counted
 """
 
+# Every strong call the organisation has ever made that was not refused: pending reservations and
+# failed attempts count (a failed request may still have counted against the provider's quota).
+_STRONG_MADE_SQL = """
+select count(*) from public.llm_calls
+where org_id = %s and tier = 'strong' and outcome <> 'refused'
+"""
+
 _INSERT_SQL = """
 insert into public.llm_calls
   (org_id, run_id, agent_id, model, tier, prompt_id, prompt_version, route_reason, outcome,
@@ -168,9 +175,13 @@ class CallLedger:
         max_calls_per_run: int,
         max_cost_per_run_usd: float,
         pending_expiry_s: int,
+        strong_cap: tuple[UUID, int] | None = None,
     ) -> None:
         self._pool = pool
         self._registry = registry
+        # (organisation, most strong calls it may EVER make): enforced in `admit`, under the
+        # organisation's lock, from `llm_calls` (a count, never a counter: Rules.md A1).
+        self.strong_cap = strong_cap
         self._max_calls = max_calls_per_run
         self._max_cost = max_cost_per_run_usd
         self._expiry_s = pending_expiry_s
@@ -221,10 +232,25 @@ class CallLedger:
             await conn.execute(_LOCK_SQL, (f"llm:run:{ctx.run_id}",))
             await conn.execute(_LOCK_SQL, (f"llm:model:{model.id}",))
             u = await self.usage(conn, ctx, tier)
+            if (
+                tier is Tier.STRONG
+                and self.strong_cap is not None
+                and ctx.org_id == self.strong_cap[0]
+            ):
+                cur = await conn.execute(_STRONG_MADE_SQL, (ctx.org_id,))
+                made_row = await cur.fetchone()
+                made = int(made_row[0]) if made_row else 0
+                if made >= self.strong_cap[1]:
+                    refusal = StrongTierCapReached(
+                        f"refused: organisation {ctx.org_id} has made {made} of the "
+                        f"{self.strong_cap[1]} strong-tier calls it was approved for"
+                    )
             # Pending calls have no cost yet; count each at this call's estimate.
             projected = u.run_cost_usd + (u.run_pending + 1) * estimated_cost_usd
             org_projected = u.org_month_cost_usd + (u.org_month_pending + 1) * estimated_cost_usd
-            if u.run_calls >= self._max_calls:
+            if refusal is not None:
+                pass  # the strong-tier cap, decided above
+            elif u.run_calls >= self._max_calls:
                 refusal = BudgetExceeded(
                     f"refused: run has made {u.run_calls} of {self._max_calls} LLM calls "
                     "(Rules.md C3)"

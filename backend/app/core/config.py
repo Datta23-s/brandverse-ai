@@ -130,6 +130,17 @@ class Settings(BaseSettings):
     # organisation can measure the strong calls a run takes without any other organisation, or any
     # evaluation read, being able to spend or see them. Set, it overrides `llm_allow_strong_tier`.
     llm_strong_tier_org_id: UUID | None = None
+    # A hard cap on the strong calls that organisation may ever make (owner, 2026-11-02): the 21st
+    # call of the 20-a-day tier is not the only limit; this one is the measurement's own. Counted
+    # from `llm_calls` (never a counter, Rules.md A1): every strong call that was not refused,
+    # by any run of the organisation. Required whenever `llm_strong_tier_org_id` is set.
+    llm_strong_tier_max_calls: int | None = Field(default=None, ge=1)
+
+    # WHICH organisation is the tuning organisation, apart from whether the strong tier is live
+    # (owner, 2026-11-02). Its approvals are `kind = 'tuning'` (migration 0032); every other
+    # practice organisation's are `calibration`. Setting it enables NOTHING: it is identity, not
+    # permission, so the real calibration record is written at `calibration` with no strong spend.
+    tuning_org_id: UUID | None = None
 
     # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────
     # The self-hosted SearXNG JSON API on the laptop (Architecture.md §11). Unset means search is
@@ -173,6 +184,11 @@ class Settings(BaseSettings):
             )
         if self.environment == "production" and self.fake_runs_enabled:
             raise ValueError("fake_runs_enabled must be false in production")
+        if self.llm_strong_tier_org_id is not None and self.llm_strong_tier_max_calls is None:
+            raise ValueError(
+                "llm_strong_tier_org_id needs llm_strong_tier_max_calls: a strong-tier scope "
+                "with no cap is refused"
+            )
         if self.environment == "production" and self.pipeline_agents == "mock":
             raise ValueError("pipeline_agents must be 'real' in production")
         longest_pending_s = (

@@ -1,5 +1,7 @@
 """Settings: loaded once, connection budget enforced, session pooler only (Architecture.md §11)."""
 
+from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
@@ -58,6 +60,37 @@ def test_database_url_is_never_rendered() -> None:
     s = make_settings(database_url=SESSION_POOLER)
     assert "s3cret-pw" not in repr(s)
     assert "s3cret-pw" not in str(s.model_dump())
+
+
+def test_a_strong_tier_scope_needs_its_cap_and_naming_the_tuning_org_enables_nothing() -> None:
+    org = uuid4()
+    with pytest.raises(ValueError, match="llm_strong_tier_max_calls"):
+        make_settings(llm_strong_tier_org_id=org)
+    ok = make_settings(llm_strong_tier_org_id=org, llm_strong_tier_max_calls=6)
+    assert ok.llm_strong_tier_max_calls == 6
+    # Identity is not permission (owner, 2026-11-02): the tuning organisation can be named with the
+    # strong tier still off and unscoped.
+    named = make_settings(tuning_org_id=org)
+    assert named.tuning_org_id == org
+    assert named.llm_allow_strong_tier is False and named.llm_strong_tier_org_id is None
+
+
+def test_an_approvals_kind_follows_the_tuning_organisation_not_the_strong_tier() -> None:
+    """A practice organisation's decisions are `tuning` only for THE tuning organisation, and
+    `calibration` otherwise, whatever the strong tier is doing (split 2026-11-02)."""
+    from types import SimpleNamespace
+
+    from app.api.campaigns import _kind
+
+    tuning, other = uuid4(), uuid4()
+    named = SimpleNamespace(settings=make_settings(tuning_org_id=tuning))
+    assert _kind(named, tuning, True) == "tuning"  # type: ignore[arg-type]
+    assert _kind(named, other, True) == "calibration"  # type: ignore[arg-type]
+    assert _kind(named, tuning, False) == "evaluation"  # type: ignore[arg-type]
+    scoped_only = SimpleNamespace(
+        settings=make_settings(llm_strong_tier_org_id=tuning, llm_strong_tier_max_calls=6)
+    )
+    assert _kind(scoped_only, tuning, True) == "calibration"  # type: ignore[arg-type]
 
 
 def test_empty_env_values_fall_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -139,7 +139,7 @@ def _kind(resources: ResourcesDep, org_id: UUID, practice: bool) -> Kind:
     THE tuning organisation and calibration otherwise; every other organisation's are evaluation."""
     if not practice:
         return "evaluation"
-    return "tuning" if org_id == resources.settings.llm_strong_tier_org_id else "calibration"
+    return "tuning" if org_id == resources.settings.tuning_org_id else "calibration"
 
 
 async def _decide(

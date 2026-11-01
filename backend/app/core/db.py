@@ -17,6 +17,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from app.core.auth import Identity
 from app.core.config import Settings
+from app.core.event_loop import require_selector_loop
 
 PoolRole = Literal["api", "worker"]
 
@@ -32,6 +33,7 @@ def create_db_pool(settings: Settings, role: PoolRole) -> AsyncConnectionPool[As
     """An unopened pool for `role`. Caller opens it (`await pool.open()`) and closes it."""
     if settings.database_url is None:
         raise ValueError("DATABASE_URL is not configured")
+    require_selector_loop()  # a wrong loop is a clear error now, not a pool timeout in 10 s
     return AsyncConnectionPool(
         conninfo=settings.database_url.get_secret_value(),
         min_size=0,

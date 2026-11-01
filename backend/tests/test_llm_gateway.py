@@ -275,6 +275,7 @@ async def test_the_strong_tier_works_when_allowed() -> None:
 def scoped_gateway(
     scope: UUID, ledger: FakeLedger, completion: FakeCompletion, *, allow_strong: bool = False
 ) -> LLMGateway:
+    ledger.strong_cap = (scope, 6)  # a scope without a cap cannot be built (below)
     return LLMGateway(
         make_registry(unique=False),
         ledger,  # type: ignore[arg-type]
@@ -288,6 +289,26 @@ def scoped_gateway(
         completion=completion,
         sleep=Sleeps(),
     )
+
+
+def test_a_strong_tier_scope_without_a_cap_cannot_be_built() -> None:
+    """Owner, 2026-11-02: a limit approved verbally is not a limit. The scope and its cap travel
+    together or the gateway is refused at construction."""
+    org = uuid4()
+    for cap in (None, (uuid4(), 6)):  # none, or a cap for ANOTHER organisation
+        ledger = FakeLedger()
+        ledger.strong_cap = cap
+        with pytest.raises(ValueError, match="strong_cap"):
+            LLMGateway(
+                make_registry(unique=False),
+                ledger,  # type: ignore[arg-type]
+                prompt_library(),
+                api_key="k",
+                timeout_s=5,
+                max_rate_limit_waits=0,
+                max_rate_limit_wait_s=1,
+                strong_tier_org_id=org,
+            )
 
 
 async def ask_from(gw: LLMGateway, org: UUID) -> Verdict:

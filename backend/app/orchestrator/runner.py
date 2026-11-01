@@ -434,4 +434,5 @@ def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
         search_count=(values.get("research") or {}).get("searches"),
         declared_gaps=tuple(gaps.values()),
         brief_check=values.get("brief_check"),
+        timings=dict(values["timings"]) if values.get("timings") else None,
     )

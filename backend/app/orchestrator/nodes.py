@@ -17,6 +17,7 @@ declared gap. `BudgetExceeded` is not an agent failure and is never swallowed: t
 """
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
@@ -30,6 +31,7 @@ from app.core.brief_check import assess, reconcile
 from app.core.citation_terms import neutral_stems
 from app.core.gates import Finding, GateReport, Statement, evaluate, finding_dict
 from app.core.pipeline import PIPELINE_STEPS
+from app.core.timing import collecting
 from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded
 from app.memory.writeback import MemoryStage
@@ -236,8 +238,10 @@ class Nodes:
     async def retrieve_memory(self, state: RunState) -> dict[str, Any]:
         # Before A3: the request's persona does not exist yet, so C is left out of every M here
         # (app/memory/recall.py). This coverage is what the research-necessity step reads.
-        found = await self.d.retrieve(state, None)
+        with collecting() as timings:
+            found = await self.d.retrieve(state, None)
         return {
+            "timings": timings,
             "memory_hits": found.hits,
             "memory_coverage": found.coverage,
             "memory_slots": {"filled": found.slots_filled, "of": found.slots_total},
@@ -263,8 +267,15 @@ class Nodes:
     # ── step 6 ────────────────────────────────────────────────────────────────────────────────
     def research_node(self, depth: Depth) -> NodeFn:
         async def body(state: RunState) -> dict[str, Any]:
-            result = await self.d.research(state, depth)
+            started = time.perf_counter()
+            with collecting() as timings:
+                result = await self.d.research(state, depth)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            search_ms = timings.get("search_ms", 0.0)
             return {
+                # The search provider's own calls, and the rest of the step (replayed fetches,
+                # extraction, scoring) apart from them: neither is hidden in the other.
+                "timings": {"search_ms": search_ms, "research_other_ms": elapsed_ms - search_ms},
                 "research": result.report,
                 "findings": result.findings,
                 "_detail": f"{len(result.findings)} findings",
@@ -315,8 +326,10 @@ class Nodes:
         if personas:
             # Now the persona exists: recall again so the M that reuse and write-back decisions use
             # has C (app/memory/recall.py). Replaces the persona-less hits of step 4.
-            found = await self.d.retrieve(state, [p["summary"] for p in personas])
+            with collecting() as timings:
+                found = await self.d.retrieve(state, [p["summary"] for p in personas])
             update.update(
+                timings=timings,
                 memory_hits=found.hits,
                 memory_coverage_final=found.coverage,
                 memory_slots={"filled": found.slots_filled, "of": found.slots_total},
@@ -529,13 +542,14 @@ class Nodes:
                 report, truth = await self._gate(state)
                 if report is None:
                     report = evaluate({}, [], truth, self.d.lexicon, self.d.today())
-                memory = await self.d.write_memory(state, stage, report, truth)
+                with collecting() as timings:
+                    memory = await self.d.write_memory(state, stage, report, truth)
             except Exception as e:
                 await self.emit(
                     state, MEMORY_STEP, StepStatus.FAILED, f"{type(e).__name__}: {e}"[:300]
                 )
                 raise
             await self.emit(state, MEMORY_STEP, StepStatus.COMPLETED)
-            return {"memory": memory}
+            return {"memory": memory, "timings": timings}
 
         return node

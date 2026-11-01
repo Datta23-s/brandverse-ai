@@ -101,6 +101,8 @@ class RunFacts:
     search_count: int | None = None
     declared_gaps: tuple[dict[str, Any], ...] = ()
     brief_check: dict[str, Any] | None = None  # migration 0038; None keeps the column as it was
+    # Where the run's local time went (app/core/timing.py; migration 0044); None keeps the column.
+    timings: dict[str, float] | None = None
 
 
 _CLOSE_WAITS_SQL = """
@@ -118,6 +120,7 @@ set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
     search_count = coalesce(%(searches)s, r.search_count),
     declared_gaps = %(gaps)s::jsonb,
     brief_check = coalesce(%(brief_check)s::jsonb, r.brief_check),
+    timings = coalesce(%(timings)s::jsonb, r.timings),
     -- active latency: wall time minus the time spent waiting for a person (migration 0036)
     latency_ms = greatest(0, (extract(epoch from (now() - r.created_at)) * 1000
         - coalesce((select sum(extract(epoch from (w.resumed_at - w.parked_at)) * 1000)
@@ -160,6 +163,7 @@ async def end_run(
                 "searches": f.search_count,
                 "gaps": json.dumps(list(f.declared_gaps)),
                 "brief_check": None if f.brief_check is None else json.dumps(f.brief_check),
+                "timings": None if f.timings is None else json.dumps(f.timings),
             },
         )
         if cur.rowcount != 1:
