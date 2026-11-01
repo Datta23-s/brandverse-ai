@@ -1,0 +1,31 @@
+# dry run, rolled back, 2026-11-01 05:30 UTC; commit 4352202; target aws-0-ap-south-1.pooler.supabase.com
+# 0044_runs_timings.sql sha256 2311e48f00770d03
+recorded migrations (last 3): [('0041',), ('0042',), ('0043',)]
+attempt 1: backend 1787299, started 0.8s ago, pgvector loaded -> reused, held open
+attempt 2: backend 1787301, started 0.0s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0044_runs_timings.sql
+-- scope: app, public
+-- catalog changes inside the transaction
+  functions - ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, '657de005271ef061c3da9648e3beb5b9')
+  functions + ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, '8cc8849c953c8ca065515579318481c5')
+  constraints + ('runs', 'runs_timings_check', "CHECK (((timings IS NULL) OR (jsonb_typeof(timings) = 'object'::text)))")
+  columns + ('public', 'runs', 'timings', 'jsonb', 'YES', None)
+  column grants + ('public', 'runs', 'timings', 'anon', 'INSERT')
+  column grants + ('public', 'runs', 'timings', 'anon', 'REFERENCES')
+  column grants + ('public', 'runs', 'timings', 'anon', 'SELECT')
+  column grants + ('public', 'runs', 'timings', 'anon', 'UPDATE')
+  column grants + ('public', 'runs', 'timings', 'authenticated', 'INSERT')
+  column grants + ('public', 'runs', 'timings', 'authenticated', 'REFERENCES')
+  column grants + ('public', 'runs', 'timings', 'authenticated', 'SELECT')
+  column grants + ('public', 'runs', 'timings', 'authenticated', 'UPDATE')
+  column grants + ('public', 'runs', 'timings', 'service_role', 'INSERT')
+  column grants + ('public', 'runs', 'timings', 'service_role', 'REFERENCES')
+  column grants + ('public', 'runs', 'timings', 'service_role', 'SELECT')
+  column grants + ('public', 'runs', 'timings', 'service_role', 'UPDATE')
+-- exercise
+runs.timings: ('jsonb', 'YES')
+runs_initial_state forces timings to null for an API role: present
+check constraint: ("CHECK (((timings IS NULL) OR (jsonb_typeof(timings) = 'object'::text)))",)
+-- after rollback: catalog identical to before

@@ -472,6 +472,52 @@ Phase 7 (used-items record; correction staging). Item 17: specified, not impleme
 named limitations V15 to V20 in section 8, not phased. Item 21: moved to Phase 6 chunk E. Items 12 to 14: the first decision
 of Phase 7, each input brought to the owner with options; not resolved on 2026-10-31.
 
+### 2.12 Which latency figure the evaluation reports as LR — **RULED 2026-11-02 (owner proposed, recorded)**
+`runs.latency_ms` is one wall figure, and on this machine it is not comparable across arms (V22). A run's active time is
+now recorded in parts (migration 0044, `app/evaluation/latency.py`): `model_ms` (summed over `llm_calls`), `search_ms`
+(the search provider's calls; about zero under replay, recorded anyway so a live run is comparable), `research_other_ms`
+(replayed fetches, extraction, scoring), `encoder_recall_ms` and `encoder_writeback_ms` (local embedding, measured
+separately), `waits_ms` (`run_waits`) and a SIGNED `residual_ms` that is never clamped and never folded into a named part.
+
+**LR is reported as model latency plus search latency. Wall-clock latency is reported separately and caveated.** Agreement
+with the owner's expectation, with two caveats I add: (1) *model latency is a SUM*, and agents that run at once overlap, so a
+sum exceeds the time they took together (the residual goes negative by that overlap, and is shown as such). Baselines B and
+Proposed share the same fan-out, so the sum is comparable between them; it is not a critical-path time, and is not called one.
+(2) *Under replay `search_ms` is about zero for every arm*, so the search half of LR compares nothing until a run is live; the
+recording's own per-query latencies could stand in for it, but that substitution is a separate decision and is not made here.
+
+### 2.13 Budget arithmetic for the evaluation (2026-11-02, before Phase 7)
+*What the "60 calls" is.* An **owner-set standing development budget** for Phase 6 chunks D, E and F, spent in the tuning
+organisation. It is per project, covers development only, does not refill, and is not a provider limit. **19 of 60 spent.**
+*What the provider limits are.* Free tier, per Google Cloud project (so development calls share it): Standard and Cheap are
+separate models at **500 requests/day each**, 15/min, 250K tokens/min; Strong is **20/day**, 5/min. The day resets in full at
+midnight Pacific (`rpd_resets_at`); there is no rolling refill.
+
+*Calls per run, measured (first real campaign, 2026-11-01), all Standard:* A1, A3, A2, A6, the claim classifier and A7's risk
+read = **6**, plus the brief check (ADMISSION) = 7; the brief check is precomputed for the evaluation's 30 requests
+(`evaluation-plan.md`), so an evaluation run makes 6. A revision round adds A6, the classifier and A7 = **3**. Research depth
+does not change the count (A2 is one call at D1 or D2; the research itself makes no model call). Cheap tier: used by no agent
+today (Phase 7 routing may change that).
+
+| Part | Assumption | Standard calls |
+|---|---|---|
+| Proposed, 30 requests | 6 + expected revisions 1.2 (30% need one round, 10% a second) = 7.2 | 216 |
+| Baseline B, 30 requests | same five agents on this track, 7.2 | 216 |
+| Baseline A, 30 requests | generate + classify, 2 | 60 |
+| Calibration, 10 practice campaigns | generated once (re-scoring uses no model call), 7.2 | 72 |
+| Infrastructure re-run allowance | 20% of the 60 pipeline runs, plus A | about 98 |
+| **Total** | | **about 660** (480 with no revisions; about 900 if half need a round) |
+
+Strong tier: the plan's own planning figure, 18 to 24 calls over 6 to 8 touching runs, plus the one regulated tuning request.
+**Days at the real refill:** Standard **2 days** (660 / 500, and the development calls of those days count too), Strong **2 days**
+(24 / 20); RPM and TPM are not binding (660 calls is under an hour at 15/min). **The quota fits before 25 November with room.**
+*What does not fit by itself:* the calendar. The experiment cannot start until Phase 7 is built and frozen (2.10); the
+Proposed arm needs 3 sequential generate-then-approve rounds per brand (campaign N+1 only after N is decided); 90 campaigns plus
+the 10 calibration ones need at least 7 approval sittings of at most 15; and the second scorer and the two raters do not exist
+(V21). With 23 days left, Phase 7 frozen by about 12 November leaves a workable window; frozen after about 18 November it does not,
+and the fix is then a design change (fewer requests per arm, or a cheaper Baseline B), which has to be taken before Phase 7 is
+built, not after. The binding constraints are the schedule and the people, not the model quota.
+
 ---
 
 ## 3. Output gates and claim handling
@@ -999,6 +1045,7 @@ is present in the first commit of that code.
 | V19 | **No latency budget in code.** Architecture 4.3 says a rate-limit wait that would push a run past its latency budget ends the step as a partial result; no budget exists, so a long wait just waits. Out of scope: latency is measured and reported with and without waits (Phase 6 chunk F), not enforced | Deferred 2026-10-31 |
 | V20 | **Organisation rate limits are not enforced.** `rate_limit_runs_per_hour` and `rate_limit_requests_per_minute` exist as columns; only the monthly spend cap is enforced (`app/llm/ledger.py`). Out of scope: a multi-tenant product concern; the evaluation has one user and the free-tier model limits already bound throughput | Deferred 2026-10-31 |
 | V21 | **The design needs two humans besides the builder, and the project has one.** Found 2026-11-01 by asking who the second calibration scorer is. **Instance 1, D3 (`docs/evaluation-plan.md`, `docs/approval-rubric.md` section 6):** before run 1 the approver scores 10 practice campaigns and "a second team member independently scores the same 10"; the rubric is amended until they agree on at least 8 of 10 (a raw count of campaigns whose two approve / revise / reject outcomes match, `calibration_agreement`, not a statistic). **Instance 2, D2 (evaluation plan section 6, `PRD.md` 7.1, `Phases.md` Phase 10):** two human raters **who did not build the agents** rate all 30 requests' outputs in every arm, blind to arm, with Cohen's kappa per rubric dimension. Neither the second scorer nor the raters are named anywhere ("not yet named"); Kundan is the only human, and directed the build (AI wrote the code), so Kundan is a doubtful candidate for either role and cannot be two raters. `Memory.md` does not mention approver calibration, but chunk G calibrates the reuse bands "against approver judgement", so it rests on a calibrated approver too. **Options (owner, 2026-11-01).** (a) **Recruit two people**: two raters, blind to arm, rating 30 campaigns against the rubric with Cohen's kappa; one of them is also the second calibration scorer on the 10 practice campaigns, so it is one recruitment problem, not two. Rough cost per person: the 10 calibration campaigns plus 30 evaluation campaigns, three to four hours over two sittings. **Recruitment is being attempted first.** (b) **One rater, no kappa, limitation stated**: the single rater directed the system's construction, so the bias direction is known and favourable; every quality figure is reported with that caveat attached. (c) **Drop the human quality rating**: considered and REJECTED, because it leaves the efficiency claims (ARR, SRR, CR, LR) with no quality control: a cheaper campaign that is worse would read as a win. **Nothing is implemented for this.** Until a ruling, the calibration and every human quality score are blocked, and chunk G's band calibration depends on the calibrated approver | Stated 2026-11-01; recruitment under way; options (a) first, (b) fallback, (c) rejected |
+| V22 | **Wall-clock latency is not a fair arm comparison on this hardware.** Under replayed research, a run's wall time is dominated by LOCAL encoder time on consumer hardware (first real campaign, one sample: 297 s of active time against about 11 s of summed model latency, 2026-11-01; not yet decomposed), and the Proposed arm embeds more than either baseline (recall at steps 4 and 8, and write-back embedding), so total wall-clock LR favours the baselines for a reason unrelated to the hypothesis. The comparable figures are the model-latency and search-latency components (2.12). Wall clock is reported separately and caveated, with the four components and the signed residual beside it (migration 0044). The decomposition is built; the one-sample figure above stays unquoted as N1/N2 until it is measured in parts over several runs | Stated 2026-11-02; decomposition built, measurement pending |
 
 Additional stated limitations: tests run as a database superuser, so privilege failures appearing
 only for a non-superuser role are invisible to CI; accent handling differs between the lexical and
