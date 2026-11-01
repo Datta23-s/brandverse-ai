@@ -14,7 +14,10 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 0.75pt solid #444; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
   th { background: #eee; font-size: 8.5pt; }
-  td { height: 14mm; }
+  td { height: 22mm; }
+  .score { text-align: center; font-size: 11pt; letter-spacing: 1.5mm; white-space: nowrap; }
+  .ticks { font-size: 8pt; line-height: 1.5; }
+  .ticks b { font-size: 8pt; }
   .note { font-size: 8.5pt; color: #333; margin-top: 2mm; }
   @media print { body { padding: 0; max-width: none; } tr { break-inside: avoid; } }
   @page { size: A4 landscape; margin: 10mm; }
@@ -22,29 +25,29 @@
 </head>
 <body>
 <h1>Scoring sheet</h1>
-<div class="banner">FAMILIARISATION ONLY: nothing written here is recorded as data. Blind presentation is not built; do not treat this as the calibration round.</div>
+<div class="banner">Rubric amendment A1 is a DRAFT until it is frozen (<code>docs/rating/rubric-amendment-1.md</code>). Until then nothing written here is recorded as data.</div>
 <div class="meta"><div>Rater (initials):</div><div>Date:</div><div>Sitting:</div></div>
 
 <table>
 <tr>
-  <th style="width:18mm">Campaign / piece</th>
-  <th>Product relevance</th>
-  <th>Customer relevance</th>
-  <th>Brand consistency</th>
-  <th>Trustworthiness</th>
-  <th>Originality</th>
-  <th>Feasibility</th>
-  <th style="width:24mm">First failed gate / check<br>(T1.x S2.x C3.x U4.x)</th>
-  <th style="width:30mm">Outcome<br>approve / revise / reject</th>
-  <th style="width:50mm">Notes</th>
+  <th style="width:17mm">Campaign / piece</th>
+  <th style="width:15mm">Product relevance<br>0 1 2</th>
+  <th style="width:15mm">Customer relevance<br>0 1 2</th>
+  <th style="width:15mm">Brand consistency<br>0 1 2<br><small>(pending: amendment &sect;4, item 3)</small></th>
+  <th style="width:15mm">Originality<br>0 1 2</th>
+  <th style="width:15mm">Feasibility<br>0 1 2</th>
+  <th style="width:15mm">Trust&shy;worthiness<br>0 1 2</th>
+  <th style="width:62mm">Failed checks: tick EVERY one that failed</th>
+  <th style="width:26mm">Outcome</th>
+  <th>Notes</th>
 </tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
+<tr><td></td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="score">0 1 2</td><td class="ticks"><b>1 Truth</b> &#9633;T1.1 &#9633;T1.2 &#9633;T1.3 &#9633;T1.4 &#9633;T1.5<br><b>2 Safety</b> &#9633;S2.1 &#9633;S2.2 &#9633;S2.3 &#9633;S2.4 &#9633;S2.5<br><b>3 Complete</b> &#9633;C3.1 &#9633;C3.2 &#9633;C3.3 &#9633;C3.4<br><b>4 Usable</b> &#9633;U4.1 &#9633;U4.2 &#9633;U4.3</td><td>&#9633; approve<br>&#9633; revise<br>&#9633; reject</td><td></td></tr>
 </table>
-<p class="note">The six dimension columns are the human-rated dimensions of <code>PRD.md</code> &sect;7.1 (Evidence quality and Cost efficiency are computed, not rated, so they have no column). <strong>No scale is documented for them</strong> (see the rubric sheet, section B): in this sitting use the columns for what you would want a scale to say, not for a score. The gate/check and outcome columns follow the approval rubric exactly. Record the arm in Notes only if you can infer it.</p>
+<p class="note">Score each dimension 0, 1 or 2 by circling it, using the anchors on the rubric sheet. <strong>Tick every check that failed, not only the first</strong>: the first failed gate is worked out afterwards from the documented order (Gate 1, 2, 3, 4). The outcome follows the approval rubric: approve when all four gates pass; revise when Gates 1 and 2 pass and Gate 3 or 4 fails; reject when Gate 1 or 2 fails. Never rewrite the copy. Record the arm in Notes only if you can infer it. Evidence quality and cost efficiency are computed and are not scored by raters.</p>
 </body>
 </html>

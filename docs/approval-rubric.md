@@ -168,3 +168,25 @@ If the rubric must change after real runs have started:
 | Calibration date | |
 | Calibration agreement | ___ / 10 |
 | Rubric version applied | 1.2 |
+
+---
+
+## 9. Amendments
+
+### A1 (1 November 2026, run number 0): human-rated quality dimensions, and every failed check is recorded
+
+**Status: DRAFT until frozen.** Full text, the anchors as authored, and the defects found in them: `docs/rating/rubric-amendment-1.md`.
+It is frozen by `scripts/freeze_rating_amendment.py` (hash and UTC time in `docs/rating/rubric-amendment-1.lock`) before the 8 November
+sitting and before either rater sees any evaluation copy; this section then takes version 1.3.
+
+* **What it adds.** Definitions and a 0 / 1 / 2 ordinal scale for six dimensions: product relevance, customer relevance, brand
+  consistency, originality, feasibility, trustworthiness (`PRD.md` section 7.1 gave names and weights only). Agreement is reported as
+  linear-weighted Cohen's kappa per dimension, beside raw counts. Evidence quality and cost efficiency stay computed and are not shown to raters.
+* **Provenance, a limitation (V24).** The anchors were authored by the project's advisor on 1 November 2026. They are not derived
+  from a published instrument and have not been validated.
+* **Section 3 is amended.** "Stop at the first failed blocking gate and record that gate" is replaced for RATERS by: **tick every check
+  that failed**; the first failed gate is derived afterwards from the order Gate 1, 2, 3, 4, and the outcome follows from that order
+  unchanged. Reason: gate ordering alone made two raters who agree about the copy disagree about its reason (practice piece 5 fails T1.2
+  and S2.1). The system's own `approvals.failed_gate` holds one gate and is not changed here.
+* **Section 6 is amended.** The 8 November sitting is RATER AGREEMENT on the quality rubric using 10 campaigns from the CURRENT
+  (pre-Phase-7) system: valid for rater agreement, invalid for band calibration, which stays in chunk G on the post-Phase-7 system.

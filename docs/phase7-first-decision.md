@@ -108,11 +108,51 @@ source, a unit and a test.
   signal, conflicting evidence, and the daily-quota downgrade and deferral); every agent stays Standard otherwise; leave the others out
   and say so. The Cheap tier stays unused until a call is shown to be structural.
 
+## Descope: what is load-bearing for the hypothesis (asked 1 November 2026, with the 9 November freeze fixed)
+
+*The hypothesis, as the evaluation tests it:* adaptive memory reduces work (ARR, SRR, CR, LR) while quality holds. A component is
+**load-bearing** if removing it makes that comparison impossible or meaningless; **record as a limitation (a V-record)** if the
+comparison survives without it.
+
+| Component | Verdict | Reasoning | Build |
+|---|---|---|---|
+| Necessity engine (`R` -> D0/D1/D2, logged) | **Load-bearing** | It is the only thing that lowers search work: without it the Proposed arm always runs the depth requested and SRR, CR and LR are zero by construction. Needs the `N`/`U`/`S` decision above | about 1 day |
+| Injection by band (verbatim / rephrase / context), with the injected items and their bands recorded per run | **Load-bearing** | Without it memory changes nothing the agents see (V14). The per-run record IS the "reuse depth" metric, and it is what shows memory reached the copy | about 2 days (new prompt versions for the agents that take it, their lock lines, tests that a recalled item changes an input, per band) |
+| Item cap of 12, ranked by `M` | **Load-bearing, but small** | "Holding quality" needs memory unable to flood the prompt. With two kinds and 3 campaigns per brand the cap will rarely bind (a brand holds a handful of items), so it is a guard to build, not a measured effect | under half a day |
+| Forced fresh research slot | **Needs a ruling: it contradicts D0** (below) | | |
+| Dynamic agent selection | **Load-bearing only as one rule, already mostly built** | The pool is A1, A2, A3, A6, A7; A1/A6/A7 always run. A3 cannot be skipped (its persona feeds `C` and the write-back's persona rows). So the only agent that can vary is A2, and A2 already skips at D0. Varying it adds nothing beyond depth, and **ARR then equals the D0 share divided by five: collinear with SRR/depth.** Build the rule (A2 runs iff depth is not D0) and persist its rationale; do not build more | under half a day |
+| Used-items record and reuse bump | **V-record** | "Which injected items the campaign USED" needs claim-level attribution nobody built; the injected items and bands are recorded (above), which is what the metrics need. The bump is +0.02 confidence at `M >= 0.90`: over three campaigns per brand it cannot change an outcome | none |
+| Correction staging (`flagged`, `edited_out`) | **V-record** (your prior is right) | An edit-out names words in the copy, not a memory item, and no statement-to-item link exists, so a correction cannot be attributed. The poisoning defence is then stated as not operating, not faked | none |
+| Daily-quota downgrade and deferral (C4/C9) | **V-record** (your prior is right, with a condition) | The evaluation needs about 660 Standard calls against 500 a day: the schedule (2.16, generation spread over days) avoids exhaustion, and a run that hits it is an infrastructure failure re-run by the attempt rule. **Condition:** Strong is 20 a day and the plan expects 18 to 24 strong calls in the regulated runs, so those runs must be scheduled over two days by hand; a T4 call must never be downgraded, and today it fails the run, which is safe | none (a scheduling note) |
+| Rate-limit scheduler | **Already built enough** | The ledger paces to each model's RPM window and the gateway waits out a 429 without counting it as a retry; a per-model token bucket adds nothing the evaluation needs | none |
+| Model routing policy (the Cheap tier, `complexity`, `prior_failures`) | **V-record** (not in your prior; I add it) | Every agent runs Standard, the Cheap tier is used by no call, and the strong tier is a Flash model close to Standard (`Architecture.md` section 4.1), so a routing effect cannot be measured here whatever is built. T4 routing by function exists | none |
+| Admin view of the depth distribution | **V-record** | The distribution is a query over `runs.depth`; a chart is Phase 12 | none |
+
+**The forced fresh slot contradicts D0.** `Memory.md` section 9 says "force at least one fresh research slot on every run regardless
+of `R`"; `Architecture.md` section 6.1 defines D0 as "reuse memory only, zero searches". Both cannot hold: with the slot forced, no run is D0 and
+SRR is never 100% for any run. *Options:* (a) **a D0 run performs ONE search** (the planner's first query), so D0 means "one fresh query"
+and SRR for D0 is 3 of 4 or 7 of 8 saved, not all; (b) the slot is a memory slot never injected (the top item is held out of the prompt), which
+needs no search but also does not test freshness; (c) drop it and state the echo-chamber risk as not defended. *My pick: (a)* with the
+definition of D0 changed in the documents, because it is the only reading under which the slot is a fresh research slot and not a rename.
+It lowers the headline SRR; that is the price of the guard, and it is stated, not hidden.
+
+**The split, in one line.** Build: the engine (`N`, `U`, `S`), injection by band with its per-run record, the item cap, the A2-at-D0
+selection rule with its rationale, and (a). Record as limitations: used-items and the bump, correction staging, the quota downgrade
+and deferral, the rate-limit scheduler, model routing, the admin chart. About **4 to 5 build days, with tests and the freeze note**; this
+is what fits before 9 November only if the rulings below are made today and nothing is added.
+
+**Capacity, said plainly.** Until the 9th the same days also have to hold the blind presentation harness (needed on the 8th), the ten
+campaigns for the agreement round (about 72 Standard calls: **that is beyond the 29 left of the standing 60, so it needs a ruling
+on the budget**, though well inside the 500 a day), and the freeze of the rubric amendment. That is tight, with about one day of slack
+if nothing slips, and a slip moves the freeze to the 10th or 11th, where the brand-cutting rule applies.
+
 ## What the owner is asked to rule
 
 1. `N`: N-a (after the free measurement), N-b or N-c.
 2. `F`: F-a, F-b, F-c or F-d.
 3. `E`: E-a, E-b or E-c.
 4. The agent-selection rule and the routing scope above.
+5. The descope split above (build list and limitation list), and **the forced fresh slot: (a), (b) or (c)**.
+6. The budget for the agreement round's ten campaigns (about 72 Standard calls, beyond the standing 60).
 
-My picks are N-a (conditional on the measurement), F-d, E-c, and the two proposals as written. None of it is built until ruled.
+My picks are N-a, F-d, E-c, the descope split as written, and (a) for the fresh slot. None of it is built until ruled.

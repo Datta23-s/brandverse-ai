@@ -39,6 +39,7 @@
 <h2>A. The approval rubric</h2>
 <p class="src"><strong>Source</strong> (<code>docs/approval-rubric.md</code> &sect;1): The approver is judging one narrower question: <strong>"Would it be defensible to publish this?"</strong> &nbsp;A campaign can be mediocre and still approved. A campaign can be brilliant and still rejected.</p>
 <p class="src"><strong>Source</strong> (&sect;3): Evaluate in order. <strong>Stop at the first failed blocking gate</strong> and record that gate as the reason.</p>
+<p class="src"><strong>Amended 1 November 2026 (amendment A1, ruling 2):</strong> raters <strong>tick every check that failed</strong>, not only the first. The first failed gate is worked out afterwards from the order below (Gate 1, 2, 3, 4), and the outcome follows from that order as before.</p>
 
 <h3>Gate 1 &mdash; Truth (blocking). Any failure &rarr; reject. Record the failing sub-check.</h3>
 <table>
@@ -92,7 +93,21 @@
 <p class="small">The two examples per gate are on the six practice pieces in <code>familiarisation-copy.html</code> (a pass and a fail for Gates 1, 2 and 4; Gate 3 has no practice piece, see the gaps below). They were written today to practise applying the documented checks. They are not part of the rubric and are not ground truth.</p>
 <div class="ill"><strong>High (passes Gates 1 to 4):</strong> practice piece 1. <strong>Low (fails a blocking gate):</strong> pieces 2, 3, 4 and 5. <strong>Low (fails a revisable gate):</strong> piece 6.</div>
 
-<h2>B. The quality rubric (<code>PRD.md</code> &sect;7.1): what is and is not documented</h2>
+<h2>B. The quality rubric (<code>PRD.md</code> &sect;7.1)</h2>
+<div class="banner">AMENDMENT A1 (1 November 2026) supplies the definitions and the 0 / 1 / 2 scale below. <strong>It was authored by the project's advisor, is not derived from a published instrument, and is a DRAFT until it is frozen</strong> (<code>docs/rating/rubric-amendment-1.md</code>; its section 4 lists the anchors that overlap or cannot be observed). Do not rely on a draft anchor in a scoring round.</div>
+<table>
+<tr><th style="width:26mm">Dimension</th><th>0</th><th>1</th><th>2</th></tr>
+<tr><td>Product relevance</td><td>names a feature, use or property the product does not have, or could describe a different product entirely</td><td>accurate, but nothing in it identifies this product specifically</td><td>every specific claim matches the product brief, and at least one detail is specific to this product</td></tr>
+<tr><td>Customer relevance</td><td>addresses a different audience than the stated one, or no identifiable audience</td><td>fits the stated audience, but would fit most other audiences equally well</td><td>names a need, situation or vocabulary specific to the stated audience</td></tr>
+<tr><td>Brand consistency</td><td>contradicts at least one stated voice attribute</td><td>neither matches nor contradicts the stated voice</td><td>matches at least two stated voice attributes</td></tr>
+<tr><td>Originality</td><td>entirely stock phrasing; could appear in any advertisement for any product</td><td>competent but familiar; at most one fresh element</td><td>contains at least one line the rater has not seen before, and does not open with a stock phrase</td></tr>
+<tr><td>Feasibility</td><td>needs substantive rewriting before the brand could publish it</td><td>publishable after minor edits</td><td>publishable as written</td></tr>
+<tr><td>Trustworthiness</td><td>contains a claim a reader would doubt without evidence</td><td>believable, but nothing in the copy supports it</td><td>every notable claim is attributable to something stated in the copy or its cited source</td></tr>
+</table>
+<p class="src">Evidence quality (a computed fraction of claims with resolvable sources) and cost efficiency (tokens per approved campaign) are computed and are not shown to raters. Agreement is reported as linear-weighted Cohen's &kappa; per dimension, beside raw counts.</p>
+
+<h3>The earlier table (what was documented before A1), kept for the record</h3>
+<p class="small">Before A1, <code>PRD.md</code> &sect;7.1 gave names, weights and "scored by" only; the cells below were empty.</p>
 <p class="src"><strong>Source</strong> (verbatim): the rubric is "weighted"; it should be scored by "at least two human raters on a sample of &ge; 30 campaigns", reporting inter-rater agreement (Cohen's &kappa;). Report the LLM-judge score separately and label it as such.</p>
 <table>
 <tr><th>Dimension</th><th style="width:13mm">Weight</th><th>Scored by (verbatim)</th><th>Definition</th><th>Scale: what each point means</th></tr>
@@ -106,7 +121,7 @@
 <tr><td>Cost efficiency</td><td>5%</td><td>Tokens per approved campaign (primary), list-price USD alongside</td><td>A computed figure (not a rater judgement)</td><td>Not a rating</td></tr>
 </table>
 
-<h2>C. Gaps found while building this sheet</h2>
+<h2>C. Gaps found while building this sheet (before A1; the defects in A1's draft anchors are in <code>rubric-amendment-1.md</code> section 4)</h2>
 <ol>
   <li><strong>Five rated dimensions have no documented definition and no documented scale</strong>: product relevance, customer relevance, brand consistency, originality, feasibility. Trustworthiness has a method name and nothing else.</li>
   <li><strong>The project asks for &kappa; "per rubric dimension"</strong> (<code>docs/evaluation-plan.md</code> &sect;6, D2). &kappa; needs categories. Only the approval outcome (approve / revise / reject) and the pass/fail checks have them.</li>
