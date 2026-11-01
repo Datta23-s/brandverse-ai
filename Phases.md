@@ -797,11 +797,16 @@ locally, stub mode). *Not delivered:* `GET /runs/{id}`; any live check of the re
 calls spent); memory recall and live research in a real run (D0 only; D1 and D2 refuse until live runs are
 allowed); an edit-out staging `Correction.edited_out` (no injected item exists until Phase 7); a way for
 calibration's second scorer to record after the first decision has ended the run (the database allows it, the
-API does not yet); e2e of the approval path on the live project (needs an approver membership there). *Open:*
-`anon` and `authenticated` still hold table-level INSERT and UPDATE on `campaigns` and INSERT on `approvals`,
-blocked by row-level security only: the `memory_items` 0029/0030 pattern, candidate 0043, not built.
-*Migrations:* 0041 and 0042 are NOT applied live: dry run recorded (`supabase/dry-runs/`), waiting for CI green
-on the pushed HEAD, then the CLI procedure. *Standing call budget:* 12 of 60 Standard calls spent, 48 remaining,
+API does not yet); e2e of the approval path on the live project (needs an approver membership there). *Closed 2026-11-01:*
+0043 revokes `anon`'s and `authenticated`'s table-level INSERT and UPDATE on `campaigns` and INSERT on
+`approvals` (the `memory_items` 0029/0030 pattern). *Corrected 2026-11-01:* 0041's key was first
+(campaign, round, approver) and blocked the rubric's own re-score (section 6, "a re-score is a new row"); it is
+now (campaign, round) for EVALUATION decisions only, and calibration and tuning rows are append-only.
+*Migrations:* 0041, 0042 and 0043 APPLIED live 2026-11-01 04:3x UTC after CI was green on c4c9071; `migration list`
+identical through 0043; live posture 141 of 141; chain heads read (no chained rows yet).
+*Live runs (owner, 2026-11-01):* approved from now, research on REPLAY only (live search would collide with the
+recording, live model calls do not). The tuning organisation is created in a throwaway local database by
+`scripts/tuning_org.py` (owner + editor + approver); `LLM_STRONG_TIER_ORG_ID` is NOT set (strong tier needs asking). *Standing call budget:* 12 of 60 Standard calls spent, 48 remaining,
 none this chunk; no strong tier.
 
 **Chunk B live check (2026-10-29), 5 of the 6 approved Standard-tier calls**
