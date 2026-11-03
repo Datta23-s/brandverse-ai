@@ -49,7 +49,7 @@ def test_the_ruled_values_are_in_the_file_and_the_condition_is_still_unset() -> 
     b = load_dev_budget()
     assert b.ceiling_calls == 250
     assert b.total_at_ruling == 101
-    assert b.made_at_ruling == {"brandverse_chunk_f": 7}
+    assert b.made_at_ruling == {"brandverse_chunk_f": 7, "brandverse_stage2": 0}
     assert b.billing_unlinked_confirmed_on is None
 
 

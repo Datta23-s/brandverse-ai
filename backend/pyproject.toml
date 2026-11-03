@@ -60,6 +60,9 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Dumps the stack of any test stuck over 5 minutes (no kill, no new dependency). A per-test KILL needs
+# pytest-timeout, a new dev dependency: asked for, not added (dependency rule).
+faulthandler_timeout = 300
 pythonpath = ["."]
 markers = [
     "db: needs PostgreSQL with pgvector (TEST_DATABASE_URL); merge-blocking in CI",

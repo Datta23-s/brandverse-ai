@@ -18,6 +18,8 @@ total_at_ruling: 101
 # and therefore cannot make a live call under a dev ceiling.
 databases:
   brandverse_chunk_f: 7
+  # Created 3 November, after the ruling, for stage 2 of the freeze gate (scripts/phase7_stage2.py).
+  brandverse_stage2: 0
 
 # THE CONDITION on the ceiling (owner, 2026-11-01): no call of any tier until it is confirmed in
 # writing that no billing account is linked to Cloud project `brandverse-ai`. Only the owner can read

@@ -333,3 +333,24 @@ memory and could not have separated except through which product they matched. T
 Standard calls each, about 126 calls)**, replayed research as before, each approved through the product's own path; campaign 3 is then scored on the recalled memory with the real encoder and no model call (as stage 1 did), which is what makes it a recall measurement and not a third run.
 Total spend then 227 of 250. If the owner prefers a margin: run the 8 clean brands only (112 calls, 213 total) and leave B07, which the criterion excludes anyway; or run four brands first (56 calls) and look. **The multi-brand runner is not written**
 (`chunk_f_first_campaign` recreates its database, which would delete B04's memory, and runs R10 only); writing it needs no calls and is the next step once the order and the condition are settled.
+
+## 7. Stage-2 runner (3 November 2026): scope, predictions per definition, the interim gate
+
+**Written with no calls, committed before any call.** `backend/scripts/phase7_stage2.py`, tested by `backend/tests/test_phase7_stage2.py`. It refuses to run live unless this file, `config/`, the decision log and itself are committed and unmodified, so this registration provably precedes the first call.
+
+**Scope (owner, 3 November): four brands first.** Order fixed here by position, not by expected outcome: the eight clean non-regulated brands are B01, B02, B03, B05, B06, B08, B09, B10; **the interim set is the first four: B01, B02, B03, B05.** B04 (contaminated) and B07 (regulated, excluded from the criterion) are not in the set. Campaigns 1 and 2 run live (about 7 Standard calls each, 56 for the four); campaign 3 is scored from recall with no call. Each brand has its own organisation, so no memory crosses brands. Campaign 1 runs at D2 (cold start, R = 0.786); **campaign 2 runs at D1**, the depth B04's campaign 1 was run at, because the engine that would choose it is not built: this is a free parameter of the run, fixed here, and it governs how many items campaign 2 writes.
+
+**Both definitions of U, from the same recall of each campaign:** new (2.21: n at S >= 0.55, bands 0.20 / 0.32) and old (slots filled at M >= 0.80, bands 0.35 / 0.70, the stage-1 values kept as constants in the runner). Reported per campaign: N, n of recalled, slots, both U, both R, both depths, and the new depth at floors 0.50 and 0.60 (sensitivity, never to select).
+
+**Predictions per definition (registered; modal first):**
+
+| | Campaign 1 | Campaign 2 | Campaign 3 |
+|---|---|---|---|
+| New | D2 | D1 (alt D2) | D0 (alt D1) |
+| Old | D2 | D1 | **D1: the old definition is predicted NOT to separate C2 from C3** |
+
+Reason for the old row, given in advance: items one campaign writes start at confidence 0.60, so no recalled item reaches M >= 0.80, no slot fills, and old U stays 1 for campaigns 2 and 3 (stage 1's failure on B04). It is a prediction of a known failure mode, informed by B04, not a blind one.
+
+**Interim criterion (owner): at least 3 of the 4 brands show three distinct bands (campaign 1 > 2 > 3) under EITHER definition before any remaining brand runs.** Evaluated by `interim_verdict`; a partial interim (fewer than four brands scored) cannot pass. `--stage rest` reads the interim report and **refuses unless it exists and passed**: there is no flag that skips this. "Either definition" is two chances at the same threshold; both counts are reported, and a pass carried by the old definition alone would contradict 2.21's reason for replacing it, so it is reported as such.
+
+**Found while writing it (no call):** (1) **research is recorded for R01 to R25 only.** B09's campaign 2 (R26) and all of B10 (R28 to R30) cannot be replayed, so at most six clean brands (B01, B02, B03, B05, B06, B08) can run campaigns 1 and 2 live; the criterion "at least 6 of 8 clean brands" is then reachable only if all six separate, or the recording is finished (R26 to R30, live searches, held until the owner says). (2) A no-call run of the live scoring path on B04's existing memory gave n = 1 of 5 recalled items past the floor for campaign 2 and 0 of 5 for campaign 3, against the registered 4 to 7 and 8 to 11 (R 0.419, 0.453: D2, D2). That memory holds only campaign 1's items, so it does not test the prediction, but it is the first sign that the 0.55 floor may be set where few real items pass. The floor is frozen and is not touched; if stage 2 shows the same, that is the finding.
