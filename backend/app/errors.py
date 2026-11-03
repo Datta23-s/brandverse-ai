@@ -68,6 +68,15 @@ class StrongTierCapReached(CallRefused):
     concurrent calls cannot both take the last place."""
 
 
+class DevBudgetRefused(CallRefused):
+    """The development ceiling (config/dev_budget.yaml) refused the call: the billing condition is
+    not confirmed, the database is not registered, or the ceiling is spent. `kind` says which."""
+
+    def __init__(self, message: str, kind: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
 # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────────
 
 

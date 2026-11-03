@@ -120,6 +120,16 @@ class LLMGateway:
         clock: Callable[[], float] = time.monotonic,
         today: Callable[[], date] = lambda: datetime.now(UTC).date(),
     ) -> None:
+        if completion is _litellm.acompletion and getattr(ledger, "dev_budget", None) is None:
+            # A real provider call with no development ceiling is a hole (owner, 2026-11-01): the
+            # ceiling and the billing condition are enforced in the ledger, so a gateway that
+            # reaches the provider through a ledger without them cannot be built. There is no
+            # production exemption either: when evaluation runs begin, the owner replaces the
+            # file's figures and registers the live database in it.
+            raise ValueError(
+                "a gateway that calls the provider needs a ledger with a dev_budget "
+                "(config/dev_budget.yaml)"
+            )
         self._registry = registry
         self._ledger = ledger
         self._repair = prompts.get(*REPAIR_PROMPT)  # fails at start-up, not at the first repair

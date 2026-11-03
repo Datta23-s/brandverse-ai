@@ -620,6 +620,22 @@ do not separate, say so and stop; change `R` before building on it"), **the Phas
 Limit of the check: ONE brand has real memory; the other nine need their campaign 1 run (about 63 Standard calls) and have not been, so whether the failure is general is not shown,
 though nothing in the mechanism suggests brand B04 is special.
 
+### 2.21 Third set of rulings, 1 November 2026: U redefined, bands frozen, the ceiling, the variance check
+Full text and numbers: `docs/phase7-first-decision.md` "Registration 2". (1) **`U` is a saturating function of the QUANTITY of relevant memory**: `n` = recalled items whose semantic match `S` reaches a floor, `U = 1 - min(1, n/12)`.
+Reason given in advance: a binary threshold on the best match discards the quantity the hypothesis is about. Floor 0.55 = the 99th percentile of `S` between one brand's items and the other brands' requests (0.531), rounded up to 0.05: a procedure, not an outcome.
+Capped linear shape on purpose (no free parameter). The binarisation is ruled out; similarity stays as an input through the floor. (2) **The circularity is broken by freezing, not reordering**: reuse bands (0.90 / 0.80 / 0.65) and depth bands (D0 below 0.20, D2 from 0.32,
+the coverage terciles at the reference novelty 0.20) are frozen provisional values; chunk G becomes a RESULT (how closely they matched approver judgement); Phase 10's tuning of the depth thresholds is cancelled; a later change is a new dated registration with both sets
+reported. (3) **Development ceiling 250 calls, conditional on billing**: enforced in the ledger (`config/dev_budget.yaml`, `app/llm/dev_budget.py`); no call of any tier until the owner confirms in writing no billing account is linked to `brandverse-ai`. 101 spent, the overrun
+(60 to 101) the owner's. (4) **Variance check**: brand consistency is constant by construction on the ten agreement campaigns (no voice attributes exist); product relevance, originality and trustworthiness are likely near-constant; only feasibility is expected to carry kappa. Owner to choose
+the remedy before 8 November. **Found while registering:** stage 1 (2.20) scored campaign 3 against campaign 1's memory only, so campaigns 2 and 3 could not have separated; stage 2 must run campaigns 1 and 2 live (about 126 calls).
+
+### 2.22 Where work stopped, 1 November 2026 (end of day, owner's instruction)
+**Registered and committed, no stage-2 call made.** The U redefinition (2.21) is registered in `docs/phase7-first-decision.md` "Registration 2", `config/scoring.yaml` `necessity:` and `tests/test_necessity_frozen.py` in the commit that carries this entry,
+which precedes every stage-2 run: the next session starts from that registration and must not alter those values without a new dated entry. The development ceiling (250) is enforced in the ledger and `billing_unlinked_confirmed_on` in `config/dev_budget.yaml` is NULL, so every call is
+refused until the owner confirms in writing that no billing account is linked to `brandverse-ai`. **Open, in order:** (1) the owner's billing confirmation; (2) the stage-2 scope (nine brands about 126 calls for campaigns 1 and 2 live, or the eight clean brands about 112, or four first); (3) the multi-brand
+campaign 1-and-2 runner (not written; `chunk_f_first_campaign` recreates its database); (4) the 8 November remedy for the constant dimensions (2.21 item 4); (5) the Phase 7 build waits on stage 2 separating (at least 6 of 8 clean brands, three bands). Probe scripts that build a gateway directly
+(`chunk_b_*`, `v2_probe`, `llm_smoke`, `schema_confirm`, `precompute_brief_checks`, `demo_tier_switch`) now fail at construction without a `dev_budget`: intended, fix per script when one is next needed.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's

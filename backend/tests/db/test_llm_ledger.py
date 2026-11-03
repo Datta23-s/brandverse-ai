@@ -595,6 +595,64 @@ async def test_the_strong_tier_cap_refuses_the_call_after_the_last_one_approved(
     assert rows == [("pending", 6), ("refused", 2)]
 
 
+async def test_the_dev_ceiling_refuses_any_tier_and_org_and_writes_the_refusal(
+    pool: AsyncConnectionPool[AsyncConnection], db_url: str
+) -> None:
+    """Owner, 2026-11-01: 250 development calls of any tier, and none until billing is confirmed.
+    The ceiling here is 3 over this database; the database's own name is the registered one."""
+    from datetime import date
+
+    from app.errors import DevBudgetRefused
+    from app.llm.dev_budget import DevBudget
+
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute("select current_database()").fetchone()
+        assert row is not None
+        name = row[0]
+        made = c.execute(
+            "select count(*) filter (where outcome <> 'refused') from llm_calls"
+        ).fetchone()
+        assert made is not None
+    org, other = fresh_org(db_url), fresh_org(db_url)
+    ctx, other_ctx = fresh_run_ctx(db_url, org), fresh_run_ctx(db_url, other)
+    registry = make_registry(strong_rpd=1000)
+
+    def led(confirmed: date | None) -> CallLedger:
+        return CallLedger(
+            pool,
+            registry,
+            max_calls_per_run=100,
+            max_cost_per_run_usd=100.0,
+            pending_expiry_s=900,
+            dev_budget=DevBudget(
+                ceiling_calls=int(made[0]) + 3,
+                total_at_ruling=int(made[0]),
+                made_at_ruling={name: int(made[0])},
+                billing_unlinked_confirmed_on=confirmed,
+            ),
+        )
+
+    with pytest.raises(DevBudgetRefused) as unconfirmed:  # the condition first, any tier
+        await led(None).admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    assert unconfirmed.value.kind == "billing_not_confirmed"
+    confirmed = led(date(2026, 11, 2))
+    # three places across tiers and organisations, then every call is refused, again and again
+    await confirmed.admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    await confirmed.admit(other_ctx, Tier.CHEAP, P, "test", 0.0001)
+    await confirmed.admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    for _ in range(2):
+        with pytest.raises(DevBudgetRefused, match="3 of the 3|spent") as spent:
+            await confirmed.admit(other_ctx, Tier.STANDARD, P, "test", 0.0001)
+        assert spent.value.kind == "ceiling_reached"
+    with psycopg.connect(db_url, autocommit=True) as c:
+        outcomes = c.execute(
+            "select outcome, count(*) from llm_calls where org_id = any(%s) "
+            "group by outcome order by outcome",
+            ([org, other],),
+        ).fetchall()
+    assert outcomes == [("pending", 3), ("refused", 3)]
+
+
 async def test_the_cap_holds_under_concurrent_calls_and_ignores_other_tiers_and_orgs(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:

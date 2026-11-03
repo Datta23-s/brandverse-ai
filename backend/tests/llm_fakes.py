@@ -91,6 +91,9 @@ class FakeLedger:
     # (organisation, most strong calls it may ever make): the real ledger enforces it in `admit`
     # (tests/db/test_llm_ledger.py); the gateway only requires that it is set for a scope.
     strong_cap: tuple[Any, int] | None = None
+    # The development ceiling (config/dev_budget.yaml): the real ledger enforces it in `admit`
+    # (tests/db/test_llm_ledger.py); a gateway on the real provider requires that it is set.
+    dev_budget: Any = None
 
     async def organisation_is_practice(self, org_id: Any) -> bool:
         return org_id in self.practice_orgs

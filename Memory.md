@@ -149,6 +149,8 @@ on this number. The sampled HEAD estimate (`docs/evaluation-plan.md` section 8) 
 a recalled item into an agent, so the 0.90 and 0.80 bands described behaviour that no phase scheduled until today. Injection is
 now scheduled (not built) in Phase 7 together with the Research Necessity Engine, and no evaluation run happens before it (`Phases.md` Phase 7).
 
+**Superseded for U, 2026-11-01 (decision-log 2.21):** the engine's `U` no longer uses `memory_coverage`. It uses the QUANTITY of relevant memory: `n` recalled items with semantic match `S ≥ 0.55`, `U = 1 − min(1, n/12)`. The bands below still decide how a recalled item is injected, and are frozen provisional values. The sentence that follows describes the first definition, which failed its registered check (decision-log 2.20).
+
 These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`. **Since 2026-10-31 there are two required slots, `insight` and `competitor`** (the only kinds that can carry a full component set), and coverage is always reported as "k of 2 slots"; `decision-log.md` 2.9.
 
 **The bands are PROVISIONAL — recorded 2026-10-25, before anything else touches them.** The

@@ -32,6 +32,7 @@ from app.core.config import Settings
 from app.core.gates import load_superlatives
 from app.core.timing import TimedEncoder, TimedSearch
 from app.errors import BrandverseError
+from app.llm.dev_budget import load_dev_budget
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
@@ -116,6 +117,7 @@ async def open_pipeline(
             max_calls_per_run=settings.max_llm_calls_per_run,
             max_cost_per_run_usd=settings.max_cost_per_run_usd,
             pending_expiry_s=settings.llm_pending_expiry_s,
+            dev_budget=load_dev_budget(),
             strong_cap=(
                 (settings.llm_strong_tier_org_id, settings.llm_strong_tier_max_calls)
                 if settings.llm_strong_tier_org_id is not None

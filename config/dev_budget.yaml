@@ -1,0 +1,26 @@
+# The development call ceiling (owner, 2026-11-01): every model call of any tier made while developing
+# and tuning, in every throwaway database, counts against ONE ceiling, and it is enforced in the
+# ledger's admission (backend/app/llm/dev_budget.py), not remembered.
+#
+# History, so the figure is not mistaken for a design number: the standing budget was 60 Standard
+# calls (2026-10-31); the agreement round was ordered without raising it and 60 became 101; the
+# owner took the overrun and set the ceiling at 250.
+ceiling_calls: 250
+
+# Calls (any tier, not refused) made by the development work in ALL databases at the ruling, as the
+# owner counts them. A database can only see its own llm_calls, so the ledger adds this figure to
+# what its own database has logged SINCE the ruling.
+total_at_ruling: 101
+
+# Every database that may make calls, with how many non-refused calls its own llm_calls held AT THE
+# RULING. A database not listed here is REFUSED: a new throwaway database must be added here, on
+# purpose, with 0 when it was created after the ruling. Tests and the live project are not listed
+# and therefore cannot make a live call under a dev ceiling.
+databases:
+  brandverse_chunk_f: 7
+
+# THE CONDITION on the ceiling (owner, 2026-11-01): no call of any tier until it is confirmed in
+# writing that no billing account is linked to Cloud project `brandverse-ai`. Only the owner can read
+# that fact. Until this holds a date (YYYY-MM-DD, the day the owner confirmed it), EVERY call is
+# refused. If an account turns out to be linked: leave it null, everything stops, reassess spend.
+billing_unlinked_confirmed_on: null

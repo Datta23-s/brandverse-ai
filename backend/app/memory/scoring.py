@@ -110,6 +110,22 @@ class Retrieval(_Strict):
     ] = Field(min_length=1)
 
 
+class Necessity(_Strict):
+    """The Research Necessity Engine's FROZEN provisional parameters (registered 1 November 2026,
+    before any stage-2 call; docs/phase7-first-decision.md "Registration 2", decision-log 2.21).
+    tests/test_necessity_frozen.py pins every value: changing one is a decision, not an edit."""
+
+    # U is a saturating function of the NUMBER of recalled items whose semantic match S reaches
+    # this floor, against `item_cap`: coverage = min(1, n / item_cap), U = 1 - coverage.
+    relevance_floor: float = Field(gt=0, lt=1)
+    item_cap: int = Field(ge=1)
+    # R = (wN N + wU U + wS S) / (wN + wU + wS); F and E are dropped (decision-log 2.18).
+    weights: dict[Literal["N", "U", "S"], float]
+    # D0 below `d0_below`, D2 from `d2_from`, D1 between.
+    d0_below: float = Field(gt=0, lt=1)
+    d2_from: float = Field(gt=0, lt=1)
+
+
 class Research(_Strict):
     search_cache_ttl_s: int = Field(ge=1)  # a parameter of the results, never a constant
     # A search answered while some engines failed is a transient failure: it is cached, marked
@@ -232,6 +248,7 @@ class ScoringConfig(_Strict):
     memory: MemoryScoring
     writeback: Writeback
     retrieval: Retrieval
+    necessity: Necessity
     research: Research
     source: SourceScoring
 
@@ -347,6 +364,28 @@ def memory_slots(
     reported as "k of N slots": the fraction alone hides what N is."""
     filled = sum(1 for ms in best_by_slot.values() if ms and max(ms) >= cfg.bands.adapt)
     return filled, len(best_by_slot)
+
+
+def quantity_coverage(similarities: Sequence[float], cfg: Necessity) -> tuple[int, float]:
+    """(n, coverage): n = recalled items whose semantic match S reaches the relevance floor,
+    capped at the injection cap; coverage = n / cap, saturating at 1 (owner, 2026-11-01).
+
+    This replaces the binary 'slots whose best M crosses 0.80' as U's input: a threshold on the
+    single best match throws away the QUANTITY of accumulated memory, which is what the hypothesis
+    is about. Similarity is still an input (through the floor); confidence and freshness are not,
+    so coverage asks 'how much relevant material exists', not 'how good is the best item'."""
+    passing = sum(1 for s in similarities if min(1.0, max(0.0, s)) >= cfg.relevance_floor)
+    n = min(cfg.item_cap, passing)
+    return n, n / cfg.item_cap
+
+
+def necessity_depth(r: float, cfg: Necessity) -> Literal["D0", "D1", "D2"]:
+    return "D0" if r < cfg.d0_below else "D2" if r >= cfg.d2_from else "D1"
+
+
+def necessity_r(n_novelty: float, u: float, s_sector: float, cfg: Necessity) -> float:
+    w = cfg.weights
+    return (w["N"] * n_novelty + w["U"] * u + w["S"] * s_sector) / (w["N"] + w["U"] + w["S"])
 
 
 def memory_coverage(best_by_slot: Mapping[str, Sequence[float]], cfg: MemoryScoring) -> float:

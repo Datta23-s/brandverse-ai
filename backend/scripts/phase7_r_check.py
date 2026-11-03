@@ -12,8 +12,15 @@ formula as it would be implemented:
 
     R = 0.30 N + 0.25 U + 0.15 S, renormalised over 0.70  (F and E dropped: decision-log 2.18)
     N = 1 - max cosine to the organisation's earlier requests
-    U = 1 - memory_coverage;  S = 1 for a regulated sector
-    D0 below 0.35, D1 from 0.35 to below 0.70, D2 from 0.70
+    S = 1 for a regulated sector
+    U = 1 - min(1, n / 12), n = recalled items whose semantic match S reaches 0.55   (REDEFINED
+        1 November 2026, decision-log 2.21; the first definition, slots whose best M crosses
+        0.80, is what stage 1 failed on and is not used here)
+    D0 below 0.20, D1 from 0.20 to below 0.32, D2 from 0.32   (frozen provisional)
+
+All of those numbers are read from `config/scoring.yaml` `necessity:`, pinned by
+tests/test_necessity_frozen.py. Run on B04 this is a RE-SCORE of data whose stage-1 result was
+already seen, so it cannot test the registered prediction; it is reported as contaminated.
 
 Other brands have no memory yet: each needs its campaign 1 run on real models (about 7 Standard
 calls a brand), which is a separate step that needs the owner's budget ruling.
@@ -32,20 +39,14 @@ import psycopg
 from app.evaluation.test_set import request_inputs
 from app.memory.embeddings import default_encoder
 from app.memory.recall import recall
-from app.memory.scoring import load_scoring
+from app.memory.scoring import (
+    load_scoring,
+    necessity_depth,
+    necessity_r,
+    quantity_coverage,
+)
 
 URL = "postgresql://postgres:postgres@127.0.0.1:55432/brandverse_chunk_f"
-WEIGHTS = {"N": 0.30, "U": 0.25, "S": 0.15}
-D0_BELOW, D2_FROM = 0.35, 0.70
-
-
-def depth(r: float) -> str:
-    return "D0" if r < D0_BELOW else "D1" if r < D2_FROM else "D2"
-
-
-def r_score(n: float, u: float, s: float) -> float:
-    total = sum(WEIGHTS.values())
-    return (WEIGHTS["N"] * n + WEIGHTS["U"] * u + WEIGHTS["S"] * s) / total
 
 
 async def main() -> int:
@@ -90,7 +91,7 @@ async def main() -> int:
         r_in = inputs[rid]
         n = 1.0 if not prior else 1 - max(cos(rid, p) for p in prior)
         if rid == "R10":
-            u, slots = 1.0, "0 of 2 (cold start: nothing existed)"
+            u, slots = 1.0, "n = 0 (cold start: nothing existed)"
         else:
             async with await psycopg.AsyncConnection.connect(URL) as conn:
                 found = await recall(
@@ -106,18 +107,20 @@ async def main() -> int:
                     now=datetime.now(UTC),
                     personas=None,
                 )
-            u = 1.0 - found.coverage
-            best = max((i.m for i in found.items), default=0.0)
-            slots = f"{found.slots_filled} of {found.slots_total}; best M {best:.3f}"
-        s = 0.0  # B04 footwear is not a regulated sector
-        r = r_score(n, u, s)
-        rows.append((rid, n, u, r, depth(r), slots))
-    print("\ncampaign | N     | U     | R     | depth | slots filled (step-4 recall, C left out)")
+            sims = [i.components["S"] for i in found.items if "S" in i.components]
+            count, coverage = quantity_coverage(sims, cfg.necessity)
+            u = 1.0 - coverage
+            floor = cfg.necessity.relevance_floor
+            slots = f"n = {count} of {len(found.items)} recalled pass S >= {floor}"
+        s = 1.0 if r_in.regulated else 0.0
+        r = necessity_r(n, u, s, cfg.necessity)
+        rows.append((rid, n, u, r, necessity_depth(r, cfg.necessity), slots))
+    print("\ncampaign | N     | U     | R     | depth | relevant items (step-4 recall, C left out)")
     for rid, n, u, r, d, slots in rows:
         print(f"{rid:8} | {n:.3f} | {u:.3f} | {r:.3f} | {d:5} | {slots}")
     bands = [row[4] for row in rows]
-    print("\nregistered prediction: R10 D2, R11 D1, R12 D0")
-    print("produced:             ", ", ".join(f"{r[0]} {r[4]}" for r in rows))
+    print("\nstage-1 definition's prediction: R10 D2, R11 D1, R12 D0 (it failed: D2, D1, D1)")
+    print("this definition produces:", ", ".join(f"{r[0]} {r[4]}" for r in rows))
     print("separates (three different bands):", len(set(bands)) == 3)
     print("spread of R:", f"{statistics.pstdev([row[3] for row in rows]):.3f}")
     return 0

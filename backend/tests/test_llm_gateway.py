@@ -298,6 +298,7 @@ def test_a_strong_tier_scope_without_a_cap_cannot_be_built() -> None:
     for cap in (None, (uuid4(), 6)):  # none, or a cap for ANOTHER organisation
         ledger = FakeLedger()
         ledger.strong_cap = cap
+        ledger.dev_budget = object()  # the development ceiling is its own test (test_dev_budget)
         with pytest.raises(ValueError, match="strong_cap"):
             LLMGateway(
                 make_registry(unique=False),

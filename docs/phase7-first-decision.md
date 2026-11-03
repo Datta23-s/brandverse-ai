@@ -216,3 +216,120 @@ and on whether to change `R` first.
 6. The budget for the agreement round's ten campaigns (about 72 Standard calls, beyond the standing 60).
 
 My picks are N-a, F-d, E-c, the descope split as written, and (a) for the fresh slot. None of it is built until ruled.
+
+---
+
+# Registration 2 (1 November 2026): U redefined, bands frozen, predictions, budget, variance check
+
+**Registered before any stage-2 call.** The values below are in `config/scoring.yaml` (`necessity:`), pinned by `backend/tests/test_necessity_frozen.py`, and
+committed before the first call. Owner rulings of 1 November 2026 (four, in the order below). Nothing here was fitted to a stage-2 outcome; one thing was seen
+beforehand and is declared in "What was seen before registering".
+
+## 1. U is redefined: quantity of relevant memory, not the best match crossing a threshold
+
+*The reason, given in advance (owner's construct argument, independent of any number):* a binary threshold on the single best match discards the QUANTITY of
+accumulated memory, and quantity is what the hypothesis is about. "Do I already know enough about this brand" is a question about how much usable material exists.
+
+```
+n        = the number of recalled items whose semantic match S reaches the relevance floor (S = cosine of request and item, clamped to [0, 1])
+coverage = min(1, n / 12)                       12 = the injection cap (Memory.md section 9)
+U        = 1 - coverage
+R        = (0.30 N + 0.25 U + 0.15 S_sector) / 0.70       N = 1 - max cosine to the organisation's earlier requests; S_sector = 1 for a regulated sector
+```
+
+**The relevance floor is 0.55, set by a procedure and not from any campaign.** The null: S between one brand's 5 memory items and the 27 requests of the OTHER brands
+(135 unrelated pairs; the local encoder, no model call). Its percentiles: 50th 0.399, 75th 0.430, 90th 0.458, 95th 0.488, 99th 0.531, maximum 0.553. **Floor = the 99th
+percentile rounded UP to the next 0.05 = 0.55**: an unrelated item passes about once in a hundred. The procedure used no C2 or C3 similarity and does not move with any
+outcome.
+
+**The shape is the capped linear function, and that is deliberate.** "Saturating" is satisfied by saturating at the cap. Any smooth curve (exponential, logarithmic) adds a
+free parameter (a time constant) that would be chosen by looking at what separates; the capped line adds none, because the cap is already the owner's. The cost is stated:
+it saturates abruptly at 12 and gives no diminishing returns before it.
+
+**Is the floor itself a new overfitting risk? Yes, it is the one new knob, and these are the guards.** (a) It comes from a null distribution defined before stage 2, with its
+percentile and rounding rule fixed here. (b) Stage 2 reports, as SENSITIVITY ONLY and never to select, the same depths at floors 0.50 and 0.60. (c) If the verdict flips between
+0.50 and 0.60, that is reported as fragility whatever the verdict at 0.55 is. (d) The floor is a property of the encoder, so a change of encoder re-derives it by the same procedure.
+
+**Option (d), keeping semantic match in coverage:** it is kept, and it is already inside this definition: relevance IS the semantic match S, through the floor. M is deliberately not
+used: it carries confidence and freshness (a one-campaign item starts at confidence 0.60), which is why stage 1 saw no item reach 0.80.
+
+## 2. The bands are frozen now as provisional pre-registered values; chunk G becomes a RESULT
+
+**Why the experiment can run on provisional bands.** The circle existed only if calibration were a prerequisite. It is not: frozen bands make chunk G a measurement, "how closely did the
+pre-registered bands match approver judgement", reportable whichever way it comes out and stronger than a threshold fitted to the approver and called validated. I see no reason the
+experiment cannot run on them. Three consequences, stated rather than discovered later: (i) **Phase 10's tuning of the depth thresholds is cancelled**; the dissertation reports the
+as-frozen values. (ii) Freezing forbids SILENT revision, not revision: a change after chunk G is a new dated registration before the evaluation freeze, with both sets reported (Rules.md A5).
+(iii) Stage 2 tests the DEPTH bands only. The reuse bands drive injection, which is not built, so they are frozen here and untested until Phase 7 builds it.
+
+| Band | Frozen value | Rationale (written before any stage-2 run) |
+|---|---|---|
+| Reuse: verbatim | `M >= 0.90` | Memory.md section 3.2 default, set 2026-10-18 before any data; also the write-back gate (section 6.3). Unchanged. |
+| Reuse: adapt | `0.80 <= M < 0.90` | Same source. **No longer feeds U** (section 1); it still decides whether an agent may rephrase an injected item. |
+| Reuse: support | `0.65 <= M < 0.80` | Same source; background only, never the sole basis for a claim. Below 0.65 an item is not injected. |
+| Depth: D2 | `R >= 0.32` | The coverage tercile: U >= 2/3 (at most 4 of 12 relevant items) at the reference novelty N = 0.20, S = 0: R = (0.30 x 0.20 + 0.25 x 2/3) / 0.70 = 0.324. "Memory holds under a third of a full prompt: research in full." |
+| Depth: D0 | `R < 0.20` | The other tercile: U <= 1/3 (at least 8 of 12): R = (0.06 + 0.25 x 1/3) / 0.70 = 0.205. "Memory holds two thirds of a full prompt or more: reuse only." D1 between. |
+
+The reference N = 0.20 is the 1 November free measurement of within-brand novelty (means 0.195 and 0.159). The design's 0.35 / 0.70 were set for a range whose typical maximum was 0.85; with F and E dropped
+(decision-log 2.18) a non-regulated request tops out at 0.79, and 0.35 / 0.70 would put D1 where `U >= 0.72`, a band memory could reach only by holding almost nothing. The terciles are the
+construct-based replacement; they are NOT the old numbers moved until the data looked right.
+
+**Consequence for the one regulated brand (B07), stated now.** `S_sector` = 1 adds 0.214 to R, so a regulated request is never D0 whatever memory holds, and is D2 up to 10 relevant items and D1 only
+at 11 or 12. B07 cannot show the progression by construction. That is the design's weight on sector risk acting as intended (regulated work always gets research), and it means the memory
+benefit on a regulated brand is not measurable under these weights. It is a V-record, and B07 is excluded from the separation criterion below.
+
+## 3. Registered predictions (campaigns 1, 2 and 3 per brand)
+
+Depth is a deterministic function of `n` and `N` (tested): with N about 0.21, **n <= 4 gives D2, n = 5 to 8 gives D1, n >= 9 gives D0** (non-regulated). So what is predicted is `n`, which depends on how many
+items a campaign writes. Observed once: B04's campaign 1 wrote 5 (4 insight, 1 competitor) at D1. Campaign 1 of the other brands runs at D2 (cold start), which may write more; I predict 4 to 8.
+
+| Campaign | Brands B01-B03, B05, B06, B08-B10 (8 brands) | B04 | B07 (regulated) |
+|---|---|---|---|
+| **1** | n = 0, N = 1, R = **0.786, D2**: certain by construction | D2 | R = 1.00, **D2** |
+| **2** (other product, same brand) | n predicted **4 to 7**: R 0.24 to 0.33, **D1 modal, about 60%**; alternative D2 (n <= 4, the 4-item edge); D0 only if campaign 1 wrote 9+ | contaminated (below) | R 0.43 to 0.51, **D2** |
+| **3** (first product again, new objective) | n predicted **8 to 11** (campaign 1's plus campaign 2's items, less near-duplicates merged at 0.95): R 0.15 to 0.21, **D0 modal, about 55%**; alternative D1 (n = 8) | contaminated | R 0.31 to 0.37, **D2 at n <= 10, else D1** |
+
+Within-brand differences I expect and register: B02 (smartwatch, then a calling smartwatch) and B06 (protein coffee, then a flavour of it) have a campaign-2 product close to campaign 1's, so more of campaign 1's items pass the floor: higher n(C2) than the
+other brands, still D1 unless campaign 1 wrote 9 or more items.
+
+**Pass criterion for "stage 2 separates", registered:** among the 8 clean non-regulated brands, **at least 6 show three different bands** (C1 > C2 > C3 in depth). **Falsified if** C2 and C3 share a band in more than 2 of the 8, or all three share a band in any
+two. Reported beside it for every brand, pass or fail: n, N, U, R, depth for all three campaigns; n written per campaign; the sensitivity at floors 0.50 and 0.60; and R's monotonicity (C1 > C2 > C3 by at least 0.05) as the continuous version of the same question. **Known
+weak point, said before the run:** the margins are thin where the bands are narrow (D1 is n = 5 to 8 only), and the thin edge is n(C2) = 4 against 5; if campaign 1 writes 4 items, C2 is D2 and the criterion fails for that brand.
+
+**What was seen before registering.** B04's stage-1 result (best M 0.715 and 0.771, depths D2, D1, D1) was seen before this definition was chosen, and the count of 5 items per campaign is from B04. So **B04 is contaminated** and is re-scored for the record
+only (it cannot test the prediction). The floor's null used B04's five items but no C2 or C3 similarity of B04's. The other nine brands are clean.
+
+## 4. Development budget: ceiling 250, conditional, enforced in code
+
+Owner: the ceiling is **250 calls, any tier, and the overrun (60 to 101) is the owner's**. It is conditional: **no further call of any tier until it is confirmed in writing that no billing account is linked to Cloud project `brandverse-ai`**; if one is linked, everything stops, stage 2
+included, and the whole spend position is reassessed. Enforced in `LLMGateway`/`CallLedger.admit` the way the strong-tier cap is: `config/dev_budget.yaml` holds the ceiling (250), the owner's tally at the ruling (101), the databases allowed to call
+(each with its own `llm_calls` count at the ruling) and `billing_unlinked_confirmed_on`. While that date is null **every call of every tier is refused** (a `refused` row, `DevBudgetRefused`); a database not listed is refused; the 251st is refused; a gateway that reaches the provider through a ledger without the
+budget cannot be built. Tests: `tests/test_dev_budget.py` (decision, pinned values, the construction refusal) and `tests/db/test_llm_ledger.py` (refusals written, any tier and organisation). **Tally: 101 spent, 149 remain. Stage 2 needs about 126 (section 6), not the 63 I estimated for campaign 1 alone; about 23 would remain, and a repaired `invalid_output` costs an extra call, so the ceiling is tight.** The condition is
+UNSET: I cannot read the billing fact and have not set it.
+
+## 5. Variance check on the ten agreement campaigns (before the 8th)
+
+They ran at D0 with no research, so nothing carries a citation. My forecast of the spread across the ten, per dimension, from reading the generated copy (a forecast by the developer, not a rating, and it must not reach the raters). Kappa is undefined for a dimension a rater scores
+identically on all ten, and with a constant on one rater only it is zero or undefined: a property of the sample, not of the raters.
+
+| Dimension | Expected spread | Constant? |
+|---|---|---|
+| Product relevance | Almost all copies state specifications from the product brief (a litre capacity, a warranty, a wattage). Expect 2 on 8 to 10 of 10, perhaps 1 on P04 (lip balm, two claims) and P07 | **Likely near-constant at 2: high risk** |
+| Customer relevance | Copy is generic: "your daily routine", "your kitchen"; only P05 (commute, travel), P06 (wet days, school run) and P08 (journey) touch the stated audience. Expect mostly 1, a few 0 or 2 | Low spread; **medium to high risk of constant 1** |
+| **Brand consistency** | **There are no stated voice attributes** for any of the ten (`products.yaml` states none; the copywriter is not given a voice; A1 defect 3, still awaiting the owner's answer). A rater can only give "neither matches nor contradicts" | **CONSTANT BY CONSTRUCTION: kappa undefined whatever the raters do** |
+| Originality | Stock phrasing throughout ("Discover ...", "Streamline your routine", "peace of mind", "your daily routine"). Expect 0 or 1, little 2 | **High risk of near-constant** |
+| Feasibility | The gate and the system disagree: 7 passed, 3 flagged, 2 needed a revision round. Expect a real mix of 1 and 2, some 0 (P03, P07, P09 flagged) | **Varies: the one dimension I expect to carry kappa** |
+| Trustworthiness | No copy cites a source (D0). The anchor's "attributable to something stated in the copy or its cited source" is met only where the copy attributes itself (P10, "Based on manufacturer tests"). Expect 1 almost throughout, 0 for the three flagged | **High risk of near-constant at 1** |
+
+**Decision needed from the owner:** the 8 November set as generated can show agreement on **feasibility only, with confidence**; it cannot show it on brand consistency whatever happens, and probably not on product relevance, originality and trustworthiness. Options: (a) mix a few
+RESEARCHED campaigns in (needs calls, and cited claims make trustworthiness vary); (b) author voice attributes for the ten and regenerate (the generator was not given one, so the copy cannot be matched to it: 70 calls); (c) drop brand consistency from the 8 November analysis (A1 option b) and report which of the other five
+are undefined, as limitations, with the sample's property named in advance. My recommendation: (c) for brand consistency now, and (a) for a handful (3 or 4 campaigns, run when billing is confirmed) only if the owner wants trustworthiness and product relevance to be measurable.
+
+## 6. Stage 2 status
+
+**Not run.** The billing condition is unmet (section 4), so the ledger refuses every call.
+
+**A flaw in stage 1, found while writing the predictions, and what it changes.** Stage 1 scored campaign 3 against the memory campaign 1 wrote, not the memory campaigns 1 AND 2 wrote, because campaign 2 had never been run. Campaigns 2 and 3 therefore saw the same
+memory and could not have separated except through which product they matched. The ruling's own description ("campaign 3 has roughly twice" what campaign 2 has) needs campaign 2's write-back to exist. So **stage 2 runs campaigns 1 AND 2 live for each of the nine brands (18 runs, about 7
+Standard calls each, about 126 calls)**, replayed research as before, each approved through the product's own path; campaign 3 is then scored on the recalled memory with the real encoder and no model call (as stage 1 did), which is what makes it a recall measurement and not a third run.
+Total spend then 227 of 250. If the owner prefers a margin: run the 8 clean brands only (112 calls, 213 total) and leave B07, which the criterion excludes anyway; or run four brands first (56 calls) and look. **The multi-brand runner is not written**
+(`chunk_f_first_campaign` recreates its database, which would delete B04's memory, and runs R10 only); writing it needs no calls and is the next step once the order and the condition are settled.

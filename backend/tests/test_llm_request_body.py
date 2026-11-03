@@ -101,9 +101,11 @@ def _sent_body(
 
     monkeypatch.setattr(http_handler.AsyncHTTPHandler, "post", intercept)
     settings = get_settings()
+    ledger = FakeLedger()
+    ledger.dev_budget = object()  # nothing leaves the machine; the ceiling has its own tests
     gateway = LLMGateway(
         registry_from(settings.models_config_path),  # the real registry: the real model ids
-        FakeLedger(),  # type: ignore[arg-type]
+        ledger,  # type: ignore[arg-type]
         prompt_library(),
         api_key="offline-test-key",
         timeout_s=5,

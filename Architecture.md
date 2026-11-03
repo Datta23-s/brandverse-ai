@@ -266,8 +266,8 @@ therefore tallied here by hand, and every live-verification call is added to thi
 **Standing budget (owner, 2026-10-31): 60 Standard-tier calls in the tuning organisation for Phase 6 chunks D, E and F;
 no strong tier without asking; the running tally is reported in every report.** Counted against the 60 so far: the V11
 re-runs X and Y (10 calls: 2 + 3 + 1 + 4 in the rows dated 2026-10-30) and the revision test z (2), plus chunk F's first real campaign (7, 2026-11-01) and the killed-worker run (12, counting 2 abandoned reservations) = **31 of 60 spent**; the agreement round's 70 calls (ordered by the owner
-on 2026-11-01, outside the original chunk D/E/F scope) take the project's development total to 101, **over the 60, which now needs a new ceiling from the owner**; of the 60, **31 spent,
-29 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
+on 2026-11-01, outside the original chunk D/E/F scope) take the project's development total to 101, **over the 60. New ceiling (owner, 2026-11-01): 250 calls of any tier, CONDITIONAL on written confirmation that no
+billing account is linked to the project; enforced in the ledger (`config/dev_budget.yaml`, `app/llm/dev_budget.py`), every call refused until the condition is recorded. 101 spent, 149 remaining.** Not counted against it: the 30 calls of the brief-check precompute (approved separately), and everything
 before the standing budget (chunk B's earlier live runs: the rows through the first full D1 run and its first forced
 revision). The 4 unused calls of z's approval are folded in with no separate accounting. The table counts calls made.
 

@@ -37,7 +37,14 @@ from uuid import UUID
 from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
-from app.errors import BudgetExceeded, CallRefused, QuotaExhausted, StrongTierCapReached
+from app.errors import (
+    BudgetExceeded,
+    CallRefused,
+    DevBudgetRefused,
+    QuotaExhausted,
+    StrongTierCapReached,
+)
+from app.llm.dev_budget import DevBudget
 from app.llm.prompts import PromptRef
 from app.llm.registry import ModelRegistry, Tier
 
@@ -138,6 +145,10 @@ select count(*) from public.llm_calls
 where org_id = %s and tier = 'strong' and outcome <> 'refused'
 """
 
+_DEV_MADE_SQL = """
+select current_database(), count(*) filter (where outcome <> 'refused') from public.llm_calls
+"""
+
 _INSERT_SQL = """
 insert into public.llm_calls
   (org_id, run_id, agent_id, model, tier, prompt_id, prompt_version, route_reason, outcome,
@@ -176,9 +187,14 @@ class CallLedger:
         max_cost_per_run_usd: float,
         pending_expiry_s: int,
         strong_cap: tuple[UUID, int] | None = None,
+        dev_budget: DevBudget | None = None,
     ) -> None:
         self._pool = pool
         self._registry = registry
+        # The development ceiling (config/dev_budget.yaml): every call of every tier and
+        # organisation in this database, plus the other databases' share. The gateway refuses to
+        # send a real provider call through a ledger without one.
+        self.dev_budget = dev_budget
         # (organisation, most strong calls it may EVER make): enforced in `admit`, under the
         # organisation's lock, from `llm_calls` (a count, never a counter: Rules.md A1).
         self.strong_cap = strong_cap
@@ -232,7 +248,14 @@ class CallLedger:
             await conn.execute(_LOCK_SQL, (f"llm:run:{ctx.run_id}",))
             await conn.execute(_LOCK_SQL, (f"llm:model:{model.id}",))
             u = await self.usage(conn, ctx, tier)
-            if (
+            if self.dev_budget is not None:
+                cur = await conn.execute(_DEV_MADE_SQL)
+                dev_row = await cur.fetchone()
+                if dev_row is not None:
+                    decided = self.dev_budget.refusal(str(dev_row[0]), int(dev_row[1]))
+                    if decided is not None:
+                        refusal = DevBudgetRefused(decided[1], decided[0])
+            if refusal is None and (
                 tier is Tier.STRONG
                 and self.strong_cap is not None
                 and ctx.org_id == self.strong_cap[0]
@@ -249,7 +272,7 @@ class CallLedger:
             projected = u.run_cost_usd + (u.run_pending + 1) * estimated_cost_usd
             org_projected = u.org_month_cost_usd + (u.org_month_pending + 1) * estimated_cost_usd
             if refusal is not None:
-                pass  # the strong-tier cap, decided above
+                pass  # the development ceiling or the strong-tier cap, decided above
             elif u.run_calls >= self._max_calls:
                 refusal = BudgetExceeded(
                     f"refused: run has made {u.run_calls} of {self._max_calls} LLM calls "
