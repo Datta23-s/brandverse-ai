@@ -3,17 +3,21 @@
 Registered in `docs/phase7-first-decision.md`: "Registration 2" and "Stage-2 runner (3 November)".
 For each brand it runs campaigns 1 and 2 LIVE on real models (research replayed from the evaluation
 snapshot, each campaign approved through the product's own path, memory written back), then scores
-campaign 3 from recall alone (no model call, as stage 1 did). Both definitions of `U` are computed
+campaign 3 from recall alone (no model call, as stage 1 did). THREE variants of `U` are computed
 from the SAME recall of each campaign:
 
-  new  U = 1 - min(1, n/12), n = recalled items with S >= 0.55   bands D0 < 0.20 <= D1 < 0.32 <= D2
-       (decision-log 2.21; config/scoring.yaml `necessity:`)
-  old  U = 1 - (slots filled at M >= 0.80) / 2                   bands D0 < 0.35 <= D1 < 0.70 <= D2
-       (the definition stage 1 failed on; its bands are constants here, config no longer holds them)
+  old    U = 1 - (slots filled at M >= 0.80) / 2          bands D0 < 0.35 <= D1 < 0.70 <= D2
+         (the original design; its bands are constants here, config no longer holds them)
+  floor  U = 1 - min(1, n/12), n = recalled items with S >= 0.55   frozen bands 0.20 / 0.32
+         (decision-log 2.21; config/scoring.yaml `necessity:`)
+  count  U = 1 - min(1, n/12), n = EVERY recalled item     the same frozen bands
+
+REGISTERED PREFERENCE ORDERING (owner, 3 November, before any run): old, then floor, then count; the
+first that meets the criterion is adopted. This is what makes three variants one test.
 
 Scope, in order (owner, 3 November): `interim` runs four brands, `rest` runs the others. `rest`
 REFUSES unless the interim report exists and passed: 3 of 4 brands showing three distinct bands
-(campaign 1 > 2 > 3) under EITHER definition. Neither this file nor a flag can skip that.
+(campaign 1 > 2 > 3) under at least one variant. Neither this file nor a flag can skip that.
 
 Live calls are refused by the ledger until `billing_unlinked_confirmed_on` is set by the owner
 (`config/dev_budget.yaml`); this runner never touches that file. It also refuses to start a live
@@ -91,9 +95,24 @@ RANK = {"D0": 0, "D1": 1, "D2": 2}
 # them (C1 D2, C2 D1, C3 D1). Stage 1 on B04 informs this, so it is a prediction of a known failure
 # mode, not a blind one.
 PREDICTIONS: dict[str, dict[int, tuple[Depth, ...]]] = {
-    "new": {1: ("D2",), 2: ("D1", "D2"), 3: ("D0", "D1")},  # modal first
+    "floor": {1: ("D2",), 2: ("D1", "D2"), 3: ("D0", "D1")},  # modal first
+    # UNCERTAIN, and its basis is an artifact: stage 1 scored campaign 3 against campaign 1's
+    # memory only, so "no item reaches M >= 0.80" was seen on memory that campaign 2 had not yet
+    # added to. With campaigns 1 and 2 live, campaign 3 recalls more and older items; whether any
+    # reaches 0.80 is not known. D1, D1 is the stage-1 expectation, held loosely.
     "old": {1: ("D2",), 2: ("D1",), 3: ("D1",)},
+    # No floor: every recalled item counts, so n = items campaign 1 wrote (about 5 to 8) at
+    # campaign 2 and campaign 1's plus campaign 2's (about 9 to 12, less merged duplicates) at
+    # campaign 3. Alternatives: D2 at campaign 2 if campaign 1 wrote 4 or fewer items; D1 at
+    # campaign 3 if the two campaigns wrote 8 or fewer between them.
+    "count": {1: ("D2",), 2: ("D1", "D2"), 3: ("D0", "D1")},
 }
+
+# The registered preference ordering (owner, 3 November, before any run): the first variant that
+# meets the criterion is the one adopted. The original design is preferred because changing a
+# mechanism is justified only when the original fails. This ordering is what makes three variants
+# one test and not three chances.
+VARIANTS: tuple[str, ...] = ("old", "floor", "count")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,19 +120,34 @@ class CampaignScore:
     request_id: str
     position: int
     novelty: float
-    n_relevant: int  # items with S >= floor (capped at 12)
+    n_floor: int  # recalled items with S >= the floor (capped at 12)
+    n_count: int  # recalled items, all of them (capped at 12)
     n_recalled: int
     slots_filled: int
     slots_total: int
     best_m: float
-    u_new: float
     u_old: float
-    r_new: float
+    u_floor: float
+    u_count: float
     r_old: float
-    depth_new: Depth
+    r_floor: float
+    r_count: float
     depth_old: Depth
-    # sensitivity only, never to select: the same depth at the other floors (Registration 2 s.1)
-    depth_new_at_floor: dict[str, Depth] = field(default_factory=dict)
+    depth_floor: Depth
+    depth_count: Depth
+    # sensitivity only, never to select: the floor variant's depth at the other floors
+    depth_floor_at: dict[str, Depth] = field(default_factory=dict)
+
+    def u(self, variant: str) -> float:
+        return {"old": self.u_old, "floor": self.u_floor, "count": self.u_count}[variant]
+
+    def r(self, variant: str) -> float:
+        return {"old": self.r_old, "floor": self.r_floor, "count": self.r_count}[variant]
+
+    def depth(self, variant: str) -> Depth:
+        return {"old": self.depth_old, "floor": self.depth_floor, "count": self.depth_count}[
+            variant
+        ]
 
 
 def old_depth(r: float) -> Depth:
@@ -133,12 +167,17 @@ def score_campaign(
     cfg: Necessity,
     floors: Sequence[float] = (0.50, 0.60),
 ) -> CampaignScore:
-    """Both definitions from one recall. Pure: no database, no model, no encoder."""
+    """All three variants from one recall. Pure: no database, no model, no encoder.
+
+    OLD: slots filled at M >= 0.80, stage-1 bands. FLOOR: n at S >= the frozen floor, frozen bands.
+    COUNT: n = every recalled item (floor 0), the same frozen bands."""
     s_sector = 1.0 if regulated else 0.0
-    n, cov = quantity_coverage(similarities, cfg)
-    u_new, u_old = 1.0 - cov, 1.0 - old_coverage
-    r_new = necessity_r(novelty, u_new, s_sector, cfg)
+    n_floor, cov_floor = quantity_coverage(similarities, cfg)
+    n_count, cov_count = quantity_coverage([1.0] * len(similarities), cfg)
+    u_old, u_floor, u_count = 1.0 - old_coverage, 1.0 - cov_floor, 1.0 - cov_count
     r_old = necessity_r(novelty, u_old, s_sector, cfg)
+    r_floor = necessity_r(novelty, u_floor, s_sector, cfg)
+    r_count = necessity_r(novelty, u_count, s_sector, cfg)
     sens: dict[str, Depth] = {}
     for f in floors:
         _, c = quantity_coverage(similarities, cfg.model_copy(update={"relevance_floor": f}))
@@ -147,18 +186,22 @@ def score_campaign(
         request_id=request_id,
         position=position,
         novelty=novelty,
-        n_relevant=n,
+        n_floor=n_floor,
+        n_count=n_count,
         n_recalled=len(similarities),
         slots_filled=slots[0],
         slots_total=slots[1],
         best_m=best_m,
-        u_new=u_new,
         u_old=u_old,
-        r_new=r_new,
+        u_floor=u_floor,
+        u_count=u_count,
         r_old=r_old,
-        depth_new=necessity_depth(r_new, cfg),
+        r_floor=r_floor,
+        r_count=r_count,
         depth_old=old_depth(r_old),
-        depth_new_at_floor=sens,
+        depth_floor=necessity_depth(r_floor, cfg),
+        depth_count=necessity_depth(r_count, cfg),
+        depth_floor_at=sens,
     )
 
 
@@ -176,20 +219,20 @@ def r_monotonic(rs: Sequence[float], margin: float = 0.05) -> bool:
 class InterimVerdict:
     passed: bool
     brands: int
-    separating_new: int
-    separating_old: int
+    separating: dict[str, int]  # variant -> brands with three distinct bands
+    adopted: str | None  # the FIRST variant, in the registered order, that meets the criterion
     needed: int
 
 
 def interim_verdict(scores: dict[str, Sequence[CampaignScore]]) -> InterimVerdict:
-    """3 of 4 brands with three distinct bands under EITHER definition (owner's ruling). Needs all
+    """3 of 4 brands with three distinct bands under a variant; the adopted variant is the first in
+    the registered order (OLD, FLOOR, COUNT) that meets it, whatever the others show. Needs all
     four brands scored: a partial interim cannot pass."""
     full = {b: s for b, s in scores.items() if len(s) == 3}
-    new = sum(separates([c.depth_new for c in s]) for s in full.values())
-    old = sum(separates([c.depth_old for c in s]) for s in full.values())
+    counts = {v: sum(separates([c.depth(v) for c in s]) for s in full.values()) for v in VARIANTS}
     complete = len(full) == len(INTERIM_BRANDS) and set(full) == set(INTERIM_BRANDS)
-    ok = complete and max(new, old) >= INTERIM_NEEDS
-    return InterimVerdict(ok, len(full), new, old, INTERIM_NEEDS)
+    adopted = next((v for v in VARIANTS if complete and counts[v] >= INTERIM_NEEDS), None)
+    return InterimVerdict(adopted is not None, len(full), counts, adopted, INTERIM_NEEDS)
 
 
 def brand_requests(path: Path = TEST_SET) -> dict[str, tuple[str, str, str]]:
@@ -335,30 +378,26 @@ async def recall_and_score(
 
 def print_table(brand: str, scores: Sequence[CampaignScore]) -> None:
     print(
-        f"\n{brand}: campaign | N | n(S>=.55) of recalled | slots | U new | U old"
-        " | R new | R old | new | old | new @ floors .50/.60"
+        f"\n{brand}: campaign | N | n floor / count of recalled | slots | "
+        "U old/floor/count | R old/floor/count | depth old/floor/count | floor@.50/.60"
     )
     for c in scores:
-        sens = "/".join(c.depth_new_at_floor.values()) or "-"
+        sens = "/".join(c.depth_floor_at.values()) or "-"
         print(
             f"  C{c.position} {c.request_id} | {c.novelty:.3f} "
-            f"| {c.n_relevant:2d} of {c.n_recalled:2d}"
-            f"            | {c.slots_filled}/{c.slots_total}   | {c.u_new:.3f} | {c.u_old:.3f}"
-            f" | {c.r_new:.3f} | {c.r_old:.3f} | {c.depth_new} | {c.depth_old} | {sens}"
+            f"| {c.n_floor:2d} / {c.n_count:2d} of {c.n_recalled:2d} "
+            f"| {c.slots_filled}/{c.slots_total} "
+            f"| {c.u_old:.2f}/{c.u_floor:.2f}/{c.u_count:.2f} "
+            f"| {c.r_old:.3f}/{c.r_floor:.3f}/{c.r_count:.3f} "
+            f"| {c.depth_old}/{c.depth_floor}/{c.depth_count} | {sens}"
         )
-    print(
-        f"  separates new: {separates([c.depth_new for c in scores])}"
-        f" (R monotonic by 0.05: {r_monotonic([c.r_new for c in scores])});"
-        f" old: {separates([c.depth_old for c in scores])}"
-        f" (R monotonic: {r_monotonic([c.r_old for c in scores])})"
-    )
-    for d in ("new", "old"):
-        hits = [
-            c.position
-            for c in scores
-            if (c.depth_new if d == "new" else c.depth_old) in PREDICTIONS[d][c.position]
-        ]
-        print(f"  prediction ({d}) hit for campaigns: {hits}")
+    for v in VARIANTS:
+        hits = [c.position for c in scores if c.depth(v) in PREDICTIONS[v][c.position]]
+        print(
+            f"  {v}: separates {separates([c.depth(v) for c in scores])}; "
+            f"R falls by 0.05 each step {r_monotonic([c.r(v) for c in scores])}; "
+            f"prediction hit for campaigns {hits}"
+        )
 
 
 async def run_live(brands: Sequence[str], stage: str) -> int:

@@ -4,7 +4,7 @@
 |---|---|
 | Status | **Options for the owner. Nothing here is ruled and nothing is built.** |
 | Date | 2026-11-01 |
-| Needed by | Phase 7 build start; the freeze is fixed for 9 November |
+| Needed by | Phase 7 build start. **Freeze plan (owner, 3 November): 11 November with 7 brands; 9 November is upside only** (section 7). Earlier text in this file that reasons "before 9 November" is the 1 November position, superseded. |
 | Governs | `Architecture.md` section 6.1 (the Research Necessity Engine) |
 
 ## What the design says
@@ -340,9 +340,9 @@ Total spend then 227 of 250. If the owner prefers a margin: run the 8 clean bran
 
 **Scope (owner, 3 November): four brands first.** Order fixed here by position, not by expected outcome: the eight clean non-regulated brands are B01, B02, B03, B05, B06, B08, B09, B10; **the interim set is the first four: B01, B02, B03, B05.** B04 (contaminated) and B07 (regulated, excluded from the criterion) are not in the set. Campaigns 1 and 2 run live (about 7 Standard calls each, 56 for the four); campaign 3 is scored from recall with no call. Each brand has its own organisation, so no memory crosses brands. Campaign 1 runs at D2 (cold start, R = 0.786); **campaign 2 runs at D1**, the depth B04's campaign 1 was run at, because the engine that would choose it is not built: this is a free parameter of the run, fixed here, and it governs how many items campaign 2 writes.
 
-**Both definitions of U, from the same recall of each campaign:** new (2.21: n at S >= 0.55, bands 0.20 / 0.32) and old (slots filled at M >= 0.80, bands 0.35 / 0.70, the stage-1 values kept as constants in the runner). Reported per campaign: N, n of recalled, slots, both U, both R, both depths, and the new depth at floors 0.50 and 0.60 (sensitivity, never to select).
+**[SUPERSEDED by 7a: three variants, not two.] Both definitions of U, from the same recall of each campaign:** new (2.21: n at S >= 0.55, bands 0.20 / 0.32) and old (slots filled at M >= 0.80, bands 0.35 / 0.70, the stage-1 values kept as constants in the runner). Reported per campaign: N, n of recalled, slots, both U, both R, both depths, and the new depth at floors 0.50 and 0.60 (sensitivity, never to select).
 
-**Predictions per definition (registered; modal first):**
+**[SUPERSEDED by 7a: predictions for all three variants.] Predictions per definition (registered; modal first):**
 
 | | Campaign 1 | Campaign 2 | Campaign 3 |
 |---|---|---|---|
@@ -351,6 +351,41 @@ Total spend then 227 of 250. If the owner prefers a margin: run the 8 clean bran
 
 Reason for the old row, given in advance: items one campaign writes start at confidence 0.60, so no recalled item reaches M >= 0.80, no slot fills, and old U stays 1 for campaigns 2 and 3 (stage 1's failure on B04). It is a prediction of a known failure mode, informed by B04, not a blind one.
 
-**Interim criterion (owner): at least 3 of the 4 brands show three distinct bands (campaign 1 > 2 > 3) under EITHER definition before any remaining brand runs.** Evaluated by `interim_verdict`; a partial interim (fewer than four brands scored) cannot pass. `--stage rest` reads the interim report and **refuses unless it exists and passed**: there is no flag that skips this. "Either definition" is two chances at the same threshold; both counts are reported, and a pass carried by the old definition alone would contradict 2.21's reason for replacing it, so it is reported as such.
+**[SUPERSEDED by 7a: the preference ordering replaces "either" and its closing sentence.] Interim criterion (owner): at least 3 of the 4 brands show three distinct bands (campaign 1 > 2 > 3) under EITHER definition before any remaining brand runs.** Evaluated by `interim_verdict`; a partial interim (fewer than four brands scored) cannot pass. `--stage rest` reads the interim report and **refuses unless it exists and passed**: there is no flag that skips this. "Either definition" is two chances at the same threshold; both counts are reported, and a pass carried by the old definition alone would contradict 2.21's reason for replacing it, so it is reported as such.
 
 **Found while writing it (no call):** (1) **research is recorded for R01 to R25 only.** B09's campaign 2 (R26) and all of B10 (R28 to R30) cannot be replayed, so at most six clean brands (B01, B02, B03, B05, B06, B08) can run campaigns 1 and 2 live; the criterion "at least 6 of 8 clean brands" is then reachable only if all six separate, or the recording is finished (R26 to R30, live searches, held until the owner says). (2) A no-call run of the live scoring path on B04's existing memory gave n = 1 of 5 recalled items past the floor for campaign 2 and 0 of 5 for campaign 3, against the registered 4 to 7 and 8 to 11 (R 0.419, 0.453: D2, D2). That memory holds only campaign 1's items, so it does not test the prediction, but it is the first sign that the 0.55 floor may be set where few real items pass. The floor is frozen and is not touched; if stage 2 shows the same, that is the finding.
+
+## 7a. Owner's rulings of 3 November 2026 (eight), registered before any stage-2 call
+
+**1. Three variants of U, one preference ordering.** All three are computed from the same recall, so the third costs no call.
+- **OLD:** U = 1 - (slots whose best M reaches 0.80) / 2; stage-1 bands (D0 < 0.35, D2 >= 0.70).
+- **FLOOR:** U = 1 - min(1, n/12), n = recalled items with S >= 0.55; frozen bands (0.20 / 0.32).
+- **COUNT:** the same with **no floor**: n = every recalled item (capped at 12); the same frozen bands.
+
+*Reason for COUNT, stated before the data (owner):* the floor gates n on similarity to the CURRENT request, so n can fall as memory grows, which the B04 figures show (n fell from 1 to 0 between campaigns 2 and 3 although the memory was the same). A quantity measure cannot behave that way. COUNT implements the construct argument of 2.21; FLOOR is that argument with a similarity gate still in it. *Cost of COUNT, stated now:* with no relevance gate, an unrelated item counts as much as a relevant one, so COUNT measures "how much memory the brand has", not "how much of it bears on this request"; within a brand of one sector that is a defensible reading, and the cross-brand null (2.21) is why the floor existed. Recall is already scoped to the organisation and brand, which is what makes COUNT usable.
+
+**Registered preference ordering: OLD, then FLOOR, then COUNT; the first that meets the criterion is adopted**, whatever the later ones show. Reason: the original design is preferred because changing a mechanism is justified only when the original fails. This ordering, written before the run, is what makes three variants one test and not three chances; the interim report states the adopted variant and the count for each, and `--stage rest` refuses unless some variant met 3 of 4.
+
+**Predictions (registered; modal first):**
+
+| | Campaign 1 | Campaign 2 | Campaign 3 |
+|---|---|---|---|
+| OLD (**uncertain**) | D2 | D1 | D1 |
+| FLOOR | D2 | D1 (alt D2) | D0 (alt D1) |
+| COUNT | D2 | D1 (alt D2 if campaign 1 wrote 4 or fewer items) | D0 (alt D1 if the two campaigns wrote 8 or fewer between them) |
+
+The OLD prediction is marked uncertain and **its basis is stage 1's artifact**: stage 1 scored campaign 3 against campaign 1's memory only, so "no recalled item reaches M >= 0.80" was seen on memory that campaign 2 had not added to. With both campaigns live, campaign 3 recalls more and older items, and whether any reaches 0.80 is not known. D1, D1 is the stage-1 expectation, held loosely.
+
+**2. Campaign 2 runs at D1 (confirmed). Scaffold assumption, bias direction named:** D1 writes fewer items than D2 would, so it is the LESS favourable scaffold for separation: fewer items written by campaign 2 means a smaller n at campaign 3. A result that separates under D1 separates. The real experiment lets R choose the depth, so the scaffold is not the experiment; it is a lower bound on what memory accumulation does to R.
+
+**3. Recording of R26 to R30 approved** (owner). It makes no model call, so neither the ledger nor the billing hold applies. It needs the machine on AC power (standing rule); it was on battery when this was written and was NOT started on battery. It keeps the full criterion at "at least 6 of 8 clean brands" (B09 and B10 become replayable) and a 10-brand freeze needs it regardless.
+
+**4. The 8 November sitting needs no blind harness.** Ruling 2 of 1 November (a familiarisation/agreement sitting on ten campaigns from one system) leaves no arm to conceal, and both raters score identical items. The harness is needed only for the 16 November main round and is built after the freeze. It is therefore not on the path to the freeze, and the build days it was carrying are free.
+
+**5. pytest-timeout approved** and added as a dev dependency (`pytest-timeout>=2.4.0`, resolved 2.4.0); `timeout = 300`, thread method, in `pyproject.toml`. The earlier `faulthandler_timeout` is replaced: it dumped but could not kill.
+
+**6. The real-encoder path in tests was a hole, now closed. Cause:** importing LiteLLM (`app/llm/_litellm.py`) runs `dotenv.load_dotenv()` while `LITELLM_MODE` is `DEV` (the default), copying the repository's `.env`, `GOOGLE_API_KEY` included, into `os.environ`. `Settings(_env_file=None)` still reads the process environment, so every test that imported the gateway held a live key locally, `pipeline_agents` defaulted to `real`, and a test worker built the real pipeline and loaded the 1 GB encoder. CI has no `.env`, so it never did: local and CI differed, and the suite could not be shown unable to reach a provider. **Closed in three layers**, each shown to refuse in `tests/test_real_call_guard.py` in a subprocess handed a planted key: (a) `_litellm.py` sets `LITELLM_MODE=PRODUCTION` before the import; (b) an autouse fixture removes every provider key from the test environment; (c) the same fixture replaces the provider call (`app.llm._litellm.acompletion`, resolved when a gateway is built, no longer a default argument) and `LocalEncoder.load` without an injected constructor with a refusal. A test may opt out only by carrying `@pytest.mark.real_provider` or `real_encoder` AND being named in `tests/conftest.py`; both sets are empty, and a marker outside the set or a name without the marker fails collection.
+
+**7. Freeze plan: 11 November with 7 brands. 9 November is upside only and is not the plan** in this or any other document. The seven are chosen from the recorded brands by the owner at the freeze; B01 to B08 are recorded, so the 7-brand branch does not depend on R26 to R30. Arithmetic with the harness removed (ruling 4): the build is 4 to 5 days (descope table), starting the day after stage 2 passes. If the ledger opens on 3 November and the interim passes that night, the build runs 4 to 8 November and the freeze is 8 November (4 days) or 9 November (5 days) with no slack. That is the upside. Every day the interim is delayed, or a rework of R is needed, moves it one-for-one; 11 November leaves two to three days of slack against 4 to 8 November, and is the plan. If the interim fails, there is no date until R is changed, and ruling 4 of 2.17 applies (cut brands, never campaigns).
+
+**8. Pushed with 1 and 2 folded in.** This section is part of the registration that precedes the run.

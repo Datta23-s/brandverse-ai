@@ -60,19 +60,23 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Dumps the stack of any test stuck over 5 minutes (no kill, no new dependency). A per-test KILL needs
-# pytest-timeout, a new dev dependency: asked for, not added (dependency rule).
-faulthandler_timeout = 300
+# A test stuck over 5 minutes is KILLED and its stack printed (pytest-timeout, approved by the owner
+# 2026-11-03 as a dev dependency: the earlier faulthandler dump alone could not stop a hang).
+timeout = 300
+timeout_method = "thread"
 pythonpath = ["."]
 markers = [
     "db: needs PostgreSQL with pgvector (TEST_DATABASE_URL); merge-blocking in CI",
     "redis: needs a Redis server (REDIS_TEST_URL, default 127.0.0.1 db 15); required in CI",
+    "real_provider: may call a real model provider; also needs the test named in tests/conftest.py",
+    "real_encoder: may load the real encoder; also needs the test named in tests/conftest.py",
 ]
 
 [dependency-groups]
 dev = [
     "mypy>=2.4.0",
     "pytest>=9.1.1",
+    "pytest-timeout>=2.4.0",
     "ruff>=0.17.0",
 ]
 embeddings = [

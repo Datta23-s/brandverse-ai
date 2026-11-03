@@ -122,6 +122,7 @@ def _sent_body(
     return json.loads(body) if isinstance(body, (str, bytes)) else body
 
 
+@pytest.mark.real_provider  # real client, HTTP post intercepted; named in tests/conftest.py
 @pytest.mark.parametrize("tier", [Tier.CHEAP, Tier.STANDARD, Tier.STRONG])
 @pytest.mark.parametrize("name", sorted(SCHEMAS))
 def test_every_structured_schema_is_sent_in_the_provider_safe_form(

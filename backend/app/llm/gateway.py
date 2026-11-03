@@ -115,11 +115,15 @@ class LLMGateway:
         max_rate_limit_wait_s: float,
         allow_strong_tier: bool = False,
         strong_tier_org_id: UUID | None = None,
-        completion: Completion = _litellm.acompletion,
+        completion: Completion | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
         today: Callable[[], date] = lambda: datetime.now(UTC).date(),
     ) -> None:
+        # Resolved here, not as a default argument, so the provider call is looked up when a
+        # gateway is built and a test fixture can replace it (tests/conftest.py).
+        if completion is None:
+            completion = _litellm.acompletion
         if completion is _litellm.acompletion and getattr(ledger, "dev_budget", None) is None:
             # A real provider call with no development ceiling is a hole (owner, 2026-11-01): the
             # ceiling and the billing condition are enforced in the ledger, so a gateway that
