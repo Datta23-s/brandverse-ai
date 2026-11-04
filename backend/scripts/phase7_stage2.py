@@ -440,6 +440,16 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
     if managed_supabase_hosts(url):
         print("refusing to log to the live project")
         return 1
+    # A run left in progress by a crashed attempt would be RESUMED by the worker's recovery sweep at
+    # start-up, in parallel with the new run, doubling the CPU load and the job time (found
+    # 2026-11-04: the probe's step 3 took 277 s instead of 8 s and ARQ killed its job at 600 s).
+    # This database is the stage-2 scratch database only; its stale runs are closed, and counted.
+    with psycopg.connect(url, autocommit=True) as c:
+        closed = c.execute(
+            "update runs set status = 'failed', completed_at = now() "
+            "where status in ('queued', 'awaiting_approval')"
+        ).rowcount
+    print(f"closed {closed} stale in-progress run(s) left by an earlier attempt", flush=True)
     inputs_all = request_inputs()
     reqs = brand_requests()
     cfg = load_scoring()
@@ -474,6 +484,12 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             "LLM_STRONG_TIER_ORG_ID": "",
             # Diagnostics (2026-11-04): all-thread stack dump every 2 min (works through a GIL-held
             # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
+            # The worker's log goes to a file: Python block-buffers a redirected stdout, so lines
+            # written before a termination were lost (the first crash's log ended 15 minutes early).
+            "PYTHONUNBUFFERED": "1",
+            # ARQ kills a run job at this limit. 600 s (the default) is too tight for a D2 run on
+            # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
+            "WORKER_JOB_TIMEOUT_S": "1800",
             "WORKER_STACK_DUMP_S": "120",
             "RESEARCH_STEP_TIMEOUT_S": "420",
             # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED

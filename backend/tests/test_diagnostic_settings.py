@@ -23,6 +23,19 @@ def test_the_stage2_worker_environment_leaves_the_thread_caps_off() -> None:
         assert f'"{name}":' not in src
 
 
+def test_the_stage2_worker_logs_unbuffered_and_has_a_job_timeout_that_fits_d2() -> None:
+    """2026-11-04: a redirected stdout is block-buffered, so a terminated worker lost its last
+    lines; and ARQ's 600 s default killed a D2 run whose research alone takes 205 to 313 s."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "phase7_stage2.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"PYTHONUNBUFFERED": "1"' in src
+    assert '"WORKER_JOB_TIMEOUT_S": "1800"' in src
+    assert "update runs set status = 'failed'" in src  # stale runs are not resumed by the sweep
+
+
 def test_the_environment_turns_them_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WORKER_STACK_DUMP_S", "120")
     monkeypatch.setenv("RESEARCH_STEP_TIMEOUT_S", "420")
