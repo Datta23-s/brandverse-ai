@@ -37,7 +37,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -400,20 +400,137 @@ def print_table(brand: str, scores: Sequence[CampaignScore]) -> None:
         )
 
 
-async def _watch_worker(
-    worker: "subprocess.Popen[bytes]", main: "asyncio.Task[Any] | None", log_path: Path
-) -> None:
-    """Cancel the main task the moment the worker process is gone."""
-    while worker.poll() is None:  # noqa: ASYNC110 - polls a child process; it offers no event
-        await asyncio.sleep(3)
-    print(
-        f"WORKER DIED at {datetime.now(UTC):%H:%M:%S}Z, exit code {worker.returncode} "
-        f"(0xC0000005 / 3221225477 is an access violation: see the Windows Application log, "
-        f"Event 1000 python.exe). Worker log: {log_path}",
-        flush=True,
-    )
-    if main is not None:
-        main.cancel()
+CRASH_LOG = Path("C:/BrandverseData/logs/stage2-crashes.jsonl")
+MAX_WORKER_RESTARTS = 12
+# What the runner is doing right now, for the crash log (updated by `run_brand` before each POST).
+CURRENT_CAMPAIGN: dict[str, Any] = {}
+
+
+def last_step_in(log_text: str) -> dict[str, Any] | None:
+    """The last pipeline step line a worker log holds ("step 6 research: start" and the run it was
+    for), read from the end. The log is unbuffered, so this is where the worker had got to."""
+    for line in reversed(log_text.splitlines()):
+        if '"msg": "step ' not in line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        msg = str(entry.get("msg", ""))
+        if msg.startswith("step "):
+            return {"line": msg, "run_id": entry.get("run_id"), "ts": entry.get("ts")}
+    return None
+
+
+class WorkerSupervisor:
+    """Starts the stage-2 worker and starts it AGAIN when it dies.
+
+    A STOPGAP FOR THE INTERIM ONLY (owner, 2026-11-04), never the evaluation's fix. The worker has
+    died of access violations in native code at about 1 research execution in 5 (decision-log
+    2.25), silently: the run stays `queued` and nothing parks. On a death this records it (time,
+    exit code, the campaign being run, the step the worker had reached, the incarnation), starts a
+    new worker, and lets the worker's own start-up recovery sweep resume the run from its
+    checkpoint (at-least-once: the step that was running runs again). The crash rate is MEASURED
+    from `crashes` and the crash log, not assumed. The interim reports no latency anyone will use,
+    so the minutes a restart costs do not matter to it. After `max_restarts` it gives up."""
+
+    def __init__(
+        self,
+        launch: Callable[[int], tuple[Any, Path]],
+        *,
+        crash_log: Path = CRASH_LOG,
+        max_restarts: int = MAX_WORKER_RESTARTS,
+        ready_timeout_s: float = 180.0,
+        poll_s: float = 2.0,
+        campaign: dict[str, Any] | None = None,
+    ) -> None:
+        self._launch, self._crash_log = launch, crash_log
+        self._max, self._ready_s, self._poll_s = max_restarts, ready_timeout_s, poll_s
+        self._campaign = campaign if campaign is not None else CURRENT_CAMPAIGN
+        self.proc: Any = None
+        self.log_path: Path | None = None
+        self.incarnation = 0
+        self.crashes: list[dict[str, Any]] = []
+        self.logs: list[Path] = []
+        self.gave_up: str | None = None
+        self._stopping = False
+
+    async def _start_one(self) -> bool:
+        self.proc, self.log_path = self._launch(self.incarnation)
+        self.logs.append(self.log_path)
+        waited = 0.0
+        while waited < self._ready_s:
+            await asyncio.sleep(self._poll_s)
+            waited += self._poll_s
+            if "pipeline ready" in self.log_path.read_text(encoding="utf-8", errors="replace"):
+                return True
+            if self.proc.poll() is not None:
+                return False
+        return False
+
+    async def start(self) -> bool:
+        return await self._start_one()
+
+    def _record_crash(self) -> dict[str, Any]:
+        if self.log_path is None:
+            raise RuntimeError("a crash was recorded before any worker was launched")
+        text = self.log_path.read_text(encoding="utf-8", errors="replace")
+        entry = {
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "incarnation": self.incarnation,
+            "exit_code": self.proc.returncode,
+            "campaign": dict(self._campaign),
+            "last_step": last_step_in(text),
+            "worker_log": str(self.log_path),
+            "note": "0xC0000005 (3221225477 / -1073741819) is an access violation; the Windows "
+            "Application log (Event 1000, python.exe) names the module",
+        }
+        self.crashes.append(entry)
+        self._crash_log.parent.mkdir(parents=True, exist_ok=True)
+        with self._crash_log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        return entry
+
+    async def watch(self, main: "asyncio.Task[Any] | None") -> None:
+        """Restart the worker whenever it dies; cancel `main` if it cannot be brought back."""
+        while not self._stopping:
+            if self.proc.poll() is None:
+                await asyncio.sleep(self._poll_s)
+                continue
+            if self._stopping:
+                return
+            entry = self._record_crash()
+            print(
+                f"WORKER DIED (crash {len(self.crashes)}) exit {entry['exit_code']} while "
+                f"{entry['campaign']} at {entry['last_step']}",
+                flush=True,
+            )
+            if len(self.crashes) > self._max:
+                self.gave_up = f"{len(self.crashes)} worker deaths: over the {self._max} allowed"
+            else:
+                self.incarnation += 1
+                if await self._start_one():
+                    print(f"worker restarted (incarnation {self.incarnation})", flush=True)
+                    continue
+                self.gave_up = f"the worker would not start again (incarnation {self.incarnation})"
+            print("GIVING UP:", self.gave_up, flush=True)
+            if main is not None:
+                main.cancel()
+            return
+
+    def stop(self) -> None:
+        self._stopping = True
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.terminate()
+            self.proc.wait(timeout=30)
+
+    def research_starts(self) -> int:
+        """Research steps begun across every incarnation: the denominator of the crash rate."""
+        return sum(
+            p.read_text(encoding="utf-8", errors="replace").count('"msg": "step 6 research: start')
+            for p in self.logs
+            if p.exists()
+        )
 
 
 async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> int:
@@ -485,54 +602,56 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
     )
     issuer = TestIssuer()
     app = create_app(settings, verifier=issuer.verifier())
-    worker_log = Path(tempfile.gettempdir()) / "stage2_worker.log"
-    worker = subprocess.Popen(  # noqa: S603, ASYNC220
-        [sys.executable, "-m", "app.workers"],
-        env={
-            **os.environ,
-            "DATABASE_URL": url,
-            "REDIS_URL": REDIS_URL,
-            "ENVIRONMENT": "development",
-            "PIPELINE_AGENTS": "real",
-            "RESEARCH_SNAPSHOT_DIR": str(STORE),
-            "MAX_LLM_CALLS_PER_RUN": "10",
-            "LLM_ALLOW_STRONG_TIER": "false",
-            "LLM_STRONG_TIER_ORG_ID": "",
-            # Diagnostics (2026-11-04): all-thread stack dump every 2 min (works through a GIL-held
-            # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
-            # The worker's log goes to a file: Python block-buffers a redirected stdout, so lines
-            # written before a termination were lost (the first crash's log ended 15 minutes early).
-            "PYTHONUNBUFFERED": "1",
-            # ARQ kills a run job at this limit. 600 s (the default) is too tight for a D2 run on
-            # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
-            "WORKER_JOB_TIMEOUT_S": "1800",
-            "WORKER_STACK_DUMP_S": "120",
-            # 900 s: probe 2 measured research at 358.6 s alone on AC, so 420 s left no room.
-            "RESEARCH_STEP_TIMEOUT_S": "900",
-            # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED
-            # here (owner, 2026-11-04): probe 2 completed uncapped, so a cap addresses an
-            # unestablished cause and would make a clean pass uninterpretable. The setting stays
-            # in config, off.
-        },
-        stdout=worker_log.open("w", encoding="utf-8"),
-        stderr=subprocess.STDOUT,
-    )
+
+    def launch(incarnation: int) -> tuple[Any, Path]:
+        # One log file per incarnation, so a restart does not overwrite what the dead one wrote.
+        suffix = "" if incarnation == 0 else f".{incarnation}"
+        log_path = Path(tempfile.gettempdir()) / f"stage2_worker{suffix}.log"
+        proc = subprocess.Popen(  # noqa: S603, ASYNC220
+            [sys.executable, "-m", "app.workers"],
+            env=worker_env,
+            stdout=log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+        return proc, log_path
+
+    worker_env = {
+        **os.environ,
+        "DATABASE_URL": url,
+        "REDIS_URL": REDIS_URL,
+        "ENVIRONMENT": "development",
+        "PIPELINE_AGENTS": "real",
+        "RESEARCH_SNAPSHOT_DIR": str(STORE),
+        "MAX_LLM_CALLS_PER_RUN": "10",
+        "LLM_ALLOW_STRONG_TIER": "false",
+        "LLM_STRONG_TIER_ORG_ID": "",
+        # Diagnostics (2026-11-04): all-thread stack dump every 2 min (works through a GIL-held
+        # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
+        # The worker's log goes to a file: Python block-buffers a redirected stdout, so lines
+        # written before a termination were lost (the first crash's log ended 15 minutes early).
+        "PYTHONUNBUFFERED": "1",
+        # ARQ kills a run job at this limit. 600 s (the default) is too tight for a D2 run on
+        # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
+        "WORKER_JOB_TIMEOUT_S": "1800",
+        "WORKER_STACK_DUMP_S": "120",
+        # 900 s: probe 2 measured research at 358.6 s alone on AC, so 420 s left no room.
+        "RESEARCH_STEP_TIMEOUT_S": "900",
+        # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED
+        # here (owner, 2026-11-04): probe 2 completed uncapped, so a cap addresses an
+        # unestablished cause and would make a clean pass uninterpretable. The setting stays
+        # in config, off.
+    }
     results: dict[str, list[CampaignScore]] = {}
+    supervisor = WorkerSupervisor(launch)
     try:
-        for _ in range(90):
-            await asyncio.sleep(2)
-            if "pipeline ready" in worker_log.read_text(encoding="utf-8", errors="replace"):
-                break
-            if worker.poll() is not None:
-                print("worker exited at start-up:", worker_log.read_text(errors="replace")[-800:])
-                return 1
-        else:
-            print("worker not ready in 3 minutes")
+        if not await supervisor.start():
+            print("worker did not become ready; log:", supervisor.log_path)
             return 1
         # A worker that dies leaves its run `queued` and the runner waiting for a campaign that
-        # will never park (the first crash cost 15 minutes of that; 4 November 2026). Notice at
-        # once, say how it died, and stop.
-        watcher = asyncio.create_task(_watch_worker(worker, asyncio.current_task(), worker_log))
+        # will never park (the first crash cost 15 minutes of that; 4 November 2026). The
+        # supervisor notices at once, records the death, starts a new worker, and the new
+        # worker's recovery sweep resumes the run. A STOPGAP for the interim only (2.25).
+        watcher = asyncio.create_task(supervisor.watch(asyncio.current_task()))
         try:
             async with app.router.lifespan_context(app):
                 transport = httpx.ASGITransport(app=app)
@@ -557,15 +676,22 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
                         if not probe:
                             print_table(b, results[b])
         except asyncio.CancelledError:
-            if worker.poll() is None:
-                raise  # cancelled from outside, not by the watcher
-            print("STOPPED: the worker process died; no result.", flush=True)
+            if supervisor.gave_up is None:
+                raise  # cancelled from outside, not by the supervisor
+            print(f"STOPPED: {supervisor.gave_up}; no result.", flush=True)
             return 2
         finally:
             watcher.cancel()
     finally:
-        worker.terminate()
-        worker.wait(timeout=30)
+        supervisor.stop()
+    rate = {
+        "worker_crashes": len(supervisor.crashes),
+        "research_steps_started": supervisor.research_starts(),
+        "crash_log": str(CRASH_LOG),
+        "note": "STOPGAP supervision for the interim only (decision-log 2.25); the rate is "
+        "crashes / research steps started, counted from the worker logs",
+    }
+    print("WORKER CRASH RATE:", rate, flush=True)
     if probe:
         print("PROBE COMPLETE (no report written). TALLY (this database):", tally(url))
         return 0
@@ -578,6 +704,7 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         "brands": {b: [asdict(c) for c in s] for b, s in results.items()},
         "verdict": None if verdict is None else asdict(verdict),
         "llm_calls": tally(url),
+        "worker_supervision": {**rate, "crashes": supervisor.crashes},
     }
     (INTERIM_REPORT if stage == "interim" else REST_REPORT).write_text(
         json.dumps(report, indent=1) + "\n", encoding="utf-8"
@@ -642,6 +769,7 @@ async def run_brand(
     vectors: list[list[float]] = []
     plan = ((1, r1, i1, product_a), (2, r2, i2, product_b), (3, r3, i3, product_a))
     for pos, rid, inp, product in plan:
+        CURRENT_CAMPAIGN.update(request=rid, campaign=pos, brand_id=str(brand_id))
         score, vec = await recall_and_score(
             url,
             enc,
