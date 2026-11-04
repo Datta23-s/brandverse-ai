@@ -25,4 +25,9 @@ databases:
 # writing that no billing account is linked to Cloud project `brandverse-ai`. Only the owner can read
 # that fact. Until this holds a date (YYYY-MM-DD, the day the owner confirmed it), EVERY call is
 # refused. If an account turns out to be linked: leave it null, everything stops, reassess spend.
-billing_unlinked_confirmed_on: null
+# BASIS (4 November 2026): gcloud VERIFICATION, not only the owner's statement. `gcloud billing projects
+# describe gen-lang-client-0622579315` (display name brandverse-ai, created 2026-10-17) printed
+# billingEnabled: false and an empty billingAccountName. This is the CURRENT state only. The owner also
+# stated that no card or free trial was ever added to any Google account; gcloud contradicts "never" in
+# part (four CLOSED billing accounts exist, none linked to this project now). See Architecture.md 4.4.
+billing_unlinked_confirmed_on: 2026-11-04

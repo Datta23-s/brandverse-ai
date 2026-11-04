@@ -359,7 +359,12 @@ Cheap and 10 Strong calls of the earlier probes (the tally above, 76 Standard, 4
 the whole tally well under one US dollar. The zero-budget constraint (`Rules.md` C0) would then have been breached retroactively, by
 an amount the tally can state and the billing account would show. The owner is checking (2026-11-01).
 
-**Billing condition: provenance of the evidence (4 November 2026). Nothing is confirmed; `billing_unlinked_confirmed_on` is still null.**
+**UPDATE, 4 November 2026 (later): the condition is CONFIRMED by gcloud and `billing_unlinked_confirmed_on` is 2026-11-04.**
+- **Project found.** `gcloud projects list` shows display name `brandverse-ai` = project ID **`gen-lang-client-0622579315`** (number 905001837844, created 2026-10-17 10:27 UTC). The name was right; the ID is what the commands need. The "unverified" entry below is corrected: it is verified to exist under the account `dattasable1213`.
+- **Clear false.** `gcloud billing projects describe gen-lang-client-0622579315` printed `billingEnabled: false`, `billingAccountName: ''`. Basis of the date: this gcloud reading, with the owner's statement (no card, no free trial) as corroboration.
+- **Two limits stated.** (1) It is the state AT THE READING; billing history is not shown, so linkage between 2026-10-17 and now is not excluded by it (the free-tier limits read 2026-10-14 and 10-17 and the zero-spend tally argue against it, nothing more). (2) `gcloud billing accounts list` is NOT empty: four accounts exist ("My Billing Account", "… 1", "… 2", "… 3"), **all closed** (OPEN False), none listing this project; one lists `project-e946952a-b9bd-4108-a13`. That contradicts "no billing account ever existed" in the owner's statement (the accounts were presumably created by a trial offer on this Google account); it does not contradict the condition, which is about this project. Reported to the owner, not resolved here.
+
+**Billing condition: provenance of the evidence (4 November 2026, earlier the same day; superseded by the update above). `billing_unlinked_confirmed_on` was still null when this was written.**
 - **The project name is UNVERIFIED.** `brandverse-ai` is the name the user stated on 2026-10-17 (above); no console, AI Studio page or command has
   shown it to be the project that owns the key. On 2026-11-04 `gcloud billing projects describe brandverse-ai` run as `dattasable1213@gmail.com`
   returned "does not have permission … (or it may not exist)": that is neither a false nor a true, and nothing was set from it. It may mean the
