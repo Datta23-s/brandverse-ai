@@ -1,0 +1,32 @@
+# dry run, rolled back, 2026-11-04 09:09 UTC; commit 2edb3f7; target aws-0-ap-south-1.pooler.supabase.com
+# 0046_runs_failure.sql sha256 61dc5bb72b9cc79f
+recorded migrations (last 3): [('0043',), ('0044',), ('0045',)]
+attempt 1: backend 2105940, started 1.0s ago, pgvector loaded -> reused, held open
+attempt 2: backend 2105942, started 0.0s ago, pgvector not loaded -> FRESH
+acting as postgres (the CLI's role, no SET ROLE), superuser: False
+still fresh immediately before the files: pgvector not loaded
+applied inside the dry-run transaction: 0046_runs_failure.sql
+-- scope: app, public
+-- catalog changes inside the transaction
+  functions - ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, '8cc8849c953c8ca065515579318481c5')
+  functions + ('app', 'runs_initial_state', '', False, 'postgres', '{"search_path=\\"\\""}', 'v', None, 'd196c303a6279a2390ac50d8ddb111a8')
+  constraints + ('runs', 'runs_failure_check', "CHECK (((failure IS NULL) OR (jsonb_typeof(failure) = 'object'::text)))")
+  columns + ('public', 'runs', 'failure', 'jsonb', 'YES', None)
+  column grants + ('public', 'runs', 'failure', 'anon', 'INSERT')
+  column grants + ('public', 'runs', 'failure', 'anon', 'REFERENCES')
+  column grants + ('public', 'runs', 'failure', 'anon', 'SELECT')
+  column grants + ('public', 'runs', 'failure', 'anon', 'UPDATE')
+  column grants + ('public', 'runs', 'failure', 'authenticated', 'INSERT')
+  column grants + ('public', 'runs', 'failure', 'authenticated', 'REFERENCES')
+  column grants + ('public', 'runs', 'failure', 'authenticated', 'SELECT')
+  column grants + ('public', 'runs', 'failure', 'authenticated', 'UPDATE')
+  column grants + ('public', 'runs', 'failure', 'service_role', 'INSERT')
+  column grants + ('public', 'runs', 'failure', 'service_role', 'REFERENCES')
+  column grants + ('public', 'runs', 'failure', 'service_role', 'SELECT')
+  column grants + ('public', 'runs', 'failure', 'service_role', 'UPDATE')
+-- exercise
+runs.failure: ('jsonb', 'YES')
+check on failure: ("CHECK (((failure IS NULL) OR (jsonb_typeof(failure) = 'object'::text)))",)
+app.runs_initial_state forces failure null and keeps the earlier columns forced
+existing runs with a failure recorded (must be 0): (0,)
+-- after rollback: catalog identical to before
