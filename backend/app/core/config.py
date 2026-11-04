@@ -71,12 +71,10 @@ class Settings(BaseSettings):
     # 1800 s (owner, 2026-11-04): research was measured at 205 to 359 s, so the old 600 s gave under
     # a 2x margin and contention consumed it (the stage-2 probe); 1800 s is about 5x the worst seen.
     worker_job_timeout_s: int = Field(default=1800, ge=1)
-    # Diagnostics (off by default). Dump every thread's Python stack to stderr every N seconds
-    # (`faulthandler`): it works while the interpreter is stuck holding the GIL, which is the one
-    # hang an `await` timeout cannot see (stage-2 interim, 2026-11-04: step 6 silent 15 minutes).
-    worker_stack_dump_s: float | None = Field(default=None, ge=10)
-    # Fail the research step with its name if it takes longer than this. It fires only while the
-    # event loop is running; a loop frozen by a GIL-holding thread is `worker_stack_dump_s`'s job.
+    # Diagnostic (off by default): fail the research step with its name if it takes longer than
+    # this. It fires only while the event loop is running. (There is deliberately NO repeating
+    # stack-dump setting: `faulthandler.dump_traceback_later` reads other threads' frames without
+    # the GIL and crashed this project's own processes five times on 2026-11-04; decision-log 2.25.)
     research_step_timeout_s: float | None = Field(default=None, gt=0)
     # Cap torch's intra-op threads in the worker, set BEFORE the encoder loads (hypothesis, stage-2
     # interim 2026-11-04: torch threads multiplying against the extraction pool starve the loop).

@@ -157,11 +157,11 @@ def main() -> None:
     # before a terminated worker's last flush are lost. The first stage-2 crash's diagnosis was lost
     # that way (2026-11-04), and that must not happen during the evaluation.
     unbuffer_stdio()
-    if settings.worker_stack_dump_s is not None:
-        # Repeating all-thread stack dump to stderr, from a C watchdog thread that needs no GIL.
-        faulthandler.enable()
-        faulthandler.dump_traceback_later(settings.worker_stack_dump_s, repeat=True)
-        log.info("stack dumps armed", extra={"every_s": settings.worker_stack_dump_s})
+    # On a native crash (an access violation) print the Python stack to stderr, so the log says
+    # where the process died. This is the SAFE faulthandler: it runs only at the moment of the
+    # fatal signal. NEVER arm `faulthandler.dump_traceback_later` here: it walks other threads'
+    # frames without the GIL and crashed this project's own processes on 2026-11-04 (2.25).
+    faulthandler.enable()
     log.info(
         "worker starting",
         extra={

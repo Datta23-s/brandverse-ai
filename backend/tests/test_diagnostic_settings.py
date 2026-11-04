@@ -5,9 +5,8 @@ import pytest
 from app.core.config import Settings
 
 
-def test_both_diagnostics_are_off_by_default() -> None:
+def test_the_diagnostics_are_off_by_default() -> None:
     s = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert s.worker_stack_dump_s is None
     assert s.research_step_timeout_s is None
     assert s.worker_torch_threads is None
 
@@ -36,24 +35,35 @@ def test_the_stage2_worker_logs_unbuffered_and_has_a_job_timeout_that_fits_d2() 
     assert "update runs set status = 'failed'" in src  # stale runs are not resumed by the sweep
 
 
-def test_the_environment_turns_them_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WORKER_STACK_DUMP_S", "120")
+def test_the_environment_turns_the_research_timeout_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RESEARCH_STEP_TIMEOUT_S", "420")
     s = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert s.worker_stack_dump_s == 120.0
     assert s.research_step_timeout_s == 420.0
 
 
-def test_a_dump_interval_under_ten_seconds_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WORKER_STACK_DUMP_S", "1")
-    with pytest.raises(ValueError, match="worker_stack_dump_s"):
-        Settings(_env_file=None)  # type: ignore[call-arg]
-
-
-def test_the_stage2_worker_is_started_with_both() -> None:
+def test_the_stage2_worker_has_the_research_timeout() -> None:
     from pathlib import Path
 
     src = (Path(__file__).resolve().parents[1] / "scripts" / "phase7_stage2.py").read_text(
         encoding="utf-8"
     )
-    assert '"WORKER_STACK_DUMP_S"' in src and '"RESEARCH_STEP_TIMEOUT_S"' in src
+    assert '"RESEARCH_STEP_TIMEOUT_S"' in src
+
+
+def test_nothing_in_the_code_arms_a_repeating_stack_dump() -> None:
+    """`faulthandler.dump_traceback_later` reads other threads' frames without the GIL. On
+    2026-11-04 it killed this project's worker and three replay scripts mid-dump (each log shows
+    `File ` cut off by `Windows fatal exception: access violation`), and for hours that was
+    mistaken for a crash in lxml, in the regex engine and in the interpreter.
+    `faulthandler.enable()` (a stack at a fatal signal) is safe and stays."""
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parents[1]
+    offenders = [
+        str(path.relative_to(backend))
+        for folder in ("app", "scripts")
+        for path in (backend / folder).rglob("*.py")
+        if "dump_traceback_later(" in path.read_text(encoding="utf-8")
+        and path.name != "test_diagnostic_settings.py"
+    ]
+    assert offenders == []

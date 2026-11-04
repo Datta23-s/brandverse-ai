@@ -625,15 +625,15 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         "MAX_LLM_CALLS_PER_RUN": "10",
         "LLM_ALLOW_STRONG_TIER": "false",
         "LLM_STRONG_TIER_ORG_ID": "",
-        # Diagnostics (2026-11-04): all-thread stack dump every 2 min (works through a GIL-held
-        # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
-        # The worker's log goes to a file: Python block-buffers a redirected stdout, so lines
-        # written before a termination were lost (the first crash's log ended 15 minutes early).
+        # A named timeout on the research step, instead of a blanket 15-minute wait. There is NO
+        # repeating stack dump: `faulthandler.dump_traceback_later` crashed the worker mid-dump
+        # (2026-11-04, 2.25), and the worker's own `faulthandler.enable()` still prints a stack at
+        # a fatal signal. The worker's log goes to a file: Python block-buffers a redirected
+        # stdout, so lines written before a termination were lost.
         "PYTHONUNBUFFERED": "1",
         # ARQ kills a run job at this limit. 600 s (the default) is too tight for a D2 run on
         # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
         "WORKER_JOB_TIMEOUT_S": "1800",
-        "WORKER_STACK_DUMP_S": "120",
         # 900 s: probe 2 measured research at 358.6 s alone on AC, so 420 s left no room.
         "RESEARCH_STEP_TIMEOUT_S": "900",
         # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED
