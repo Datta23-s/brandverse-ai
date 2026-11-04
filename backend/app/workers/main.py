@@ -16,10 +16,11 @@ from arq.worker import Worker, func
 
 from app.core.config import Settings, get_settings
 from app.core.db import create_db_pool, ping_database
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, unbuffer_stdio
 from app.core.redis import arq_redis_settings, json_deserializer, json_serializer
 from app.core.run_events import RunEventLog
 from app.models.campaigns import RecoverJob
+from app.workers.gate import ExecutionGate
 from app.workers.jobs import (
     EDIT_OUT_PIPELINE,
     PING,
@@ -45,6 +46,7 @@ log = logging.getLogger(__name__)
 
 async def on_startup(ctx: dict[str, Any]) -> None:
     settings: Settings = ctx["settings"]
+    ctx["gate"] = ExecutionGate()  # a recovery never runs beside a run (workers/gate.py)
     ctx["events"] = RunEventLog(
         ctx["redis"],
         ttl_s=settings.run_events_ttl_s,
@@ -151,6 +153,10 @@ async def run(settings: Settings) -> None:
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
+    # PERMANENT, not a debugging aid: a redirected stdout is block-buffered, so the lines written
+    # before a terminated worker's last flush are lost. The first stage-2 crash's diagnosis was lost
+    # that way (2026-11-04), and that must not happen during the evaluation.
+    unbuffer_stdio()
     if settings.worker_stack_dump_s is not None:
         # Repeating all-thread stack dump to stderr, from a C watchdog thread that needs no GIL.
         faulthandler.enable()

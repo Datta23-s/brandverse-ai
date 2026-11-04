@@ -37,6 +37,7 @@ from app.core.truth import ProductTruth
 from app.errors import BrandverseError, BudgetExceeded, StepTimeout
 from app.memory.writeback import MemoryStage
 from app.models.runs import StepEvent, StepStatus
+from app.orchestrator import progress
 from app.orchestrator.deps import GraphDeps
 from app.orchestrator.state import AgentTask, Depth, RunState
 
@@ -121,6 +122,7 @@ class Nodes:
             # A named line at each end of every step, so silence localises to a step in the worker
             # log and not to a blank (stage-2 interim, 2026-11-04). `emit` also writes the stream.
             began = time.perf_counter()
+            progress.started(UUID(state["run_id"]), step, name)
             log.info("step %d %s: start", step, name, extra={"step": step, "step_name": name})
             if start:
                 await self.emit(state, step, StepStatus.STARTED)

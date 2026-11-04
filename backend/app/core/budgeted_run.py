@@ -121,6 +121,7 @@ set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
     declared_gaps = %(gaps)s::jsonb,
     brief_check = coalesce(%(brief_check)s::jsonb, r.brief_check),
     timings = coalesce(%(timings)s::jsonb, r.timings),
+    failure = coalesce(%(failure)s::jsonb, r.failure),
     -- active latency: wall time minus the time spent waiting for a person (migration 0036)
     latency_ms = greatest(0, (extract(epoch from (now() - r.created_at)) * 1000
         - coalesce((select sum(extract(epoch from (w.resumed_at - w.parked_at)) * 1000)
@@ -140,10 +141,12 @@ async def end_run(
     budget_exhausted: bool,
     memory: StagedMemory | None = None,
     facts: RunFacts | None = None,
+    failure: dict[str, Any] | None = None,
 ) -> Committed | None:
     """Write the run's terminal status and its staged memory in one transaction: both land or
     neither does. Additions only with `completed`; corrections with any status the caller passes
-    them for (the attempt rule is applied in `run_steps`)."""
+    them for (the attempt rule is applied in `run_steps`). `failure` (migration 0046) says why and
+    where a `failed` run ended, when the backend knows; None leaves the column as it was."""
     if memory and memory.adds_trust and status != "completed":
         raise ValueError("memory that adds trust is committed only for a completed run")
     async with pool.connection() as conn, conn.transaction():
@@ -164,6 +167,7 @@ async def end_run(
                 "gaps": json.dumps(list(f.declared_gaps)),
                 "brief_check": None if f.brief_check is None else json.dumps(f.brief_check),
                 "timings": None if f.timings is None else json.dumps(f.timings),
+                "failure": None if failure is None else json.dumps(failure),
             },
         )
         if cur.rowcount != 1:
@@ -267,13 +271,20 @@ async def _end_failed(
     run_id: UUID,
     corrections: StagedMemory | None,
     facts: RunFacts | None = None,
+    failure: dict[str, Any] | None = None,
 ) -> None:
     """End the run `failed`, with its corrections if it has any. If committing them fails too, the
     run still ends `failed` — without them, and logged: an unterminated run would be worse."""
     if corrections:
         try:
             await end_run(
-                pool, run_id, "failed", budget_exhausted=False, memory=corrections, facts=facts
+                pool,
+                run_id,
+                "failed",
+                budget_exhausted=False,
+                memory=corrections,
+                facts=facts,
+                failure=failure,
             )
             return
         except Exception:
@@ -281,7 +292,7 @@ async def _end_failed(
                 "run failed; its corrections could not be committed",
                 extra={"run_id": str(run_id), "corrections": len(corrections.corrections)},
             )
-    await end_run(pool, run_id, "failed", budget_exhausted=False, facts=facts)
+    await end_run(pool, run_id, "failed", budget_exhausted=False, facts=facts, failure=failure)
 
 
 async def fail_run(
@@ -289,8 +300,9 @@ async def fail_run(
     run_id: UUID,
     corrections: StagedMemory | None,
     facts: RunFacts | None = None,
+    failure: dict[str, Any] | None = None,
 ) -> None:
     """End a run `failed` outside `run_steps` (the LangGraph runner), shielded from cancellation,
     with the same rules: corrections commit if there are any, and the run ends `failed` either
     way."""
-    await asyncio.shield(_end_failed(pool, run_id, corrections, facts))
+    await asyncio.shield(_end_failed(pool, run_id, corrections, facts, failure))

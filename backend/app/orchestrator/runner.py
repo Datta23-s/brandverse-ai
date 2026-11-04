@@ -34,9 +34,10 @@ from psycopg_pool import AsyncConnectionPool
 from app.core.budgeted_run import RunFacts, end_run, fail_run, resume_run, suspend_run
 from app.core.infrastructure import classify_infrastructure_failure
 from app.core.pipeline import PIPELINE_STEPS
-from app.errors import BrandverseError, BudgetExceeded
+from app.errors import BrandverseError, BudgetExceeded, StepTimeout
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunFailed, RunStarted, StepEvent, StepStatus
+from app.orchestrator import progress
 from app.orchestrator.deps import EventSink
 from app.orchestrator.graph import APPROVAL_NODE
 from app.orchestrator.state import Decision, Depth, RunState
@@ -79,7 +80,11 @@ class RunLedger(Protocol):
     ) -> None: ...
 
     async def fail(
-        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+        self,
+        run_id: UUID,
+        corrections: StagedMemory | None,
+        facts: RunFacts | None,
+        failure: dict[str, Any] | None = None,
     ) -> None: ...
 
 
@@ -118,9 +123,13 @@ class PoolRunLedger:
         )
 
     async def fail(
-        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+        self,
+        run_id: UUID,
+        corrections: StagedMemory | None,
+        facts: RunFacts | None,
+        failure: dict[str, Any] | None = None,
     ) -> None:
-        await fail_run(self._pool, run_id, corrections, facts)
+        await fail_run(self._pool, run_id, corrections, facts, failure)
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,6 +285,7 @@ class Pipeline:
                 facts=facts_from_state(values),
             )
             await self._events.append(RunCompleted(run_id=run_id))
+            progress.forget(run_id)
             return PipelineOutcome("completed", values)
         except BudgetExceeded as e:
             await self._ledger.end(
@@ -293,7 +303,17 @@ class Pipeline:
             infrastructure = classify_infrastructure_failure(e)
             corrections = stage.corrections_only() if infrastructure is None else None
             log.warning("run failed", extra={"infrastructure_failure": infrastructure})
-            await self._ledger.fail(run_id, corrections, await self._saved_facts(config))
+            last = progress.last_started(run_id)
+            failure: dict[str, Any] = {
+                "kind": "step_timeout" if isinstance(e, StepTimeout) else "exception",
+                "step": last[0] if last else None,
+                "step_name": last[1] if last else None,
+                "exception": type(e).__name__,
+                "message": str(e)[:300],
+                "infrastructure_failure": infrastructure,
+            }
+            await self._ledger.fail(run_id, corrections, await self._saved_facts(config), failure)
+            progress.forget(run_id)
             try:
                 await self._events.append(
                     RunFailed(run_id=run_id, error=f"internal error: {type(e).__name__}")
@@ -301,6 +321,37 @@ class Pipeline:
             except Exception:
                 log.exception("the failure could not be reported on the stream")
             raise
+
+    async def fail_timed_out(self, run_id: UUID, after_s: float) -> dict[str, Any]:
+        """End a run `failed` because its job ran out of time, and say so (migration 0046).
+
+        An ARQ timeout used to leave the run `queued` with no error anywhere, indistinguishable
+        from a run that had not started (stage-2 interim, 2026-11-04). The ending names the step
+        the run last started, the time it had, and its infrastructure kind: a job timeout is
+        `process_crash` in the attempt rule fixed on 2026-10-17 (core/infrastructure.py), so no
+        corrections are committed, as for any infrastructure failure. Returns what was recorded.
+        """
+        last = progress.last_started(run_id)
+        step, name = last if last is not None else (None, None)
+        where = f"step {step} {name}" if last is not None else "an unknown step"
+        message = f"job exceeded its {after_s:.0f} s limit while in {where}"
+        failure: dict[str, Any] = {
+            "kind": "job_timeout",
+            "step": step,
+            "step_name": name,
+            "after_s": round(after_s),
+            "infrastructure_failure": "process_crash",
+            "message": message,
+        }
+        log.error("run failed: %s", message, extra={"failure": failure})
+        facts = await self._saved_facts(self._config(run_id, MemoryStage()))
+        await self._ledger.fail(run_id, None, facts, failure)
+        try:
+            await self._events.append(RunFailed(run_id=run_id, step=step, error=message))
+        except Exception:
+            log.exception("the timeout could not be reported on the stream")
+        progress.forget(run_id)
+        return failure
 
     async def _finalize(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
         """End a run whose graph finished in a process that died before the ending was written.

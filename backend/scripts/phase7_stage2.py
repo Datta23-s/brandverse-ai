@@ -400,6 +400,22 @@ def print_table(brand: str, scores: Sequence[CampaignScore]) -> None:
         )
 
 
+async def _watch_worker(
+    worker: "subprocess.Popen[bytes]", main: "asyncio.Task[Any] | None", log_path: Path
+) -> None:
+    """Cancel the main task the moment the worker process is gone."""
+    while worker.poll() is None:  # noqa: ASYNC110 - polls a child process; it offers no event
+        await asyncio.sleep(3)
+    print(
+        f"WORKER DIED at {datetime.now(UTC):%H:%M:%S}Z, exit code {worker.returncode} "
+        f"(0xC0000005 / 3221225477 is an access violation: see the Windows Application log, "
+        f"Event 1000 python.exe). Worker log: {log_path}",
+        flush=True,
+    )
+    if main is not None:
+        main.cancel()
+
+
 async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> int:
     """Campaigns 1 and 2 live per brand, campaign 3 from recall; resumable per brand.
 
@@ -491,7 +507,7 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
             "WORKER_JOB_TIMEOUT_S": "1800",
             "WORKER_STACK_DUMP_S": "120",
-            # 900 s: probe 2 measured the research step at 358.6 s alone on AC, so 420 s left no room.
+            # 900 s: probe 2 measured research at 358.6 s alone on AC, so 420 s left no room.
             "RESEARCH_STEP_TIMEOUT_S": "900",
             # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED
             # here (owner, 2026-11-04): probe 2 completed uncapped, so a cap addresses an
@@ -513,28 +529,40 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         else:
             print("worker not ready in 3 minutes")
             return 1
-        async with app.router.lifespan_context(app):
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport, base_url="http://test", timeout=60
-            ) as client:
-                for b in ok:
-                    r1, r2, r3 = reqs[b]
-                    results[b] = await run_brand(
-                        url,
-                        client,
-                        issuer,
-                        enc,
-                        cfg,
-                        inputs_all,
-                        (r1, r2, r3),
-                        seed,
-                        wait_for_campaign,
-                        wait_for_end,
-                        stop_after=1 if probe else 3,
-                    )
-                    if not probe:
-                        print_table(b, results[b])
+        # A worker that dies leaves its run `queued` and the runner waiting for a campaign that
+        # will never park (the first crash cost 15 minutes of that; 4 November 2026). Notice at
+        # once, say how it died, and stop.
+        watcher = asyncio.create_task(_watch_worker(worker, asyncio.current_task(), worker_log))
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport, base_url="http://test", timeout=60
+                ) as client:
+                    for b in ok:
+                        r1, r2, r3 = reqs[b]
+                        results[b] = await run_brand(
+                            url,
+                            client,
+                            issuer,
+                            enc,
+                            cfg,
+                            inputs_all,
+                            (r1, r2, r3),
+                            seed,
+                            wait_for_campaign,
+                            wait_for_end,
+                            stop_after=1 if probe else 3,
+                        )
+                        if not probe:
+                            print_table(b, results[b])
+        except asyncio.CancelledError:
+            if worker.poll() is None:
+                raise  # cancelled from outside, not by the watcher
+            print("STOPPED: the worker process died; no result.", flush=True)
+            return 2
+        finally:
+            watcher.cancel()
     finally:
         worker.terminate()
         worker.wait(timeout=30)

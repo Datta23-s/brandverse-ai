@@ -74,6 +74,7 @@ class Ledger:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, ...]] = []
         self.facts: list[RunFacts | None] = []
+        self.failures: list[dict[str, Any] | None] = []
         self.current = "queued"
 
     async def status(self, run_id: UUID) -> str | None:
@@ -99,10 +100,15 @@ class Ledger:
         self.current = status
 
     async def fail(
-        self, run_id: UUID, corrections: StagedMemory | None, facts: RunFacts | None
+        self,
+        run_id: UUID,
+        corrections: StagedMemory | None,
+        facts: RunFacts | None,
+        failure: dict[str, Any] | None = None,
     ) -> None:
         self.calls.append(("fail", corrections))
         self.facts.append(facts)
+        self.failures.append(failure)
         self.current = "failed"
 
 
@@ -274,6 +280,9 @@ async def test_a_research_step_over_its_timeout_fails_naming_the_step() -> None:
         await h.start(depth="D2")
     assert (6, "failed") in h.sink.steps()
     assert h.ledger.calls[0][0] == "fail"
+    failure = h.ledger.failures[0]
+    assert failure is not None and failure["kind"] == "step_timeout"
+    assert (failure["step"], failure["step_name"]) == (6, "research")
 
 
 async def test_with_no_timeout_set_research_is_not_cut_short() -> None:
@@ -362,6 +371,12 @@ async def test_an_unexpected_error_fails_the_run_and_is_reraised() -> None:
     assert h.ledger.calls[0][0] == "fail"
     assert isinstance(h.sink.events[-1], RunFailed)
     assert (2, "failed") in h.sink.steps()
+    # The failed run says why and where (migration 0046): the exception, the message, the step.
+    failure = h.ledger.failures[0]
+    assert failure is not None
+    assert failure["kind"] == "exception" and failure["exception"] == "RuntimeError"
+    assert failure["message"] == "database gone"
+    assert (failure["step"], failure["step_name"]) == (2, "load_product_context")
 
 
 class Hangs:

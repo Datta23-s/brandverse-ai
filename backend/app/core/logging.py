@@ -69,6 +69,16 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, default=str, ensure_ascii=True)
 
 
+def unbuffer_stdio() -> None:
+    """Flush stdout and stderr at every line. A redirected stream is block-buffered by default, so
+    when a process is terminated the lines since the last flush are lost; the worker's log is
+    redirected to a file and is the only record of what it was doing (stage-2 crash, 2026-11-04)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(line_buffering=True)
+
+
 def configure_logging(level: str, stream: TextIO | None = None) -> None:
     """Route all logging (ours, uvicorn's, ARQ's) through one JSON handler on stdout.
 

@@ -22,6 +22,7 @@ in Redis under a TTL. Nothing here writes to Postgres; only extracted, scored, a
 persist, and those are built from this by later pieces.
 """
 
+import threading
 from collections.abc import Callable, Mapping
 from datetime import date
 from urllib.parse import urlsplit
@@ -110,19 +111,32 @@ class Extractor:
         )
 
 
+# ONE extraction at a time, process-wide. trafilatura parses every page with a single module-level
+# lxml parser (`trafilatura.utils.HTML_PARSER`) and lxml documents that a parser must not be shared
+# between threads. Under replay every page is available at once, so the research step's eight
+# extraction threads parsed against that one parser together, and the worker was killed by an
+# access violation in lxml's `etree` three seconds into the step (Windows Application Error, 4
+# November 2026 09:38:51 IST; a second crash, in python312.dll, at 14:10:04). The lock sits here,
+# on the one function that reaches trafilatura, so no caller (the research driver, the agents'
+# evidence reader, a script) can bypass it. Results do not depend on order; pure-Python
+# trafilatura holds the GIL for most of a page anyway, so the lock costs little wall time.
+_TRAFILATURA_LOCK = threading.Lock()
+
+
 def trafilatura_extract(html: str, url: str) -> dict[str, object] | None:
     """The real binding. Tables are kept (a competitor's spec table is evidence); comments are
     not (reader chatter is not the page's claim); precision is favoured over recall."""
     from trafilatura import bare_extraction  # optional group: imported only when used
 
-    document = bare_extraction(
-        html,
-        url=url,
-        with_metadata=True,
-        include_comments=False,
-        include_tables=True,
-        favor_precision=True,
-    )
+    with _TRAFILATURA_LOCK:
+        document = bare_extraction(
+            html,
+            url=url,
+            with_metadata=True,
+            include_comments=False,
+            include_tables=True,
+            favor_precision=True,
+        )
     if document is None:
         return None
     fields = document if isinstance(document, dict) else document.as_dict()

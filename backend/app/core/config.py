@@ -67,7 +67,10 @@ class Settings(BaseSettings):
     worker_max_jobs: int = Field(default=2, ge=1)
     # The port the single worker holds as its lease (app/workers/lease.py).
     worker_lease_port: int = Field(default=47631, ge=1024, le=65535)
-    worker_job_timeout_s: int = Field(default=600, ge=1)
+    # ARQ kills a job at this limit; the job fails its own run just inside it (workers/jobs.py).
+    # 1800 s (owner, 2026-11-04): research was measured at 205 to 359 s, so the old 600 s gave under
+    # a 2x margin and contention consumed it (the stage-2 probe); 1800 s is about 5x the worst seen.
+    worker_job_timeout_s: int = Field(default=1800, ge=1)
     # Diagnostics (off by default). Dump every thread's Python stack to stderr every N seconds
     # (`faulthandler`): it works while the interpreter is stuck holding the GIL, which is the one
     # hang an `await` timeout cannot see (stage-2 interim, 2026-11-04: step 6 silent 15 minutes).

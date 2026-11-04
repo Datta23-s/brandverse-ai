@@ -249,3 +249,52 @@ def test_the_stated_versus_derived_site_name_rule(
 ) -> None:
     page = small(raw_with(sitename=sitename)).extract("", url)
     assert page.sitename == expected
+
+
+def _overlap_of_eight_threads(monkeypatch: pytest.MonkeyPatch, *, hold_s: float) -> int:
+    """The most threads that were inside trafilatura at the same moment, out of eight."""
+    import threading
+    import time
+
+    trafilatura = pytest.importorskip("trafilatura")
+    inside, worst, lock = 0, 0, threading.Lock()
+
+    def fake_bare_extraction(html: str, **_: object) -> dict[str, object]:
+        nonlocal inside, worst
+        with lock:
+            inside += 1
+            worst = max(worst, inside)
+        time.sleep(hold_s)  # long enough for the other threads to arrive
+        with lock:
+            inside -= 1
+        return {"text": "x" * 500}
+
+    monkeypatch.setattr(trafilatura, "bare_extraction", fake_bare_extraction)
+    threads = [
+        threading.Thread(target=trafilatura_extract, args=("<p>x</p>", f"https://e.test/{i}"))
+        for i in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return worst
+
+
+def test_extraction_never_runs_in_two_threads_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """trafilatura parses every page with one module-level lxml parser, and lxml says a parser must
+    not be shared between threads. Under replay the research step's eight threads did, and the
+    worker died of an access violation in lxml's etree (Windows Application Error, 2026-11-04
+    09:38:51 IST). The lock is on the binding itself, so no caller can bypass it."""
+    assert _overlap_of_eight_threads(monkeypatch, hold_s=0.02) == 1
+
+
+def test_the_extraction_lock_is_what_serialises_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The control: with the lock replaced by one that does nothing, the same eight threads DO
+    overlap, so the test above is measuring the lock and not luck."""
+    import contextlib
+
+    from app.research import extraction
+
+    monkeypatch.setattr(extraction, "_TRAFILATURA_LOCK", contextlib.nullcontext())
+    assert _overlap_of_eight_threads(monkeypatch, hold_s=0.05) > 1

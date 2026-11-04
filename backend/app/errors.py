@@ -17,6 +17,12 @@ class RunEventCorrupt(BrandverseError):
     """A run-progress stream holds an entry that is not a valid run event."""
 
 
+class JobTimedOut(BrandverseError):
+    """A run's job reached its own deadline (just inside ARQ's); the run was ended `failed`.
+    Deliberately not a `TimeoutError`: that is classified `network_error`, and a job timeout is
+    `process_crash` in the attempt rule (app/core/infrastructure.py)."""
+
+
 class StepTimeout(BrandverseError):
     """A pipeline step exceeded its own timeout; the message names the step."""
 

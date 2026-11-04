@@ -1,18 +1,22 @@
 """ARQ job functions. Each validates its JSON payload with Pydantic before doing anything."""
 
+import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
 from app.core.campaigns import audit
 from app.core.logging import bind_run_id, set_run_id
 from app.core.run_events import RunEventLog
+from app.errors import JobTimedOut
 from app.models.campaigns import DecisionJob, EditOutJob, PipelineRunJob, RecoverJob
 from app.models.jobs import PingJob, PingResult
 from app.models.runs import FakeRunJob, RunFailed
 from app.orchestrator.runner import EditOutRefused, NotAwaitingApproval, NotRecoverable, Pipeline
 from app.workers.fake_run import execute_fake_run
+from app.workers.gate import ExecutionGate
 
 log = logging.getLogger(__name__)
 
@@ -110,19 +114,72 @@ async def run_fake_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dic
     return {"run_id": str(job.run_id), "status": "completed" if completed else "failed"}
 
 
+_FALLBACK_GATE = ExecutionGate()  # for callers that run a job function without a worker context
+_DEADLINE_MARGIN_S = 30.0
+
+
+def _deadline_s(ctx: dict[str, Any]) -> float | None:
+    """The job's own deadline: just inside ARQ's `job_timeout`, so the job can tell its own time
+    running out (fail the run, say why) from the worker being shut down (leave it resumable). Both
+    reach the job as a cancellation; only this one is ours. None: no settings in the context."""
+    settings = ctx.get("settings")
+    if settings is None:
+        return None
+    limit = float(settings.worker_job_timeout_s)
+    return limit - min(_DEADLINE_MARGIN_S, limit * 0.05)
+
+
+async def _execute(
+    ctx: dict[str, Any],
+    run_id: UUID,
+    work: Callable[[], Awaitable[Any]],
+    *,
+    exclusive: bool = False,
+) -> Any:
+    """Run a pipeline job under the execution gate and its own deadline.
+
+    The gate: run jobs share it, a recovery holds it alone (app/workers/gate.py). The deadline: if
+    it expires the RUN ends `failed` with the step it was in (migration 0046) and `JobTimedOut` is
+    raised; a worker shutdown is a different cancellation and passes through untouched (the run
+    stays resumable, as before). A frozen event loop cannot run this code at all; that case is
+    ARQ's timeout, and the run is then left as it always was (queued), which is why the step log
+    and the stack dump exist."""
+    pipeline: Pipeline = ctx["pipeline"]
+    gate: ExecutionGate = ctx.get("gate") or _FALLBACK_GATE
+    limit = _deadline_s(ctx)
+    deadline = asyncio.timeout(limit)
+    try:
+        async with deadline:
+            async with gate.exclusive() if exclusive else gate.shared():
+                return await work()
+    except TimeoutError as e:
+        if not deadline.expired() or limit is None:
+            raise  # the work's own timeout, not ours
+        try:
+            failure = await pipeline.fail_timed_out(run_id, limit)
+        except Exception:
+            log.exception("the timed-out run could not be marked failed")
+            raise JobTimedOut(f"run {run_id}: job exceeded {limit:.0f} s") from e
+        raise JobTimedOut(f"run {run_id}: {failure['message']}") from e
+
+
 async def run_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     """Start a real run. The pipeline reports its own failures (`run.failed`) before re-raising."""
     job = PipelineRunJob.model_validate(payload)
     pipeline: Pipeline = ctx["pipeline"]
     with bind_run_id(str(job.run_id)):
-        outcome = await pipeline.start(
-            run_id=job.run_id,
-            org_id=job.request.org_id,
-            user_id=job.by,
-            product_id=job.request.product_id,
-            brief=job.request.brief,
-            depth=job.request.depth,
-            audience=job.request.audience,
+        outcome = await _execute(
+            ctx,
+            job.run_id,
+            lambda: pipeline.start(
+                run_id=job.run_id,
+                org_id=job.request.org_id,
+                user_id=job.by,
+                product_id=job.request.product_id,
+                brief=job.request.brief,
+                depth=job.request.depth,
+                audience=job.request.audience,
+            ),
         )
     return {"run_id": str(job.run_id), "status": outcome.status}
 
@@ -133,7 +190,11 @@ async def resume_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[
     pipeline: Pipeline = ctx["pipeline"]
     with bind_run_id(str(job.run_id)):
         try:
-            outcome = await pipeline.resume(job.run_id, job.outcome, by=job.by, reason=job.reason)
+            outcome = await _execute(
+                ctx,
+                job.run_id,
+                lambda: pipeline.resume(job.run_id, job.outcome, by=job.by, reason=job.reason),
+            )
         except NotAwaitingApproval:
             # Already continued (the job id dedupes within ARQ's result window, not beyond it).
             log.warning("decision job found the run no longer waiting; nothing done")
@@ -174,7 +235,9 @@ async def recover_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict
     pipeline: Pipeline = ctx["pipeline"]
     with bind_run_id(str(job.run_id)):
         try:
-            outcome = await pipeline.recover(job.run_id)
+            outcome = await _execute(
+                ctx, job.run_id, lambda: pipeline.recover(job.run_id), exclusive=True
+            )
         except NotRecoverable as e:
             log.warning("recovery found nothing to continue", extra={"reason": str(e)})
             return {"run_id": str(job.run_id), "status": "not_recoverable", "reason": str(e)}
