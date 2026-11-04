@@ -12,8 +12,9 @@ is outside the declared set or cannot be read when it must be:
   "cannot read" is reported as NOT CHECKED and does not pass silently).
 
 What this cannot read is listed in the report as NOT CHECKED, so it is not mistaken for checked:
-the Supabase project's owner, the GitHub account's email, the Claude Code login and any connector
-(the Supabase dashboard / GitHub settings are the only places to see them).
+the Supabase project's owner and the GitHub account's email (the dashboard / settings are the only
+places to see them). Out of scope by design, and never read: the Claude Code login and Claude's
+connectors, which the project does not authenticate with (Rules.md P17 scope, Kundan 2026-11-04).
 
 Read-only: it runs `gcloud` and `git` with fixed argument lists and writes nothing.
 """
@@ -71,7 +72,7 @@ def _email_problem(label: str, email: str, d: Declared) -> str | None:
     e = email.lower()
     if e in d.allowed_emails:
         return None
-    named = " (a named non-project account)" if e in d.known_disallowed_emails else ""
+    named = " (disallowed for project credentials)" if e in d.known_disallowed_emails else ""
     return f"{label} is {email}{named}: not in config/accounts.yaml allowed_emails"
 
 
@@ -106,7 +107,6 @@ def evaluate(d: Declared, o: Observed) -> tuple[list[str], list[str]]:
     not_checked += [
         "Supabase project owner (dashboard only)",
         "GitHub account email (settings only)",
-        "Claude Code login and connectors",
     ]
     return failures, not_checked
 

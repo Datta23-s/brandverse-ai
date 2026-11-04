@@ -13,7 +13,10 @@ allowed_emails:
 # GitHub login that owns the origin remote.
 allowed_github_owners:
   - Datta23-s
-# Named so the refusal message can say why; they are refused anyway because they are not allowed.
+# DISALLOWED FOR PROJECT CREDENTIALS, PERMITTED FOR THE CLAUDE CODE SESSION (Kundan, 2026-11-04). The
+# Claude Code login is deliberately Kundan's and is out of scope: the project does not authenticate
+# with it or with Claude's connectors, and the guard does not read them. Named so the refusal message
+# can say why; refused anyway because it is not in allowed_emails.
 known_disallowed_emails:
   - kundansable@gmail.com
 # The Cloud project that owns the Gemini API key (display name brandverse-ai). Its IAM members must all

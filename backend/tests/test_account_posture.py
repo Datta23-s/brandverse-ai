@@ -69,7 +69,20 @@ def test_an_account_outside_the_set_is_refused(run: ap.Run, needle: str) -> None
 
 
 def test_the_named_account_is_called_out() -> None:
-    assert "a named non-project account" in _check(_fake(gcloud_active=KUNDAN))[0]
+    assert "disallowed for project credentials" in _check(_fake(gcloud_active=KUNDAN))[0]
+
+
+def test_only_project_credentials_are_read() -> None:
+    """The Claude Code login and connectors are out of scope: only gcloud and git are ever run."""
+    seen: list[str] = []
+    base = _fake()
+
+    def run(cmd: list[str]) -> tuple[int, str]:
+        seen.append(cmd[0])
+        return base(cmd)
+
+    _check(run)
+    assert set(seen) == {"gcloud", "git"}
 
 
 def test_gcloud_signed_out_fails_closed() -> None:
