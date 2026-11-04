@@ -491,7 +491,8 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             # this laptop: research alone is 205 s to 313 s, and it doubles under contention.
             "WORKER_JOB_TIMEOUT_S": "1800",
             "WORKER_STACK_DUMP_S": "120",
-            "RESEARCH_STEP_TIMEOUT_S": "420",
+            # 900 s: probe 2 measured the research step at 358.6 s alone on AC, so 420 s left no room.
+            "RESEARCH_STEP_TIMEOUT_S": "900",
             # Thread caps (OMP_NUM_THREADS, MKL_NUM_THREADS, WORKER_TORCH_THREADS) are DISABLED
             # here (owner, 2026-11-04): probe 2 completed uncapped, so a cap addresses an
             # unestablished cause and would make a clean pass uninterpretable. The setting stays
