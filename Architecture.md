@@ -1100,6 +1100,12 @@ connects (proven offline in `tests/test_project_state.py`; run live 2026-11-04: 
 whether its request counts as activity is not established here, so the weekly touch stays a real database session
 (`live_posture.py` opens one). Run both before every evaluation session and each weekday until 25 November.
 
+**The weekly touch is NOT automated; the risk is ACCEPTED (owner, 4 November 2026).** *Reason:* a scheduled task on a laptop that sleeps,
+runs on battery and gets closed is unreliable, and a touch that silently fails to fire is worse than one known to be manual. The project
+is worked on daily until 25 November and `live_posture.py` opens a real database session each time, so a seven-day gap is not a realistic
+failure mode before the deadline. *The one case that would change this:* a stretch of days with no session at all (travel, illness, a
+broken laptop). *The response then is to run `live_posture.py` once, not to build a scheduler.*
+
 **If it reports NOT ACTIVE: resume the project.** (1) Open the Supabase dashboard, organisation "Datta23-s's Org", project
 `brandverse-ai`; if it shows *Paused*, press *Restore project* and wait until it shows healthy (minutes). (2) Re-run
 `uv run python scripts/project_state.py`, then `scripts/live_posture.py --url "$DATABASE_URL"`. (3) The restore keeps the URL and keys but

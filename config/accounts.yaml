@@ -25,6 +25,8 @@ gemini_cloud_project_id: gen-lang-client-0622579315
 
 # ATTESTED, not machine-checked (owner, 2026-11-04, audit closed): identities no command here can read.
 # The guard does not test these; an attestation is a dated statement, upgraded if a reading is found.
+# Standing pattern (owner, 2026-11-04): anything else that rests on a statement and not a reading is
+# recorded the same way, as a dated attestation beside what is machine-read.
 attested:
   supabase_project: >-
     brandverse-ai (ref waftkvzmftsuotelbcwp) sits in "Datta23-s's Org" on the free plan, authenticated
