@@ -1,0 +1,21 @@
+# The account identities this project may use (Rules.md P17, owner, 2026-11-04).
+#
+# Every account the project uses must be Datta's: the Google account that owns the Gemini API key and
+# the Cloud project, the gcloud signed-in account, the git author, GitHub, Supabase and any other
+# service credential. Kundan's accounts, kundansable@gmail.com included, are NOT to be used for any
+# project credential, service or API key.
+#
+# `scripts/account_posture.py` checks what it can READ against this file and exits non-zero on any
+# identity outside it; `scripts/live_posture.py` runs it first. A new account is added here, on
+# purpose, in a commit the owner approves.
+allowed_emails:
+  - dattasable1213@gmail.com
+# GitHub login that owns the origin remote.
+allowed_github_owners:
+  - Datta23-s
+# Named so the refusal message can say why; they are refused anyway because they are not allowed.
+known_disallowed_emails:
+  - kundansable@gmail.com
+# The Cloud project that owns the Gemini API key (display name brandverse-ai). Its IAM members must all
+# be allowed. Verified 2026-11-04: sole owner dattasable1213@gmail.com.
+gemini_cloud_project_id: gen-lang-client-0622579315

@@ -129,6 +129,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--url", required=True, help="the live project's connection string")
     args = parser.parse_args()
+    # Rules.md P17: no live check runs under an account outside config/accounts.yaml.
+    import account_posture
+
+    if account_posture.main() != 0:
+        print("refusing to open the live project: account posture failed")
+        return 1
     host = urlparse(args.url).hostname
     conn = open_read_only(args.url)
     try:
