@@ -359,6 +359,24 @@ Cheap and 10 Strong calls of the earlier probes (the tally above, 76 Standard, 4
 the whole tally well under one US dollar. The zero-budget constraint (`Rules.md` C0) would then have been breached retroactively, by
 an amount the tally can state and the billing account would show. The owner is checking (2026-11-01).
 
+**Billing condition: provenance of the evidence (4 November 2026). Nothing is confirmed; `billing_unlinked_confirmed_on` is still null.**
+- **The project name is UNVERIFIED.** `brandverse-ai` is the name the user stated on 2026-10-17 (above); no console, AI Studio page or command has
+  shown it to be the project that owns the key. On 2026-11-04 `gcloud billing projects describe brandverse-ai` run as `dattasable1213@gmail.com`
+  returned "does not have permission … (or it may not exist)": that is neither a false nor a true, and nothing was set from it. It may mean the
+  project belongs to another account, or the name is wrong. To be confirmed by Kundan from AI Studio's API keys page.
+- **The narrower fact the condition needs** is "does any billing account exist", because one cannot exist without a payment method being entered.
+  The owner asked Kundan on 2026-11-04 whether he ever added a card or accepted a free trial on any Google account.
+  - *If no:* the date is set with the basis recorded here as **the owner's statement that no payment method was ever added, NOT a console
+    verification**. The weaker basis stays visible in this section and is upgraded if a console reading is later found.
+  - *If yes:* it stays null, every call stays refused, and the whole spend position is reassessed, including the window below.
+- **Exposure window, OPEN (neither closed nor a breach).** From 2026-10-17 16:07 IST (LiteLLM gateway committed, d8905fb; the `.env` with a live
+  key had existed since 15:59) to 2026-11-03 17:37 IST (8c15d47 stopped LiteLLM loading `.env` and added the test guard), importing LiteLLM
+  copied the key into every local test process. Before the development gate (44e6977, 2026-11-03 16:47 IST) a test gateway built on the real
+  provider call, or any call outside the gateway, was not refused. After it, a real call without a development budget raises at construction,
+  and test databases are not in `config/dev_budget.yaml`, so they are refused. Whether a call was made in the window is decided only by
+  comparing the provider-side request count for the key over that window with the ledger's 146 Standard, 4 Cheap and 10 Strong, which needs
+  the owner's console. Not resolved on inference.
+
 #### Prompts — versioned templates, recorded per call (Phase 2 chunk B, 2026-10-17)
 
 - **Templates are files**, `config/prompts/<prompt_id>/<version>.yaml`, each naming its own id
