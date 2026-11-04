@@ -476,6 +476,12 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
             "WORKER_STACK_DUMP_S": "120",
             "RESEARCH_STEP_TIMEOUT_S": "420",
+            # Thread caps (hypothesis 2026-11-04): torch's intra-op threads against the extraction
+            # pool. The environment variables must exist before torch is imported, so they are set
+            # here, in the worker's own environment, not inside it.
+            "OMP_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "WORKER_TORCH_THREADS": "1",
         },
         stdout=worker_log.open("w", encoding="utf-8"),
         stderr=subprocess.STDOUT,

@@ -9,6 +9,17 @@ def test_both_diagnostics_are_off_by_default() -> None:
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.worker_stack_dump_s is None
     assert s.research_step_timeout_s is None
+    assert s.worker_torch_threads is None
+
+
+def test_the_stage2_worker_environment_caps_the_math_threads() -> None:
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "phase7_stage2.py").read_text(
+        encoding="utf-8"
+    )
+    for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "WORKER_TORCH_THREADS"):
+        assert f'"{name}": "1"' in src
 
 
 def test_the_environment_turns_them_on(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -13,6 +13,7 @@ and a checkpointer connection. Two compositions, chosen by `Settings.pipeline_ag
   A real run works at depth D0 today; the refusal is a visible failure, not a silent skip.
 """
 
+import logging
 from contextlib import AsyncExitStack
 from datetime import date
 
@@ -56,6 +57,8 @@ from app.orchestrator.runner import Pipeline, PoolRunLedger
 from app.orchestrator.state import Depth, RunState
 from app.research.extraction import Extractor, trafilatura_extract
 from app.research.snapshot import SnapshotPages, SnapshotSearch, SnapshotStore
+
+log = logging.getLogger(__name__)
 
 
 class LiveResearchNotEnabled(BrandverseError):
@@ -146,6 +149,11 @@ async def open_pipeline(
         }
         # The local encoder (loaded here, 37 s): recall scores with it and items written to memory
         # carry its real vectors.
+        if settings.worker_torch_threads is not None:
+            import torch
+
+            torch.set_num_threads(settings.worker_torch_threads)
+            log.info("torch threads capped", extra={"threads": settings.worker_torch_threads})
         encoder = default_encoder()
         scoring = load_scoring()
         research: Research = _refuse_live_research

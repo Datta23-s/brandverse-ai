@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # Fail the research step with its name if it takes longer than this. It fires only while the
     # event loop is running; a loop frozen by a GIL-holding thread is `worker_stack_dump_s`'s job.
     research_step_timeout_s: float | None = Field(default=None, gt=0)
+    # Cap torch's intra-op threads in the worker, set BEFORE the encoder loads (hypothesis, stage-2
+    # interim 2026-11-04: torch threads multiplying against the extraction pool starve the loop).
+    # None: torch's default (all cores). Environment OMP_NUM_THREADS / MKL_NUM_THREADS are set by
+    # whoever starts the worker; they must exist before torch is imported.
+    worker_torch_threads: int | None = Field(default=None, ge=1)
 
     # Run-progress event streams in Redis.
     run_events_ttl_s: int = Field(default=7 * 24 * 3600, ge=60)
