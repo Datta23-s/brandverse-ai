@@ -12,14 +12,15 @@ def test_both_diagnostics_are_off_by_default() -> None:
     assert s.worker_torch_threads is None
 
 
-def test_the_stage2_worker_environment_caps_the_math_threads() -> None:
+def test_the_stage2_worker_environment_leaves_the_thread_caps_off() -> None:
+    """Owner, 2026-11-04: the caps stay in config, disabled, until a cause is established."""
     from pathlib import Path
 
     src = (Path(__file__).resolve().parents[1] / "scripts" / "phase7_stage2.py").read_text(
         encoding="utf-8"
     )
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "WORKER_TORCH_THREADS"):
-        assert f'"{name}": "1"' in src
+        assert f'"{name}":' not in src
 
 
 def test_the_environment_turns_them_on(monkeypatch: pytest.MonkeyPatch) -> None:
