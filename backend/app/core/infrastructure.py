@@ -11,7 +11,9 @@ Exactly four kinds qualify, and nothing else:
 - `process_crash` — the attempt was cancelled under the worker (`asyncio.CancelledError`:
   shutdown, job timeout). A process that dies outright never reaches this code: such an attempt
   has no terminal status, and the Phase 10 harness classifies it `process_crash` when it finds the
-  run unterminated with no live job.
+  run unterminated with no live job. A job that reaches its own deadline is now ended `failed` by
+  the worker, with `runs.failure` = `{kind: job_timeout, infrastructure_failure: process_crash, ...}`
+  (migration 0046, 2026-11-04), so it no longer waits for that harness rule to find it.
 
 Everything else — a budget stop (`partial`), a gate block, invalid model output, a provider's
 refusal of a malformed request, a bug — is not an infrastructure failure: the attempt is a result.
