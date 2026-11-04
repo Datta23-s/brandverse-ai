@@ -400,8 +400,14 @@ def print_table(brand: str, scores: Sequence[CampaignScore]) -> None:
         )
 
 
-async def run_live(brands: Sequence[str], stage: str) -> int:
-    """Campaigns 1 and 2 live per brand, campaign 3 from recall; resumable per brand."""
+async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> int:
+    """Campaigns 1 and 2 live per brand, campaign 3 from recall; resumable per brand.
+
+    `probe`: ONE brand (the first), campaign 1 only, then stop. It writes NO report (a report would
+    read as an interim result and wake the recording queue) and is for finding out whether a live
+    run completes at all (stage-2 interim, 2026-11-04: step 6 never finished)."""
+    if probe:
+        brands = list(brands)[:1]
     # Imported here so the pure functions above (and their tests) load without the app, the encoder
     # or a database.
     import httpx
@@ -466,6 +472,10 @@ async def run_live(brands: Sequence[str], stage: str) -> int:
             "MAX_LLM_CALLS_PER_RUN": "10",
             "LLM_ALLOW_STRONG_TIER": "false",
             "LLM_STRONG_TIER_ORG_ID": "",
+            # Diagnostics (2026-11-04): all-thread stack dump every 2 min (works through a GIL-held
+            # hang) and a named timeout on the research step, instead of a blanket 15-minute wait.
+            "WORKER_STACK_DUMP_S": "120",
+            "RESEARCH_STEP_TIMEOUT_S": "420",
         },
         stdout=worker_log.open("w", encoding="utf-8"),
         stderr=subprocess.STDOUT,
@@ -500,11 +510,16 @@ async def run_live(brands: Sequence[str], stage: str) -> int:
                         seed,
                         wait_for_campaign,
                         wait_for_end,
+                        stop_after=1 if probe else 3,
                     )
-                    print_table(b, results[b])
+                    if not probe:
+                        print_table(b, results[b])
     finally:
         worker.terminate()
         worker.wait(timeout=30)
+    if probe:
+        print("PROBE COMPLETE (no report written). TALLY (this database):", tally(url))
+        return 0
     OUT.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240 - one local directory, at the end
     verdict = interim_verdict(results) if stage == "interim" else None
     report = {
@@ -555,6 +570,7 @@ async def run_brand(
     seed_fn: Any,
     wait_for_campaign: Any,
     wait_for_end: Any,
+    stop_after: int = 3,
 ) -> list[CampaignScore]:
     """One brand: its own organisation (so no memory crosses brands), campaign 1 live, campaign 2
     live, campaign 3 scored from recall. Each campaign is SCORED before it runs, from the memory
@@ -626,6 +642,8 @@ async def run_brand(
             f"{rid}: campaign {pos} approved; "
             f"memory items for the brand now {wrote[0] if wrote else '?'}"
         )
+        if pos >= stop_after:
+            break
     return scores
 
 
@@ -694,7 +712,14 @@ def main() -> int:
     p.add_argument(
         "--dry-run", action="store_true", help="plan and preflight only; no database, no calls"
     )
+    p.add_argument(
+        "--probe",
+        action="store_true",
+        help="one brand, campaign 1 only, no report: does a live run complete at all?",
+    )
     a = p.parse_args()
+    if a.probe and a.stage != "interim":
+        p.error("--probe is for the interim stage only")
     if a.dry_run:
         return dry_run(a.stage)
     if a.stage == "rest":
@@ -703,7 +728,9 @@ def main() -> int:
             print("REFUSED:", why)
             return 1
     brands = INTERIM_BRANDS if a.stage == "interim" else REST_BRANDS
-    return asyncio.run(run_live(brands, a.stage), loop_factory=asyncio.SelectorEventLoop)
+    return asyncio.run(
+        run_live(brands, a.stage, probe=a.probe), loop_factory=asyncio.SelectorEventLoop
+    )
 
 
 if __name__ == "__main__":

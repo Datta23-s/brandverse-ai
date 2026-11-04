@@ -16,6 +16,7 @@ checkpointed state; the runner hands step 15 a fresh stage. No node observes suc
 declared gap. `BudgetExceeded` is not an agent failure and is never swallowed: the run ends partial.
 """
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -33,7 +34,7 @@ from app.core.gates import Finding, GateReport, Statement, evaluate, finding_dic
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.timing import collecting
 from app.core.truth import ProductTruth
-from app.errors import BrandverseError, BudgetExceeded
+from app.errors import BrandverseError, BudgetExceeded, StepTimeout
 from app.memory.writeback import MemoryStage
 from app.models.runs import StepEvent, StepStatus
 from app.orchestrator.deps import GraphDeps
@@ -114,14 +115,36 @@ class Nodes:
     ) -> NodeFn:
         """Wrap a node body so its step emits started / completed / failed."""
 
+        name = PIPELINE_STEPS[step - 1].name
+
         async def node(state: RunState, config: RunnableConfig) -> dict[str, Any]:
+            # A named line at each end of every step, so silence localises to a step in the worker
+            # log and not to a blank (stage-2 interim, 2026-11-04). `emit` also writes the stream.
+            began = time.perf_counter()
+            log.info("step %d %s: start", step, name, extra={"step": step, "step_name": name})
             if start:
                 await self.emit(state, step, StepStatus.STARTED)
             try:
                 update = await fn(state)
             except Exception as e:  # cancellation passes through: the runner reports that
+                log.warning(
+                    "step %d %s: FAILED after %.1f s: %s: %s",
+                    step,
+                    name,
+                    time.perf_counter() - began,
+                    type(e).__name__,
+                    str(e)[:200],
+                    extra={"step": step, "step_name": name},
+                )
                 await self.emit(state, step, StepStatus.FAILED, f"{type(e).__name__}: {e}"[:300])
                 raise
+            log.info(
+                "step %d %s: done in %.1f s",
+                step,
+                name,
+                time.perf_counter() - began,
+                extra={"step": step, "step_name": name},
+            )
             detail = update.pop("_detail", None)
             if complete:
                 await self.emit(state, step, StepStatus.COMPLETED, detail)
@@ -269,7 +292,16 @@ class Nodes:
         async def body(state: RunState) -> dict[str, Any]:
             started = time.perf_counter()
             with collecting() as timings:
-                result = await self.d.research(state, depth)
+                try:
+                    result = await asyncio.wait_for(
+                        self.d.research(state, depth), timeout=self.d.research_timeout_s
+                    )
+                except TimeoutError as e:
+                    # The step's own name and depth, not the caller's blanket wait.
+                    raise StepTimeout(
+                        f"step {RESEARCH_STEP} research ({depth}) exceeded "
+                        f"{self.d.research_timeout_s:.0f} s"
+                    ) from e
             elapsed_ms = (time.perf_counter() - started) * 1000
             search_ms = timings.get("search_ms", 0.0)
             return {

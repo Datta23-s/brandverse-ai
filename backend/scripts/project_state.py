@@ -6,12 +6,13 @@ The free plan pauses an inactive project, and two of the owner's organisation's 
 already paused (2026-11-04). `brandverse-ai` must stay live through 25 November, including the
 evaluation runs and the 16 November rating, so a pause is caught here, at startup, not mid-run.
 
-The probe is a plain GET of the project's PUBLIC JWKS (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`),
-the same document the API verifies tokens against: an active project answers 200 with a `keys` list.
-A paused project does not, and anything else (DNS failure, timeout, 5xx, a body without keys) is
-reported as NOT ACTIVE. The tool cannot tell a pause from a network outage, so it says "paused or
-unreachable" and the runbook step is to look at the dashboard. It sends no credential and reads
-nothing but the public key set. Exit 0 only for ACTIVE.
+The probe is a plain GET of the project's PUBLIC JWKS
+(`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`), the same document the API verifies tokens
+against: an active project answers 200 with a `keys` list. A paused project does not, and
+anything else (DNS failure, timeout, 5xx, a body without keys) is reported as NOT ACTIVE. The
+tool cannot tell a pause from a network outage, so it says "paused or unreachable" and the
+runbook step is to look at the dashboard. It sends no credential and reads nothing but the
+public key set. Exit 0 only for ACTIVE.
 
 It reads the project's reachability, not its activity clock: whether a request here counts as the
 "activity" that resets the one-week timer is not documented in this repository, so the weekly touch

@@ -1,4 +1,4 @@
-"""The project-state check reports a paused or unreachable Supabase project (scripts/project_state.py).
+"""The project-state check reports a paused or unreachable Supabase project.
 
 Offline: the fetch is injected, so no request leaves the machine.
 """
@@ -26,14 +26,22 @@ def _fetch(status: int, body: bytes = b"") -> ps.Fetch:
 
 
 def test_an_answering_project_is_active() -> None:
-    ok, msg = ps.project_state(URL + "/", _fetch(200, json.dumps({"keys": [{"kid": "a"}]}).encode()))
+    body = json.dumps({"keys": [{"kid": "a"}]}).encode()
+    ok, msg = ps.project_state(URL + "/", _fetch(200, body))
     assert ok and msg.startswith("ACTIVE")
 
 
 @pytest.mark.parametrize(
     ("status", "body"),
-    [(0, b"getaddrinfo failed"), (540, b""), (503, b""), (404, b""), (200, b"{}"), (200, b"not json"),
-     (200, b'{"keys": []}')],
+    [
+        (0, b"getaddrinfo failed"),
+        (540, b""),
+        (503, b""),
+        (404, b""),
+        (200, b"{}"),
+        (200, b"not json"),
+        (200, b'{"keys": []}'),
+    ],
 )
 def test_anything_but_a_key_set_is_not_active(status: int, body: bytes) -> None:
     ok, msg = ps.project_state(URL, _fetch(status, body))

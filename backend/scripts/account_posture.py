@@ -2,19 +2,19 @@
 
     uv run python scripts/account_posture.py
 
-Reads the identities it CAN read, compares each with `config/accounts.yaml`, and exits non-zero if any
-is outside the declared set or cannot be read when it must be:
+Reads the identities it CAN read, compares each with `config/accounts.yaml`, and exits non-zero
+if any is outside the declared set or cannot be read when it must be:
 
-* the gcloud active account, and every other credentialed gcloud account (required: gcloud missing or
-  signed out is a failure, not a pass);
+* the gcloud active account, and every other credentialed gcloud account (required: gcloud
+  missing or signed out is a failure, not a pass);
 * the git author email, and the owner of the `origin` remote;
 * the IAM members of the Cloud project that owns the Gemini API key (when gcloud can read them;
   "cannot read" is reported as NOT CHECKED and does not pass silently).
 
-Not machine-readable, so ATTESTED by the owner instead (config/accounts.yaml `attested`, audit closed
-2026-11-04): the Supabase project's owner and the GitHub account's email. Out of scope by design, and
-never read: the Claude Code login and Claude's connectors, which the project does not authenticate
-with (Rules.md P17 scope, Kundan 2026-11-04).
+Not machine-readable, so ATTESTED by the owner instead (config/accounts.yaml `attested`, audit
+closed 2026-11-04): the Supabase project's owner and the GitHub account's email. Out of scope by
+design, and never read: the Claude Code login and Claude's connectors, which the project does
+not authenticate with (Rules.md P17 scope, Kundan 2026-11-04).
 
 Read-only: it runs `gcloud` and `git` with fixed argument lists and writes nothing.
 """

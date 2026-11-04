@@ -17,6 +17,10 @@ class RunEventCorrupt(BrandverseError):
     """A run-progress stream holds an entry that is not a valid run event."""
 
 
+class StepTimeout(BrandverseError):
+    """A pipeline step exceeded its own timeout; the message names the step."""
+
+
 class JobNotEnqueued(BrandverseError):
     """ARQ refused to enqueue a job (a job with the same ID already exists)."""
 

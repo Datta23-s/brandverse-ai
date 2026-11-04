@@ -5,6 +5,7 @@ Runs on the laptop (Architecture.md §11, worker-host decision). Start it with
 """
 
 import asyncio
+import faulthandler
 import logging
 import signal
 from contextlib import AsyncExitStack
@@ -150,6 +151,11 @@ async def run(settings: Settings) -> None:
 def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
+    if settings.worker_stack_dump_s is not None:
+        # Repeating all-thread stack dump to stderr, from a C watchdog thread that needs no GIL.
+        faulthandler.enable()
+        faulthandler.dump_traceback_later(settings.worker_stack_dump_s, repeat=True)
+        log.info("stack dumps armed", extra={"every_s": settings.worker_stack_dump_s})
     log.info(
         "worker starting",
         extra={

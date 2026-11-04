@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # The port the single worker holds as its lease (app/workers/lease.py).
     worker_lease_port: int = Field(default=47631, ge=1024, le=65535)
     worker_job_timeout_s: int = Field(default=600, ge=1)
+    # Diagnostics (off by default). Dump every thread's Python stack to stderr every N seconds
+    # (`faulthandler`): it works while the interpreter is stuck holding the GIL, which is the one
+    # hang an `await` timeout cannot see (stage-2 interim, 2026-11-04: step 6 silent 15 minutes).
+    worker_stack_dump_s: float | None = Field(default=None, ge=10)
+    # Fail the research step with its name if it takes longer than this. It fires only while the
+    # event loop is running; a loop frozen by a GIL-holding thread is `worker_stack_dump_s`'s job.
+    research_step_timeout_s: float | None = Field(default=None, gt=0)
 
     # Run-progress event streams in Redis.
     run_events_ttl_s: int = Field(default=7 * 24 * 3600, ge=60)

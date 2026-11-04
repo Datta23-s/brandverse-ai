@@ -17,8 +17,13 @@ OK = "dattasable1213@gmail.com"
 KUNDAN = "kundansable@gmail.com"
 
 
-def _fake(gcloud_active: str = OK, author: str = OK, owner: str = "Datta23-s",
-          members: str = f"user:{OK}", credentialed: str | None = None) -> ap.Run:
+def _fake(
+    gcloud_active: str = OK,
+    author: str = OK,
+    owner: str = "Datta23-s",
+    members: str = f"user:{OK}",
+    credentialed: str | None = None,
+) -> ap.Run:
     def run(cmd: list[str]) -> tuple[int, str]:
         if cmd[:3] == ["gcloud", "config", "list"]:
             return 0, gcloud_active

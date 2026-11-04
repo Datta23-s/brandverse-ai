@@ -80,6 +80,8 @@ class GraphDeps:
     check_brief: CheckBrief | None = None
     # None: blocked reports are kept in the run's state only.
     record_block: RecordBlock | None = None
+    # None: the research step has no timeout of its own. Set, it fails with the step's name.
+    research_timeout_s: float | None = None
 
 
 async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:

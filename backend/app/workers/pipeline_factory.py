@@ -190,6 +190,7 @@ async def open_pipeline(
             check_brief=brief_checker(gateway, prompts),
             record_block=gate_block_recorder(pool),
             max_revisions=settings.max_revision_rounds,
+            research_timeout_s=settings.research_step_timeout_s,
         )
     return Pipeline(
         build_graph(deps, saver),

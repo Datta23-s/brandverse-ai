@@ -42,15 +42,16 @@ def test_the_250th_call_is_the_last_and_the_251st_is_refused() -> None:
     assert "250 of the 250" in reason
 
 
-def test_the_ruled_values_are_in_the_file_and_the_condition_is_still_unset() -> None:
+def test_the_ruled_values_are_in_the_file_and_the_condition_is_confirmed() -> None:
     """Changing a figure here is a decision, not an edit: it needs a decision-log entry and this
-    test changed with it. `billing_unlinked_confirmed_on` is the owner's to set; the day they do,
-    this assertion is replaced by their date."""
+    test changed with it. `billing_unlinked_confirmed_on` was set on 2026-11-04 (decision-log
+    2.24; Architecture.md 4.4): `gcloud billing projects describe gen-lang-client-0622579315`
+    printed billingEnabled false. A change to that date is the owner's."""
     b = load_dev_budget()
     assert b.ceiling_calls == 250
     assert b.total_at_ruling == 101
     assert b.made_at_ruling == {"brandverse_chunk_f": 7, "brandverse_stage2": 0}
-    assert b.billing_unlinked_confirmed_on is None
+    assert b.billing_unlinked_confirmed_on == date(2026, 11, 4)
 
 
 def test_a_gateway_that_reaches_the_provider_cannot_be_built_without_a_ceiling() -> None:

@@ -25,7 +25,7 @@ from app.core.budgeted_run import RunFacts
 from app.core.gates import GateReport, Statement, load_superlatives
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
-from app.errors import BudgetExceeded
+from app.errors import BudgetExceeded, StepTimeout
 from app.llm.ledger import CallContext
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunEvent, RunFailed, RunStarted, StepEvent
@@ -257,6 +257,40 @@ async def test_d0_skips_research_and_the_market_agent() -> None:
     out = await h.start(depth="D0")
     assert (6, "skipped") in h.sink.steps() and (6, "started") not in h.sink.steps()
     assert sorted(out.state["agent_outputs"]) == ["A1", "A3"]
+
+
+async def test_a_research_step_over_its_timeout_fails_naming_the_step() -> None:
+    """Stage-2 interim, 2026-11-04: step 6 went silent for 15 minutes and the caller's blanket wait
+    named nothing. With a timeout set, the step fails with its own name and depth."""
+    h = Harness()
+
+    async def never(state: RunState, depth: Any) -> ResearchResult:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    h.deps.research = never
+    h.deps.research_timeout_s = 0.05
+    with pytest.raises(StepTimeout, match=r"step 6 research \(D2\) exceeded 0 s"):
+        await h.start(depth="D2")
+    assert (6, "failed") in h.sink.steps()
+    assert h.ledger.calls[0][0] == "fail"
+
+
+async def test_with_no_timeout_set_research_is_not_cut_short() -> None:
+    h = Harness()
+    assert h.deps.research_timeout_s is None
+    out = await h.start(depth="D2")
+    assert (6, "completed") in h.sink.steps() and out.state["research"]["depth"] == "D2"
+
+
+async def test_every_step_logs_a_named_start_and_end(caplog: pytest.LogCaptureFixture) -> None:
+    h = Harness()
+    with caplog.at_level("INFO", logger="app.orchestrator.nodes"):
+        await h.start(depth="D1")
+    lines = [r.getMessage() for r in caplog.records]
+    assert "step 6 research: start" in lines
+    assert any(line.startswith("step 6 research: done in ") for line in lines)
+    assert any(line.startswith("step 1 normalise_request: start") for line in lines)
 
 
 # ── Failure, budget and blocking ─────────────────────────────────────────────────────────────
