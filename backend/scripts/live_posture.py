@@ -135,6 +135,12 @@ def main() -> int:
     if account_posture.main() != 0:
         print("refusing to open the live project: account posture failed")
         return 1
+    # A paused free-plan project is caught here, not as a connection error mid-run (Architecture §11).
+    import project_state
+
+    if project_state.main() != 0:
+        print("refusing to open the live project: it is not active")
+        return 1
     host = urlparse(args.url).hostname
     conn = open_read_only(args.url)
     try:

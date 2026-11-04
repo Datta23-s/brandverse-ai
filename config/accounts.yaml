@@ -22,3 +22,11 @@ known_disallowed_emails:
 # The Cloud project that owns the Gemini API key (display name brandverse-ai). Its IAM members must all
 # be allowed. Verified 2026-11-04: sole owner dattasable1213@gmail.com.
 gemini_cloud_project_id: gen-lang-client-0622579315
+
+# ATTESTED, not machine-checked (owner, 2026-11-04, audit closed): identities no command here can read.
+# The guard does not test these; an attestation is a dated statement, upgraded if a reading is found.
+attested:
+  supabase_project: >-
+    brandverse-ai (ref waftkvzmftsuotelbcwp) sits in "Datta23-s's Org" on the free plan, authenticated
+    through the GitHub account Datta23-s.
+  github_account_email: Datta23-s is dattasable1213@gmail.com.

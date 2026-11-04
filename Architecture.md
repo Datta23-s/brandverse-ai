@@ -364,6 +364,8 @@ an amount the tally can state and the billing account would show. The owner is c
 - **Clear false.** `gcloud billing projects describe gen-lang-client-0622579315` printed `billingEnabled: false`, `billingAccountName: ''`. Basis of the date: this gcloud reading, with the owner's statement (no card, no free trial) as corroboration.
 - **Two limits stated.** (1) It is the state AT THE READING; billing history is not shown, so linkage between 2026-10-17 and now is not excluded by it (the free-tier limits read 2026-10-14 and 10-17 and the zero-spend tally argue against it, nothing more). (2) `gcloud billing accounts list` is NOT empty: four accounts exist ("My Billing Account", "… 1", "… 2", "… 3"), **all closed** (OPEN False), none listing this project; one lists `project-e946952a-b9bd-4108-a13`. That contradicts "no billing account ever existed" in the owner's statement (the accounts were presumably created by a trial offer on this Google account); it does not contradict the condition, which is about this project. Reported to the owner, not resolved here.
 
+**Account audit COMPLETE (4 November 2026): no non-Datta project credential.** Machine-read: gcloud (sole credentialed account `dattasable1213@gmail.com`), the Cloud project `gen-lang-client-0622579315` and the Gemini key's parent (sole `roles/owner` `dattasable1213@gmail.com`), the git author, the origin remote (`Datta23-s`). **Attested by the owner, not machine-checked:** the Supabase project `brandverse-ai` (ref `waftkvzmftsuotelbcwp`) sits in "Datta23-s's Org" on the free plan, authenticated through the GitHub account `Datta23-s`, which is `dattasable1213@gmail.com` (recorded in `config/accounts.yaml` `attested`; upgrade if a reading is found). Out of scope by Kundan's ruling (`Rules.md` P17): the Claude Code login and Claude's connectors.
+
 **Billing condition: provenance of the evidence (4 November 2026, earlier the same day; superseded by the update above). `billing_unlinked_confirmed_on` was still null when this was written.**
 - **The project name is UNVERIFIED.** `brandverse-ai` is the name the user stated on 2026-10-17 (above); no console, AI Studio page or command has
   shown it to be the project that owns the key. On 2026-11-04 `gcloud billing projects describe brandverse-ai` run as `dattasable1213@gmail.com`
@@ -1089,6 +1091,22 @@ database, and the per-row sizes measured on 2026-10-14 put `memory_items` far be
 the full evaluation. The large unknowns are outside the current schema: LangGraph checkpoint rows
 (Phase 6) and any persisted research-finding embeddings (Phase 5); both must be measured before
 the evaluation.
+
+**Operational risk, recorded 4 November 2026: the project must stay live through 25 November.** The free plan pauses an inactive
+project, and **two of the owner's organisation's three projects are already paused**, so this is not hypothetical. `brandverse-ai` must
+be active for the evaluation runs and the 16 November rating. *Caught at startup, not mid-run:* `scripts/project_state.py` reports
+ACTIVE or "NOT ACTIVE (paused or unreachable)" from the project's public key set, and `scripts/live_posture.py` runs it before it
+connects (proven offline in `tests/test_project_state.py`; run live 2026-11-04: ACTIVE). It cannot tell a pause from an outage, and
+whether its request counts as activity is not established here, so the weekly touch stays a real database session
+(`live_posture.py` opens one). Run both before every evaluation session and each weekday until 25 November.
+
+**If it reports NOT ACTIVE: resume the project.** (1) Open the Supabase dashboard, organisation "Datta23-s's Org", project
+`brandverse-ai`; if it shows *Paused*, press *Restore project* and wait until it shows healthy (minutes). (2) Re-run
+`uv run python scripts/project_state.py`, then `scripts/live_posture.py --url "$DATABASE_URL"`. (3) The restore keeps the URL and keys but
+can move Postgres to the latest minor version: if the posture or the migrations tests then differ, that is the version bump (below), not
+drift. (4) Free plan allows **2 active projects**: if the dashboard refuses to restore because two are active, pause or delete an
+unrelated one first, never this one. (5) A pause during an evaluation run invalidates nothing already in `llm_calls` (rows are
+committed), but the run stops; record the stop in the decision log and resume, do not patch around it.
 
 **Restoring a paused project.** Open the project in the Supabase dashboard and press *Restore
 project*; it restores in place with the same URL and keys, moved to the latest minor Postgres

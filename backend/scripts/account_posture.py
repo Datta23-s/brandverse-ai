@@ -11,10 +11,10 @@ is outside the declared set or cannot be read when it must be:
 * the IAM members of the Cloud project that owns the Gemini API key (when gcloud can read them;
   "cannot read" is reported as NOT CHECKED and does not pass silently).
 
-What this cannot read is listed in the report as NOT CHECKED, so it is not mistaken for checked:
-the Supabase project's owner and the GitHub account's email (the dashboard / settings are the only
-places to see them). Out of scope by design, and never read: the Claude Code login and Claude's
-connectors, which the project does not authenticate with (Rules.md P17 scope, Kundan 2026-11-04).
+Not machine-readable, so ATTESTED by the owner instead (config/accounts.yaml `attested`, audit closed
+2026-11-04): the Supabase project's owner and the GitHub account's email. Out of scope by design, and
+never read: the Claude Code login and Claude's connectors, which the project does not authenticate
+with (Rules.md P17 scope, Kundan 2026-11-04).
 
 Read-only: it runs `gcloud` and `git` with fixed argument lists and writes nothing.
 """
@@ -104,10 +104,6 @@ def evaluate(d: Declared, o: Observed) -> tuple[list[str], list[str]]:
         for m in o.project_members:
             if p := _email_problem("Gemini project IAM member", m, d):
                 failures.append(p)
-    not_checked += [
-        "Supabase project owner (dashboard only)",
-        "GitHub account email (settings only)",
-    ]
     return failures, not_checked
 
 
