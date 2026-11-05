@@ -77,14 +77,25 @@ def build_graph(
     g.add_edge("deep_research", "select_agents")
     g.add_conditional_edges("select_agents", n.fan_out, ["run_agent"])
     g.add_edge("run_agent", "agents_join")
-    g.add_edge("agents_join", "personalise")
+    # A provider-outage gap ends the run here, before it can reach a human (Amendment 1).
+    g.add_node("invalidate_infrastructure", n.invalidate_infrastructure)
+    g.add_conditional_edges(
+        "agents_join",
+        n.route_after_agents,
+        {"personalise": "personalise", "invalid": "invalidate_infrastructure"},
+    )
+    g.add_edge("invalidate_infrastructure", END)
     g.add_edge("personalise", "build_strategy")
     g.add_edge("build_strategy", "generate_creative")
     g.add_edge("generate_creative", "validate_evidence")
     g.add_conditional_edges(
         "validate_evidence",
         n.route_after_validation,
-        {"generate_creative": "generate_creative", APPROVAL_NODE: APPROVAL_NODE},
+        {
+            "generate_creative": "generate_creative",
+            APPROVAL_NODE: APPROVAL_NODE,
+            "invalid": "invalidate_infrastructure",
+        },
     )
     g.add_conditional_edges(
         APPROVAL_NODE,

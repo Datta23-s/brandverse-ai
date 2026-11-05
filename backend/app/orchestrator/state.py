@@ -62,6 +62,9 @@ class RunState(TypedDict, total=False):
     memory: dict[str, Any] | None
     budget: dict[str, Any]
     errors: Annotated[list[dict[str, Any]], add]
+    # Set by the terminal `invalidate_infrastructure` node when an agent gap is the provider's
+    # outage: the run ends `failed`, invalidated, before any human sees its output (2026-11-05).
+    invalidated: dict[str, Any] | None
     # Where the run's LOCAL time went, by name (app/core/timing.py; migration 0044). Figures of the
     # same name add: a node that runs twice (step 4 and step 8 recall, a re-run from a checkpoint)
     # spent the time twice.

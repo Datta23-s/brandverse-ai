@@ -31,6 +31,7 @@ from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admissio
 from app.core.brief_check import assess, reconcile
 from app.core.citation_terms import neutral_stems
 from app.core.gates import Finding, GateReport, Statement, evaluate, finding_dict
+from app.core.infrastructure import classify_infrastructure_failure, invalidating_gaps
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.timing import collecting
 from app.core.truth import ProductTruth
@@ -83,7 +84,15 @@ def report_dict(report: GateReport) -> dict[str, Any]:
 
 
 def _agent_error(step: int, agent: str, e: Exception) -> dict[str, Any]:
-    return {"step": step, "agent": agent, "error": type(e).__name__, "message": str(e)[:300]}
+    return {
+        "step": step,
+        "agent": agent,
+        "error": type(e).__name__,
+        "message": str(e)[:300],
+        # The KIND of the failure, decided from the exception alone (core/infrastructure.py): a
+        # gap of an invalidating kind ends the run before any human sees its output.
+        "infrastructure": classify_infrastructure_failure(e),
+    }
 
 
 class Nodes:
@@ -518,7 +527,29 @@ class Nodes:
             update["errors"] = errors
         return update
 
+    def route_after_agents(self, state: RunState) -> str:
+        """An outage gap in the specialist agents ends the run now: no persona, strategy or copy
+        steps are spent on a run that is already invalid."""
+        return "invalid" if invalidating_gaps(state.get("errors", [])) else "personalise"
+
+    async def invalidate_infrastructure(self, state: RunState) -> dict[str, Any]:
+        """Terminal. Marks the run for `Pipeline` to end `failed` as an infrastructure failure
+        (`runs.failure.invalidated`), BEFORE it can reach the approval step, so no human ever sees
+        the output of a run the provider's outage made. Nothing here reads the output."""
+        gaps = invalidating_gaps(state.get("errors", []))
+        return {
+            "invalidated": {
+                "kind": "infrastructure_gap",
+                "infrastructure_failure": gaps[0]["infrastructure"],
+                "gaps": [
+                    {"step": g["step"], "agent": g["agent"], "error": g["error"]} for g in gaps
+                ],
+            }
+        }
+
     def route_after_validation(self, state: RunState) -> str:
+        if invalidating_gaps(state.get("errors", [])):
+            return "invalid"
         v = state.get("validation") or {}
         if (
             v.get("outcome") == "block"

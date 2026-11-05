@@ -26,7 +26,8 @@ Classification reads the exception's type and cause chain only; nobody decides i
 """
 
 import asyncio
-from typing import Literal
+from collections.abc import Iterable, Mapping
+from typing import Any, Literal
 
 import httpx
 import psycopg
@@ -53,6 +54,21 @@ _NETWORK: tuple[type[BaseException], ...] = (
     ConnectionError,
     TimeoutError,
 )
+
+
+# A run that would END `completed` while carrying a declared gap of one of these kinds is
+# invalidated, not a result (owner ruling, 2026-11-05; docs/evaluation-plan.md Amendment 1): the
+# gap is the provider's outage, not the arm's behaviour, and leaving it in would depress whichever
+# arm the outage touched. Only `provider_unavailable` is ruled so far. Whether the same holds for
+# a rate-limit or network gap is NOT ruled and is not assumed here.
+INVALIDATING_GAP_KINDS: frozenset[str] = frozenset({"provider_unavailable"})
+
+
+def invalidating_gaps(errors: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The agent errors whose KIND invalidates the run, decided from the kind alone: the
+    classifier reads `infrastructure`, which `classify_infrastructure_failure` set from the
+    exception when the agent failed. Nobody reads the copy and then decides."""
+    return [e for e in errors if e.get("infrastructure") in INVALIDATING_GAP_KINDS]
 
 
 def _chain(exc: BaseException) -> list[BaseException]:

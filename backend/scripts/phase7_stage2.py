@@ -844,7 +844,7 @@ async def run_brand(
         if resp.status_code != 202:
             raise RuntimeError(f"{rid}: POST /runs -> {resp.status_code} {resp.text}")
         run_id = UUID(resp.json()["run_id"])
-        view = await wait_for_campaign(client, run_id, headers)
+        view = await wait_parked_or_ended(url, client, run_id, headers)
         if view is None:
             raise RuntimeError(f"{rid}: the run never parked for approval")
         ap = await client.post(
@@ -878,6 +878,34 @@ async def run_brand(
         if pos >= stop_after:
             break
     return scores
+
+
+async def wait_parked_or_ended(
+    url: str, client: Any, run_id: UUID, headers: dict[str, str], timeout_s: float = 900.0
+) -> dict[str, Any] | None:
+    """Wait for the campaign to park for approval, OR notice that the run ENDED without parking.
+
+    The shared waiter polls the campaign endpoint for 15 minutes, which is what a run that the
+    circuit breaker aborted, or that was invalidated by an outage gap (both end `failed` and
+    never park), would cost every time: 15 minutes of waiting for something that cannot happen.
+    This one also reads the run's status and stops at once, with the recorded reason."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
+    while loop.time() < deadline:
+        response = await client.get(f"/api/v1/runs/{run_id}/campaign", headers=headers)
+        if response.status_code == 200:
+            body: dict[str, Any] = response.json()
+            return body
+        with psycopg.connect(url, autocommit=True) as c:
+            row = c.execute("select status, failure from runs where id = %s", (run_id,)).fetchone()
+        if row is not None and row[0] in ("failed", "blocked", "partial", "completed"):
+            failure = row[1] or {}
+            raise InvalidCampaign(
+                f"the run ended {row[0]!r} without parking: "
+                f"{failure.get('kind', 'no reason recorded')}: {failure.get('message', '')}"
+            )
+        await asyncio.sleep(3.0)
+    return None
 
 
 class InvalidCampaign(RuntimeError):

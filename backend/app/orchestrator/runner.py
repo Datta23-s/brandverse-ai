@@ -134,7 +134,7 @@ class PoolRunLedger:
 
 @dataclass(frozen=True, slots=True)
 class PipelineOutcome:
-    status: Literal["suspended", "completed", "partial", "blocked"]
+    status: Literal["suspended", "completed", "partial", "blocked", "invalidated"]
     state: dict[str, Any]
     reason: str | None = None
 
@@ -273,6 +273,8 @@ class Pipeline:
         try:
             values = cast(dict[str, Any], await self._graph.ainvoke(graph_input, config))
             snapshot = await self._graph.aget_state(config)
+            if values.get("invalidated"):
+                return await self._invalidated(run_id, values)
             if snapshot.next:
                 return await self._park(run_id, values)
             if values.get("blocked"):
@@ -358,6 +360,33 @@ class Pipeline:
             log.exception("the timeout could not be reported on the stream")
         progress.forget(run_id)
         return failure
+
+    async def _invalidated(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
+        """End a run whose agent gap is the provider's outage (Amendment 1, 2026-11-05).
+
+        Decided by the classifier from the gap's kind alone, automatically, BEFORE the run reaches
+        the approval step: no human sees the output and then decides. The run ends `failed` with
+        `runs.failure.invalidated = true` and the fifth kind; no memory commits (an infrastructure
+        failure discards its stage); the attempt stays in the table and is re-run by the harness
+        (app/evaluation/reruns.py: at most 2 re-runs, a third failure goes to the owner)."""
+        marker = dict(values["invalidated"])
+        gaps = marker["gaps"]
+        who = ", ".join(f"{g['agent']} (step {g['step']})" for g in gaps)
+        message = f"invalidated: the provider was unavailable for {who}"
+        failure = {
+            **marker,
+            "invalidated": True,
+            "step": min(int(g["step"]) for g in gaps),
+            "message": message,
+        }
+        log.error("run invalidated by a provider outage", extra={"failure": failure})
+        await self._ledger.fail(run_id, None, facts_from_state(values), failure)
+        try:
+            await self._events.append(RunFailed(run_id=run_id, step=failure["step"], error=message))
+        except Exception:
+            log.exception("the invalidation could not be reported on the stream")
+        progress.forget(run_id)
+        return PipelineOutcome("invalidated", values, message)
 
     async def _finalize(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
         """End a run whose graph finished in a process that died before the ending was written.
@@ -480,7 +509,14 @@ def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
     for e in values.get("errors", []):
         gaps.setdefault(
             (e["agent"], e["step"]),
-            {"agent": e["agent"], "step": e["step"], "error": e["error"]},
+            {
+                "agent": e["agent"],
+                "step": e["step"],
+                "error": e["error"],
+                # Present only for a failure that is an infrastructure kind (so older gaps and
+                # ordinary agent failures keep their shape).
+                **({"infrastructure": e["infrastructure"]} if e.get("infrastructure") else {}),
+            },
         )
     agents = values.get("selected_agents")
     return RunFacts(

@@ -25,7 +25,13 @@ from app.core.budgeted_run import RunFacts
 from app.core.gates import GateReport, Statement, load_superlatives
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
-from app.errors import BudgetExceeded, ProviderCircuitOpen, ProviderUnavailable, StepTimeout
+from app.errors import (
+    BudgetExceeded,
+    LLMRateLimited,
+    ProviderCircuitOpen,
+    ProviderUnavailable,
+    StepTimeout,
+)
 from app.llm.ledger import CallContext
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunEvent, RunFailed, RunStarted, StepEvent
@@ -364,14 +370,73 @@ async def test_an_open_provider_breaker_ends_the_run_failed_as_infrastructure() 
     assert h.ledger.calls[-1][1] is None  # infrastructure failure: no corrections commit
 
 
-async def test_one_exhausted_call_is_still_only_a_gap_when_the_breaker_is_not_open() -> None:
-    """A single call that ran out of retries while other calls succeeded is an agent gap; only
-    three in a row (the breaker) end the run."""
+async def test_a_provider_unavailable_gap_invalidates_the_run_before_any_human_sees_it() -> None:
+    """Owner ruling, 5 November 2026. One call ran out of retries while others succeeded in
+    between, so the breaker never opened and the run would have ended `completed` with a gap. The
+    classifier invalidates it AUTOMATICALLY, from the gap's kind alone, before the approval step:
+    nothing is parked for a person, no memory is written, and the copy is never produced."""
     agents = {**mock_agents(), "A1": Failing("A1", ProviderUnavailable("503 x3, others fine"))}
     h = Harness(agents=agents)
     out = await h.start()
+    assert out.status == "invalidated"
+    assert not any(c[0] == "suspend" for c in h.ledger.calls)  # never parked for an approver
+    assert h.ledger.calls[-1][0] == "fail" and h.ledger.calls[-1][1] is None  # no corrections
+    assert h.memory_calls == []  # step 15 never ran: nothing reached memory
+    assert (8, "started") not in h.sink.steps()  # no persona, strategy or copy steps were spent
+    failure = h.ledger.failures[0]
+    assert failure is not None and failure["invalidated"] is True
+    assert failure["kind"] == "infrastructure_gap"
+    assert failure["infrastructure_failure"] == "provider_unavailable"
+    assert failure["gaps"] == [{"step": 7, "agent": "A1", "error": "ProviderUnavailable"}]
+    last = h.sink.events[-1]
+    assert isinstance(last, RunFailed) and last.step == 7 and "A1" in last.error
+
+
+async def test_an_outage_gap_in_the_copy_step_also_ends_the_run_before_approval() -> None:
+    agents = {**mock_agents(), "A6": Failing("A6", ProviderUnavailable("503 on the copy"))}
+    h = Harness(agents=agents)
+    out = await h.start()
+    assert out.status == "invalidated"
+    assert not any(c[0] == "suspend" for c in h.ledger.calls)
+    assert h.memory_calls == []
+    failure = h.ledger.failures[0]
+    assert failure is not None and failure["gaps"][0]["agent"] == "A6"
+
+
+async def test_the_decision_uses_the_gap_kind_alone_not_the_output() -> None:
+    """The same agent failing for any OTHER reason is an ordinary gap and the run parks as it
+    always did; the invalidation is not a judgement about what the run produced."""
+    agents = {**mock_agents(), "A1": Failing("A1", ValueError("a bug in the agent"))}
+    h = Harness(agents=agents)
+    out = await h.start()
+    assert out.status == "suspended"  # parked for the approver, gap declared
+    assert any(e["agent"] == "A1" and e["infrastructure"] is None for e in out.state["errors"])
+
+
+async def test_a_rate_limit_gap_is_not_ruled_and_is_not_invalidated() -> None:
+    """Only provider_unavailable is ruled (INVALIDATING_GAP_KINDS). Whether a rate-limit or network
+    gap should invalidate too is an open question for the owner, and the code does not assume it."""
+    agents = {**mock_agents(), "A1": Failing("A1", LLMRateLimited("still rate-limited"))}
+    h = Harness(agents=agents)
+    out = await h.start()
     assert out.status == "suspended"
-    assert any(e["agent"] == "A1" for e in out.state["errors"])
+    assert any(e["infrastructure"] == "rate_limited" for e in out.state["errors"])
+
+
+def test_the_declared_gap_carries_the_kind_only_when_it_is_an_infrastructure_kind() -> None:
+    from app.orchestrator.runner import facts_from_state
+
+    facts = facts_from_state(
+        {
+            "errors": [
+                {"agent": "A1", "step": 7, "error": "ProviderUnavailable",
+                 "infrastructure": "provider_unavailable"},
+                {"agent": "A2", "step": 7, "error": "ValueError", "infrastructure": None},
+            ]
+        }
+    )  # fmt: skip
+    assert facts.declared_gaps[0]["infrastructure"] == "provider_unavailable"
+    assert "infrastructure" not in facts.declared_gaps[1]  # ordinary gaps keep their old shape
 
 
 async def test_a_gate_block_at_step_3_ends_the_run_blocked_and_audits_it() -> None:
