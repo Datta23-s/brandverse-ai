@@ -138,6 +138,7 @@ class LLMGateway:
         unavailable_retries: int = 2,
         unavailable_backoff_s: float = 2.0,
         circuit_breaker_streak: int = 3,
+        unavailable_total_cap: int = 6,
         completion: Completion | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
@@ -180,31 +181,53 @@ class LLMGateway:
         self._today = today
         if unavailable_retries < 0 or unavailable_backoff_s < 0 or circuit_breaker_streak < 1:
             raise ValueError("retries and backoff cannot be negative; the breaker streak is >= 1")
+        if unavailable_total_cap < circuit_breaker_streak:
+            # A total below the streak would make the streak unreachable and so meaningless.
+            raise ValueError("unavailable_total_cap must be at least circuit_breaker_streak")
         self._unavailable_retries = unavailable_retries
         self._unavailable_backoff_s = unavailable_backoff_s
         self._breaker_streak = circuit_breaker_streak
-        # Consecutive provider-unavailable responses per run (2026-11-05 ruling). In memory on
-        # purpose: it protects a run that is executing now; a restarted worker starts clean.
+        self._unavailable_total_cap = unavailable_total_cap
+        # TWO bounds per run, both needed (owner, 2026-11-05). The STREAK bounds a dead provider;
+        # it does not bound a FLAKY one, because a success resets it, which is why the 5 November
+        # attempts cost 5, 9, 10 and 14 calls instead of the 5 expected. The TOTAL is never reset by
+        # a success, so the worst case per run is quotable rather than estimated. Both are in
+        # memory on purpose: they protect a run that is executing now, and a restarted worker
+        # starts clean (its runs are re-driven from their checkpoints).
         self._streak: dict[UUID, int] = {}
+        self._unavailable_total: dict[UUID, int] = {}
 
-    def _breaker_is_open(self, ctx: CallContext) -> bool:
-        return self._streak.get(ctx.run_id, 0) >= self._breaker_streak
+    def _breaker_reason(self, ctx: CallContext) -> str | None:
+        """Why this run may make no further call, or None. The streak OR the total."""
+        streak = self._streak.get(ctx.run_id, 0)
+        total = self._unavailable_total.get(ctx.run_id, 0)
+        if streak >= self._breaker_streak:
+            return f"{streak} consecutive provider-unavailable responses"
+        if total >= self._unavailable_total_cap:
+            return (
+                f"{total} provider-unavailable responses in this run (the total cap is "
+                f"{self._unavailable_total_cap}; a success resets the streak, not the total)"
+            )
+        return None
 
     def _raise_if_open(self, ctx: CallContext) -> None:
-        if self._breaker_is_open(ctx):
+        if (reason := self._breaker_reason(ctx)) is not None:
             raise ProviderCircuitOpen(
-                f"run {ctx.run_id}: {self._streak[ctx.run_id]} consecutive provider-unavailable "
-                "responses; no further calls are made in this run"
+                f"run {ctx.run_id}: {reason}; no further calls are made in this run"
             )
 
-    def _note_unavailable(self, ctx: CallContext) -> int:
+    def _note_unavailable(self, ctx: CallContext) -> tuple[int, int]:
+        """Count this answer against both bounds; returns (streak, total)."""
         if len(self._streak) > 4096:  # bounded: forget the oldest runs
             for old in list(self._streak)[:1024]:
-                del self._streak[old]
+                self._streak.pop(old, None)
+                self._unavailable_total.pop(old, None)
         self._streak[ctx.run_id] = self._streak.get(ctx.run_id, 0) + 1
-        return self._streak[ctx.run_id]
+        self._unavailable_total[ctx.run_id] = self._unavailable_total.get(ctx.run_id, 0) + 1
+        return self._streak[ctx.run_id], self._unavailable_total[ctx.run_id]
 
     def _note_ok(self, ctx: CallContext) -> None:
+        """A success resets the STREAK. It deliberately does NOT reset the total."""
         self._streak.pop(ctx.run_id, None)
 
     async def structured[M: BaseModel](
@@ -412,7 +435,7 @@ class LLMGateway:
                         )
                     )
                     unavailable_attempts += 1
-                    streak = self._note_unavailable(ctx)
+                    streak, total = self._note_unavailable(ctx)
                     log.warning(
                         "provider unavailable",
                         extra={
@@ -420,14 +443,14 @@ class LLMGateway:
                             "call_id": call_id,
                             "attempt": unavailable_attempts,
                             "run_streak": streak,
+                            "run_total": total,
                             "error": type(e).__name__,
                         },
                     )
-                    if streak >= self._breaker_streak:
+                    if (reason := self._breaker_reason(ctx)) is not None:
                         raise ProviderCircuitOpen(
-                            f"run {ctx.run_id}: {streak} consecutive provider-unavailable "
-                            f"responses (last: {type(e).__name__}); the run is aborted as an "
-                            "infrastructure failure"
+                            f"run {ctx.run_id}: {reason} (last: {type(e).__name__}); the run is "
+                            "aborted as an infrastructure failure"
                         ) from e
                     if unavailable_attempts > self._unavailable_retries:
                         raise ProviderUnavailable(

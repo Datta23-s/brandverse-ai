@@ -598,7 +598,8 @@ async def test_the_strong_tier_cap_refuses_the_call_after_the_last_one_approved(
 async def test_the_dev_ceiling_refuses_any_tier_and_org_and_writes_the_refusal(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:
-    """Owner, 2026-11-01: 250 development calls of any tier, and none until billing is confirmed.
+    """Owner, 2026-11-01: a development ceiling on calls of any tier, and none until billing is
+    confirmed (the figure was 250, raised to 500 on 2026-11-05; this test does not depend on it).
     The ceiling here is 3 over this database; the database's own name is the registered one."""
     from datetime import date
 
@@ -629,6 +630,9 @@ async def test_the_dev_ceiling_refuses_any_tier_and_org_and_writes_the_refusal(
                 total_at_ruling=int(made[0]),
                 made_at_ruling={name: int(made[0])},
                 billing_unlinked_confirmed_on=confirmed,
+                # The owner's report tripwire is not the ledger's business: the ledger refuses at
+                # the ceiling, and `report_due` is read by the stage-2 runner (2026-11-05).
+                report_to_owner_at_calls=int(made[0]) + 2,
             ),
         )
 

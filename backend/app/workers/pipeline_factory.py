@@ -139,6 +139,7 @@ async def open_pipeline(
             unavailable_retries=settings.llm_unavailable_retries,
             unavailable_backoff_s=settings.llm_unavailable_backoff_s,
             circuit_breaker_streak=settings.llm_circuit_breaker_streak,
+            unavailable_total_cap=settings.llm_unavailable_total_cap,
             allow_strong_tier=settings.llm_allow_strong_tier,
             strong_tier_org_id=settings.llm_strong_tier_org_id,
         )

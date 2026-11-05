@@ -24,6 +24,20 @@ class DevBudget:
     total_at_ruling: int
     made_at_ruling: dict[str, int]  # database name -> its own non-refused calls at the ruling
     billing_unlinked_confirmed_on: date | None
+    # Spend at which the owner is told, instead of the ceiling being raised again quietly
+    # (owner, 2026-11-05). A tripwire, not a refusal: the ceiling still refuses.
+    report_to_owner_at_calls: int
+
+    def report_due(self, database: str, made_here_now: int) -> str | None:
+        """Why the owner must be told before more calls are made, or None."""
+        total = self.total(database, made_here_now)
+        if total >= self.report_to_owner_at_calls:
+            return (
+                f"{total} of the {self.ceiling_calls} development calls are spent, at or past the "
+                f"{self.report_to_owner_at_calls} the owner asked to be told at: report, do not "
+                "raise the ceiling"
+            )
+        return None
 
     def total(self, database: str, made_here_now: int) -> int:
         """Calls in all databases: the owner's figure at the ruling plus this database's growth."""
@@ -59,8 +73,12 @@ def load_dev_budget(path: Path = DEV_BUDGET_PATH) -> DevBudget:
     confirmed = raw["billing_unlinked_confirmed_on"]
     if confirmed is not None and not isinstance(confirmed, date):
         raise ValueError("billing_unlinked_confirmed_on must be a YYYY-MM-DD date or null")
+    if not 0 < int(raw["report_to_owner_at_calls"]) < int(raw["ceiling_calls"]):
+        # A report threshold at or above the ceiling would never fire before the refusal does.
+        raise ValueError("report_to_owner_at_calls must be above 0 and below ceiling_calls")
     return DevBudget(
         ceiling_calls=int(raw["ceiling_calls"]),
+        report_to_owner_at_calls=int(raw["report_to_owner_at_calls"]),
         total_at_ruling=int(raw["total_at_ruling"]),
         made_at_ruling={str(k): int(v) for k, v in raw["databases"].items()},
         billing_unlinked_confirmed_on=confirmed,

@@ -5,7 +5,17 @@
 # History, so the figure is not mistaken for a design number: the standing budget was 60 Standard
 # calls (2026-10-31); the agreement round was ordered without raising it and 60 became 101; the
 # owner took the overrun and set the ceiling at 250.
-ceiling_calls: 250
+ceiling_calls: 500
+
+# RAISED from 250 to 500 (owner, 2026-11-05). Reasoning, recorded because a ceiling that moves for
+# convenience is not a ceiling: (a) the 250 figure existed to bound spend while the BILLING CONDITION
+# was unconfirmed, and billing is now confirmed unlinked by gcloud (below, 2026-11-04); (b) the
+# standard tier is on the free tier at 500 requests a day, so 500 development calls is inside one
+# day's free quota and buys no paid usage; (c) the 250 was consumed by a PROVIDER OUTAGE (the 5
+# November 503s cost 5 to 14 calls per interim attempt, all of it spend-not-work rows), not by the
+# work itself. DEVELOPMENT SCOPE ONLY: the evaluation gets its own budget, and this file is not it.
+# REPORT TO THE OWNER AT 400 rather than raising it again quietly (`report_to_owner_at_calls`).
+report_to_owner_at_calls: 400
 
 # Calls (any tier, not refused) made by the development work in ALL databases at the ruling, as the
 # owner counts them. A database can only see its own llm_calls, so the ledger adds this figure to

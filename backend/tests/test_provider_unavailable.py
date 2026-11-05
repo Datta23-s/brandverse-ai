@@ -75,7 +75,7 @@ class Sleeps:
 
 
 def gateway(
-    completion: FakeCompletion, *, retries: int = 2, streak: int = 3
+    completion: FakeCompletion, *, retries: int = 2, streak: int = 3, total_cap: int = 6
 ) -> tuple[LLMGateway, FakeLedger, Sleeps]:
     ledger, sleeps = FakeLedger(), Sleeps()
     gw = LLMGateway(
@@ -89,6 +89,7 @@ def gateway(
         unavailable_retries=retries,
         unavailable_backoff_s=2.0,
         circuit_breaker_streak=streak,
+        unavailable_total_cap=total_cap,
         completion=completion,
         sleep=sleeps,
     )
@@ -149,14 +150,16 @@ async def test_a_400_is_not_retried_it_is_an_error() -> None:
 
 
 async def test_retries_are_bounded_by_the_setting() -> None:
-    gw, ledger, _ = gateway(FakeCompletion(unavailable(), unavailable()), retries=1, streak=9)
+    gw, ledger, _ = gateway(
+        FakeCompletion(unavailable(), unavailable()), retries=1, streak=9, total_cap=9
+    )
     with pytest.raises(ProviderUnavailable):
         await ask(gw, new_ctx())
     assert outcomes(ledger) == ["provider_unavailable", "provider_unavailable"]  # 1 try + 1 retry
 
 
 async def test_with_no_retries_one_503_is_provider_unavailable_at_once() -> None:
-    gw, ledger, sleeps = gateway(FakeCompletion(unavailable()), retries=0, streak=9)
+    gw, ledger, sleeps = gateway(FakeCompletion(unavailable()), retries=0, streak=9, total_cap=9)
     with pytest.raises(ProviderUnavailable):
         await ask(gw, new_ctx())
     assert outcomes(ledger) == ["provider_unavailable"] and sleeps.calls == []
@@ -221,6 +224,63 @@ async def test_a_connection_error_is_a_network_error_not_an_outage() -> None:
         await ask(gw, new_ctx())
     assert not isinstance(raised.value, ProviderUnavailable | ProviderCircuitOpen)
     assert outcomes(ledger) == ["error"] and sleeps.calls == []  # one row, no retry
+
+
+async def test_a_flaky_provider_is_bounded_by_the_total_not_the_streak() -> None:
+    """THE BOUND THE STREAK DID NOT GIVE (owner, 5 November 2026). On 5 November the attempts cost
+    5, 9, 10 and 14 calls against an estimate of about 5: the provider was INTERMITTENT, and every
+    success reset the consecutive streak, so three-in-a-row never landed while the calls mounted.
+    Here each 503 is followed by a success, so the streak never reaches 3; the TOTAL stops it."""
+    script: list[Any] = []
+    for _ in range(6):
+        script += [unavailable(), reply(OK)]  # 503, ok, 503, ok, ... : streak never reaches 3
+    gw, ledger, _ = gateway(FakeCompletion(*script), total_cap=6)
+    run = new_ctx()
+    with pytest.raises(ProviderCircuitOpen, match="provider-unavailable responses in this run"):
+        for _ in range(6):
+            await ask(gw, run)
+    assert outcomes(ledger).count("provider_unavailable") == 6  # exactly the cap, then it aborts
+    assert outcomes(ledger).count("ok") == 5  # the successes did not buy more attempts
+
+
+async def test_the_total_cap_is_not_reset_by_a_success_but_the_streak_is() -> None:
+    gw, _, _ = gateway(FakeCompletion(unavailable(), reply(OK)), total_cap=6)
+    run = new_ctx()
+    await ask(gw, run)
+    assert gw._breaker_reason(run) is None  # noqa: SLF001 - the streak was reset by the success
+    assert gw._unavailable_total[run.run_id] == 1  # noqa: SLF001 - the total was not
+
+
+async def test_the_total_cap_also_refuses_the_next_call_without_a_row() -> None:
+    script: list[Any] = []
+    for _ in range(3):
+        script += [unavailable(), reply(OK)]
+    gw, ledger, _ = gateway(FakeCompletion(*script), total_cap=3)
+    run = new_ctx()
+    with pytest.raises(ProviderCircuitOpen):
+        for _ in range(3):
+            await ask(gw, run)
+    rows = len(ledger.rows)
+    with pytest.raises(ProviderCircuitOpen):
+        await ask(gw, run)
+    assert len(ledger.rows) == rows  # refused before admission: no row, no provider request
+
+
+async def test_the_total_cap_is_per_run() -> None:
+    script: list[Any] = []
+    for _ in range(4):
+        script += [unavailable(), reply(OK)]
+    gw, _, _ = gateway(FakeCompletion(*script), streak=2, total_cap=2)
+    first = new_ctx()
+    with pytest.raises(ProviderCircuitOpen):
+        for _ in range(2):
+            await ask(gw, first)
+    assert (await ask(gw, new_ctx())).supported is True  # another run starts clean
+
+
+def test_a_total_cap_below_the_streak_is_refused_as_a_configuration_error() -> None:
+    with pytest.raises(ValueError, match="unavailable_total_cap"):
+        gateway(FakeCompletion(), streak=3, total_cap=2)
 
 
 async def test_a_429_is_still_the_rate_limit_path_not_the_breaker() -> None:

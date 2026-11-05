@@ -46,15 +46,45 @@ def test_a_clean_campaign_that_wrote_memory_passes() -> None:
     assert campaign_problem("completed", [], 9, 12) is None
 
 
-def test_the_budget_floor_hands_the_decision_back_to_the_owner() -> None:
-    """Owner, 5 November 2026: the ceiling holds at 250; under 30 calls left, no attempt starts."""
-    from scripts.phase7_stage2 import BUDGET_FLOOR, budget_floor_refusal
+def test_an_attempt_cannot_exceed_its_stated_call_cap() -> None:
+    """Owner, 5 November 2026 (evening): "no attempt can exceed a stated number", because the
+    gateway's bounds limit a run, not how many campaigns an attempt tries. A campaign starts only
+    if its own worst case still fits, so the cap is a bound and not an estimate."""
+    from scripts.phase7_stage2 import (
+        ATTEMPT_CALL_CAP,
+        PER_RUN_CALL_CAP,
+        attempt_cap_refusal,
+    )
 
-    assert BUDGET_FLOOR == 30
-    assert budget_floor_refusal(91) is None and budget_floor_refusal(30) is None
-    refusal = budget_floor_refusal(29)
-    assert refusal is not None and "come back to the owner" in refusal
-    assert "not raised quietly" in refusal
+    assert (ATTEMPT_CALL_CAP, PER_RUN_CALL_CAP) == (75, 10)
+    # A clean interim is about 64 calls, so it never reaches the threshold.
+    assert attempt_cap_refusal(64) is None
+    assert attempt_cap_refusal(65) is None  # the last campaign that may start
+    refusal = attempt_cap_refusal(66)  # 66 + 10 would exceed 75
+    assert refusal is not None and "attempt cap is 75" in refusal
+    # The bound holds however the calls were spent, and the worst case is the cap itself.
+    assert attempt_cap_refusal(75) is not None
+    assert all(
+        attempt_cap_refusal(spent) is not None
+        for spent in range(ATTEMPT_CALL_CAP - PER_RUN_CALL_CAP + 1, ATTEMPT_CALL_CAP + 1)
+    )
+
+
+def test_reaching_the_attempt_cap_writes_no_report_and_is_retryable() -> None:
+    from scripts.phase7_stage2 import AttemptCapReached, InvalidCampaign
+
+    assert issubclass(AttemptCapReached, InvalidCampaign)  # exit 3: no report, retry
+
+
+def test_the_owner_is_told_at_400_instead_of_the_ceiling_being_raised_again() -> None:
+    """Owner, 5 November 2026 (evening): ceiling 500, report at 400. Supersedes the floor of 30."""
+    from app.llm.dev_budget import load_dev_budget
+
+    budget = load_dev_budget()
+    assert (budget.ceiling_calls, budget.report_to_owner_at_calls) == (500, 400)
+    # `budget_report_refusal` reads the live database, so the pure decision is asserted here.
+    assert budget.report_due("brandverse_stage2", 298) is None  # total 399
+    assert budget.report_due("brandverse_stage2", 299) is not None  # total 400
 
 
 def test_the_interim_stops_on_it_and_writes_no_report() -> None:

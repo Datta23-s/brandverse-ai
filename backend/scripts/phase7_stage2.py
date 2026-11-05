@@ -585,8 +585,13 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         ).rowcount
     print(f"closed {closed} stale in-progress run(s) left by an earlier attempt", flush=True)
     remaining = calls_remaining(url)
-    print(f"development calls remaining under the ceiling: {remaining}", flush=True)
-    if (refusal := budget_floor_refusal(remaining)) is not None:
+    spent_at_start = calls_made(url)
+    print(
+        f"development calls remaining under the ceiling: {remaining}; "
+        f"this attempt may spend at most {ATTEMPT_CALL_CAP}",
+        flush=True,
+    )
+    if (refusal := budget_report_refusal(url)) is not None:
         print("REFUSED:", refusal)
         return 1
     inputs_all = request_inputs()
@@ -600,7 +605,7 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             "environment": "development",
             "pipeline_agents": "real",
             "research_snapshot_dir": STORE,
-            "max_llm_calls_per_run": 10,
+            "max_llm_calls_per_run": PER_RUN_CALL_CAP,
             "llm_allow_strong_tier": False,
             "llm_strong_tier_org_id": None,
             "run_events_block_ms": 200,
@@ -630,7 +635,7 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         "ENVIRONMENT": "development",
         "PIPELINE_AGENTS": "real",
         "RESEARCH_SNAPSHOT_DIR": str(STORE),
-        "MAX_LLM_CALLS_PER_RUN": "10",
+        "MAX_LLM_CALLS_PER_RUN": str(PER_RUN_CALL_CAP),
         "LLM_ALLOW_STRONG_TIER": "false",
         "LLM_STRONG_TIER_ORG_ID": "",
         # A named timeout on the research step, instead of a blanket 15-minute wait. There is NO
@@ -680,6 +685,7 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
                             wait_for_campaign,
                             wait_for_end,
                             stop_after=1 if probe else 3,
+                            spent_at_start=spent_at_start,
                         )
                         if not probe:
                             print_table(b, results[b])
@@ -741,18 +747,54 @@ def _db_url() -> str:
     return ADMIN_URL.rsplit("/", 1)[0] + "/" + DB_NAME
 
 
-BUDGET_FLOOR = 30
+# The worker's per-run cap (MAX_LLM_CALLS_PER_RUN below reads this, so the two cannot drift).
+PER_RUN_CALL_CAP = 10
+# The most calls ONE attempt may spend (owner, 2026-11-05: "no attempt can exceed a stated
+# number"). A campaign starts only when its own worst case still fits under this, so the number is
+# a bound and not an estimate. Arithmetic: a clean interim is 8 live campaigns at about 7 calls
+# plus a brief check each, about 64; campaigns therefore start while at most 65 are spent
+# (75 - 10), which a clean interim never reaches; and the attempt can never exceed 75.
+ATTEMPT_CALL_CAP = 75
 
 
-def budget_floor_refusal(remaining: int, floor: int = BUDGET_FLOOR) -> str | None:
-    """Owner ruling, 5 November 2026: the development ceiling holds at 250 and is not raised
-    quietly. When fewer than `floor` calls remain, no attempt starts; the owner decides."""
-    if remaining < floor:
+def attempt_cap_refusal(
+    spent: int, cap: int = ATTEMPT_CALL_CAP, per_run: int = PER_RUN_CALL_CAP
+) -> str | None:
+    """Why no further campaign may start in this attempt, or None.
+
+    The check is made BEFORE a campaign starts and allows for that campaign's own worst case
+    (`per_run`), so the attempt cannot overshoot the cap. Why this exists: the gateway's breaker
+    bounds a DEAD provider, and the per-run total cap bounds a flaky one, but neither bounds how
+    many campaigns an attempt will try. On 5 November the attempts cost 5, 9, 10 and 14 calls
+    against an estimate of about 5 (decision-log 2.30)."""
+    if spent + per_run > cap:
         return (
-            f"only {remaining} of the development ceiling's calls remain (floor {floor}): "
-            "come back to the owner; the ceiling is not raised quietly"
+            f"{spent} calls spent in this attempt; a campaign may need {per_run} more and the "
+            f"attempt cap is {cap}: no further campaign starts"
         )
     return None
+
+
+def budget_report_refusal(url: str) -> str | None:
+    """Why no attempt starts until the owner has been told, or None.
+
+    Owner ruling, 5 November 2026 (evening): the ceiling is 500 and **the owner is told at 400
+    rather than the ceiling being raised again quietly**. This supersedes the earlier floor of 30
+    remaining. The ledger still refuses the individual call at the ceiling; this stops a new
+    ATTEMPT, so the spend does not run from 400 to 500 unattended."""
+    from app.llm.dev_budget import load_dev_budget
+
+    due = load_dev_budget().report_due(DB_NAME, calls_made(url))
+    return None if due is None else f"{due} (config/dev_budget.yaml)"
+
+
+def calls_made(url: str) -> int:
+    """Non-refused calls this database has logged (the ledger's own count, never a counter)."""
+    with psycopg.connect(url, autocommit=True) as c:
+        row = c.execute(
+            "select count(*) filter (where outcome <> 'refused') from llm_calls"
+        ).fetchone()
+    return int(row[0]) if row else 0
 
 
 def calls_remaining(url: str) -> int:
@@ -761,12 +803,7 @@ def calls_remaining(url: str) -> int:
     from app.llm.dev_budget import load_dev_budget
 
     budget = load_dev_budget()
-    with psycopg.connect(url, autocommit=True) as c:
-        row = c.execute(
-            "select count(*) filter (where outcome <> 'refused') from llm_calls"
-        ).fetchone()
-    made_here = int(row[0]) if row else 0
-    return budget.ceiling_calls - budget.total(DB_NAME, made_here)
+    return budget.ceiling_calls - budget.total(DB_NAME, calls_made(url))
 
 
 def tally(url: str) -> dict[str, int]:
@@ -789,6 +826,7 @@ async def run_brand(
     wait_for_campaign: Any,
     wait_for_end: Any,
     stop_after: int = 3,
+    spent_at_start: int = 0,
 ) -> list[CampaignScore]:
     """One brand: its own organisation (so no memory crosses brands), campaign 1 live, campaign 2
     live, campaign 3 scored from recall. Each campaign is SCORED before it runs, from the memory
@@ -828,6 +866,11 @@ async def run_brand(
         vectors.append(vec)
         if pos == 3:
             break
+        # The attempt's own cap, checked before the campaign starts (never mid-campaign), so the
+        # attempt cannot exceed it (owner, 2026-11-05).
+        spent = calls_made(url) - spent_at_start
+        if (over := attempt_cap_refusal(spent)) is not None:
+            raise AttemptCapReached(f"{rid} (campaign {pos}): {over}")
         with psycopg.connect(url, autocommit=True) as c:
             before = c.execute(
                 "select count(*) from memory_items where brand_id = %s", (brand_id,)
@@ -914,6 +957,12 @@ async def wait_parked_or_ended(
 class InvalidCampaign(RuntimeError):
     """A live campaign did not produce what the measurement needs, so nothing scored from it, or
     after it, can mean anything. Stops the run; no report is written."""
+
+
+class AttemptCapReached(InvalidCampaign):
+    """The attempt reached its own call cap before every campaign ran. No report: a partial set of
+    brands is not the interim (the criterion is 3 of 4). Retrying is the right response when the
+    cause was a flaky provider, which is what spends calls without producing campaigns."""
 
 
 def campaign_problem(

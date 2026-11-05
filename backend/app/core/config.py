@@ -138,6 +138,11 @@ class Settings(BaseSettings):
     llm_unavailable_retries: int = Field(default=2, ge=0, le=5)
     llm_unavailable_backoff_s: float = Field(default=2.0, ge=0, le=60)
     llm_circuit_breaker_streak: int = Field(default=3, ge=1, le=20)
+    # The second bound, which a success does NOT reset (owner, 2026-11-05): this many
+    # provider-unavailable responses in one run abort it whatever the streak is. The streak bounds a
+    # dead provider; only the total bounds a FLAKY one, and an intermittent provider is what made
+    # the 5 November attempts cost 5, 9, 10 and 14 calls instead of the 5 expected.
+    llm_unavailable_total_cap: int = Field(default=6, ge=1, le=100)
     # A 'pending' llm_calls row older than this is an abandoned reservation (its process died
     # between admission and finish) and stops counting toward caps and quotas. It must exceed the
     # longest a live call can stay pending — (waits + 1) x timeout + total wait = 330 s at the
