@@ -62,6 +62,19 @@ class LLMCallFailed(LLMError):
     """The provider call failed (not a rate limit); recorded as error, not retried."""
 
 
+class ProviderUnavailable(LLMCallFailed):
+    """The provider answered with a server-side unavailability (503 "high demand", 500, 502, 504,
+    any 5xx) on every attempt the gateway was allowed. The fifth infrastructure-failure kind,
+    `provider_unavailable` (amendment of 2026-11-05, docs/evaluation-plan.md): a property of the
+    provider, not of the arm being measured. Recorded as provider_unavailable, bounded-retried."""
+
+
+class ProviderCircuitOpen(LLMError):
+    """Three consecutive provider-unavailable responses in one run: the run is aborted as an
+    infrastructure failure instead of grinding through its budget against an outage (2026-11-05:
+    35 errored calls in 20 minutes). Raised for every later call in that run as well."""
+
+
 class StructuredOutputInvalid(LLMError):
     """The model's output did not validate against the schema, even after one repair."""
 
@@ -85,6 +98,12 @@ class DevBudgetRefused(CallRefused):
     def __init__(self, message: str, kind: str) -> None:
         super().__init__(message)
         self.kind = kind
+
+
+# What must END a run instead of being turned into a "declared gap" by a node that catches a
+# failed agent. ONE name, used at every catch site in the orchestrator, so a new abort cannot be
+# swallowed at a site that forgot it (tests/test_provider_unavailable.py scans for the old form).
+ABORTS: tuple[type[BaseException], ...] = (BudgetExceeded, ProviderCircuitOpen)
 
 
 # ── Research (Phase 5) ───────────────────────────────────────────────────────────────────────

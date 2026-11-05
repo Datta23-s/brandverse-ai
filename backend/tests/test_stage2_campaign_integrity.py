@@ -46,6 +46,17 @@ def test_a_clean_campaign_that_wrote_memory_passes() -> None:
     assert campaign_problem("completed", [], 9, 12) is None
 
 
+def test_the_budget_floor_hands_the_decision_back_to_the_owner() -> None:
+    """Owner, 5 November 2026: the ceiling holds at 250; under 30 calls left, no attempt starts."""
+    from scripts.phase7_stage2 import BUDGET_FLOOR, budget_floor_refusal
+
+    assert BUDGET_FLOOR == 30
+    assert budget_floor_refusal(91) is None and budget_floor_refusal(30) is None
+    refusal = budget_floor_refusal(29)
+    assert refusal is not None and "come back to the owner" in refusal
+    assert "not raised quietly" in refusal
+
+
 def test_the_interim_stops_on_it_and_writes_no_report() -> None:
     """The guard is wired in: the error is raised from the campaign loop, caught in run_live, and
     returns a distinct exit status before any report is written."""

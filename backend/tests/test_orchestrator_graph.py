@@ -25,7 +25,7 @@ from app.core.budgeted_run import RunFacts
 from app.core.gates import GateReport, Statement, load_superlatives
 from app.core.sector_registry import Sector
 from app.core.truth import Claim, ProductTruth
-from app.errors import BudgetExceeded, StepTimeout
+from app.errors import BudgetExceeded, ProviderCircuitOpen, ProviderUnavailable, StepTimeout
 from app.llm.ledger import CallContext
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunEvent, RunFailed, RunStarted, StepEvent
@@ -346,6 +346,32 @@ async def test_a_budget_refusal_ends_the_run_partial_with_corrections_only() -> 
     # The stream can tell a partial run from a complete one (chunk E).
     last = h.sink.events[-1]
     assert isinstance(last, RunCompleted) and last.partial is True
+
+
+async def test_an_open_provider_breaker_ends_the_run_failed_as_infrastructure() -> None:
+    """Tonight's outage (5 November): three consecutive 503s open the run's breaker. The run is
+    ABORTED, not turned into declared gaps, and the ending carries the fifth kind."""
+    agents = {**mock_agents(), "A1": Failing("A1", ProviderCircuitOpen("3 consecutive 503"))}
+    h = Harness(agents=agents)
+    with pytest.raises(ProviderCircuitOpen):
+        await h.start()
+    assert h.ledger.calls[-1][0] == "fail"
+    failure = h.ledger.failures[0]
+    assert failure is not None
+    assert failure["kind"] == "circuit_breaker"
+    assert failure["infrastructure_failure"] == "provider_unavailable"
+    assert isinstance(h.sink.events[-1], RunFailed)
+    assert h.ledger.calls[-1][1] is None  # infrastructure failure: no corrections commit
+
+
+async def test_one_exhausted_call_is_still_only_a_gap_when_the_breaker_is_not_open() -> None:
+    """A single call that ran out of retries while other calls succeeded is an agent gap; only
+    three in a row (the breaker) end the run."""
+    agents = {**mock_agents(), "A1": Failing("A1", ProviderUnavailable("503 x3, others fine"))}
+    h = Harness(agents=agents)
+    out = await h.start()
+    assert out.status == "suspended"
+    assert any(e["agent"] == "A1" for e in out.state["errors"])
 
 
 async def test_a_gate_block_at_step_3_ends_the_run_blocked_and_audits_it() -> None:

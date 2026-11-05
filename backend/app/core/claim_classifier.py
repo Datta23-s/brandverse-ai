@@ -41,7 +41,7 @@ from app.core.gates import (
     record_gate_block,
 )
 from app.core.truth import Claim, ProductTruth
-from app.errors import BudgetExceeded
+from app.errors import ABORTS
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallContext
 from app.llm.prompts import PromptLibrary
@@ -131,8 +131,8 @@ async def check_copy(
     """Extract, then run every gate. A failed extraction is a `gate_error` block, never a pass."""
     try:
         statements = await extract_statements(gateway, prompts, ctx, copy, truth)
-    except BudgetExceeded:
-        raise  # the run's caps, not a fault of the copy: the run ends partial (Rules.md C4)
+    except ABORTS:
+        raise  # the run's caps or an open provider breaker, not a fault of the copy (Rules C4)
     except Exception as e:
         log.exception("claim extraction failed; blocking the copy")
         sector = truth.sector.describe() if truth.sector is not None else "no sector"

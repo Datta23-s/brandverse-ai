@@ -44,6 +44,8 @@ from pydantic import BaseModel, ValidationError
 from app.errors import (
     LLMCallFailed,
     LLMRateLimited,
+    ProviderCircuitOpen,
+    ProviderUnavailable,
     StrongTierDisabled,
     StructuredOutputInvalid,
 )
@@ -86,6 +88,24 @@ def estimate_tokens(messages: list[dict[str, str]]) -> int:
     return sum(len(m["content"]) for m in messages) // 3 + 16
 
 
+def is_provider_unavailable(error: BaseException) -> bool:
+    """The provider is unavailable: a server-side 5xx (503 "high demand", 500, 502, 504, ...).
+    NOT a 429 (that is the rate-limit path above, kind `rate_limited`) and NOT a transport failure
+    (kind `network_error`). The fifth infrastructure kind, `provider_unavailable`, fixed by the
+    amendment of 2026-11-05 (docs/evaluation-plan.md): an outage is not a property of the arm."""
+    if isinstance(error, _litellm.APIConnectionError):
+        # LiteLLM gives a transport failure (and its Timeout) status_code 500 by default. It is a
+        # network error (`network_error`), not the provider answering that it is unavailable.
+        return False
+    if isinstance(
+        error,
+        _litellm.ServiceUnavailableError | _litellm.InternalServerError | _litellm.BadGatewayError,
+    ):
+        return True
+    status = getattr(error, "status_code", None)
+    return isinstance(status, int) and not isinstance(status, bool) and status >= 500
+
+
 def retry_delay_s(error: Exception) -> float | None:
     """Google's suggested wait from a 429 body (`"retryDelay": "29s"`), if present."""
     match = _RETRY_DELAY.search(str(error))
@@ -115,6 +135,9 @@ class LLMGateway:
         max_rate_limit_wait_s: float,
         allow_strong_tier: bool = False,
         strong_tier_org_id: UUID | None = None,
+        unavailable_retries: int = 2,
+        unavailable_backoff_s: float = 2.0,
+        circuit_breaker_streak: int = 3,
         completion: Completion | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], float] = time.monotonic,
@@ -155,6 +178,34 @@ class LLMGateway:
         self._sleep = sleep
         self._clock = clock
         self._today = today
+        if unavailable_retries < 0 or unavailable_backoff_s < 0 or circuit_breaker_streak < 1:
+            raise ValueError("retries and backoff cannot be negative; the breaker streak is >= 1")
+        self._unavailable_retries = unavailable_retries
+        self._unavailable_backoff_s = unavailable_backoff_s
+        self._breaker_streak = circuit_breaker_streak
+        # Consecutive provider-unavailable responses per run (2026-11-05 ruling). In memory on
+        # purpose: it protects a run that is executing now; a restarted worker starts clean.
+        self._streak: dict[UUID, int] = {}
+
+    def _breaker_is_open(self, ctx: CallContext) -> bool:
+        return self._streak.get(ctx.run_id, 0) >= self._breaker_streak
+
+    def _raise_if_open(self, ctx: CallContext) -> None:
+        if self._breaker_is_open(ctx):
+            raise ProviderCircuitOpen(
+                f"run {ctx.run_id}: {self._streak[ctx.run_id]} consecutive provider-unavailable "
+                "responses; no further calls are made in this run"
+            )
+
+    def _note_unavailable(self, ctx: CallContext) -> int:
+        if len(self._streak) > 4096:  # bounded: forget the oldest runs
+            for old in list(self._streak)[:1024]:
+                del self._streak[old]
+        self._streak[ctx.run_id] = self._streak.get(ctx.run_id, 0) + 1
+        return self._streak[ctx.run_id]
+
+    def _note_ok(self, ctx: CallContext) -> None:
+        self._streak.pop(ctx.run_id, None)
 
     async def structured[M: BaseModel](
         self,
@@ -264,25 +315,31 @@ class LLMGateway:
                 raise StrongTierDisabled(refusal)
         estimate = model.cost_usd(estimate_tokens(messages), max_output_tokens, self._today())
         waited_s = 0.0
+        # An open breaker refuses the call before it is admitted: no row, no provider request.
+        self._raise_if_open(ctx)
 
-        # 1. Admission: may refuse (raises), or ask to wait for the model's RPM window.
-        admission = await self._ledger.admit(ctx, tier, prompt, route_reason, estimate)
-        while admission.call_id is None:
-            if waited_s + admission.wait_s > self._max_wait_s:
-                reason = (
-                    f"refused: pacing {model.id} to {model.rate_limits.rpm}/min would wait "
-                    f"over {self._max_wait_s:.0f} s (Rules.md C10)"
-                )
-                await self._ledger.refuse(ctx, tier, prompt, reason)
-                raise LLMRateLimited(reason)
-            await self._sleep(admission.wait_s)
-            waited_s += admission.wait_s
+        async def admit() -> int:
+            """Admission: may refuse (raises), or ask to wait for the model's RPM window."""
+            nonlocal waited_s
             admission = await self._ledger.admit(ctx, tier, prompt, route_reason, estimate)
-        call_id = admission.call_id
+            while admission.call_id is None:
+                if waited_s + admission.wait_s > self._max_wait_s:
+                    reason = (
+                        f"refused: pacing {model.id} to {model.rate_limits.rpm}/min would wait "
+                        f"over {self._max_wait_s:.0f} s (Rules.md C10)"
+                    )
+                    await self._ledger.refuse(ctx, tier, prompt, reason)
+                    raise LLMRateLimited(reason)
+                await self._sleep(admission.wait_s)
+                waited_s += admission.wait_s
+                admission = await self._ledger.admit(ctx, tier, prompt, route_reason, estimate)
+            return admission.call_id
 
-        # 2. The call. A 429 is waited out and the same request re-sent, within the caps.
-        rate_limit_waits = 0
-        try:
+        async def one_request(call_id: int) -> tuple[Any, int]:
+            """The call for ONE admitted row. A 429 is waited out and the same request re-sent,
+            within the caps."""
+            nonlocal waited_s
+            rate_limit_waits = 0
             while True:
                 started = self._clock()
                 try:
@@ -301,8 +358,7 @@ class LLMGateway:
                         # Only when the locked prompt sets one; otherwise the provider's default.
                         **({} if temperature is None else {"temperature": temperature}),
                     )
-                    latency_ms = int((self._clock() - started) * 1000)
-                    break
+                    return response, int((self._clock() - started) * 1000)
                 except _litellm.RateLimitError as e:
                     delay = retry_delay_s(e)
                     if delay is None:
@@ -328,25 +384,78 @@ class LLMGateway:
                     rate_limit_waits += 1
                     await self._sleep(delay)
                     waited_s += delay
-        except LLMRateLimited:
-            raise
-        except BaseException as e:
-            # Any other failure, cancellation included: complete the row, then propagate.
-            await asyncio.shield(
-                self._ledger.finish(
-                    call_id,
-                    outcome="error",
-                    input_tokens=None,
-                    output_tokens=None,
-                    cost_usd=None,
-                    latency_ms=None,
-                    rate_limit_wait_ms=int(waited_s * 1000),
+
+        # 1. Admission, then 2. the call. A provider-unavailable answer (any 5xx) closes ITS row as
+        # `provider_unavailable` and is retried on a NEW admitted row after an exponential backoff,
+        # at most `unavailable_retries` times: every retry is a row of its own, so it counts as
+        # SPEND (quota, caps, cost) and never as WORK (llm_attempts.py). Three consecutive such
+        # answers in one run open the breaker and abort the run (2026-11-05 ruling).
+        call_id = await admit()
+        unavailable_attempts = 0
+        while True:
+            try:
+                response, latency_ms = await one_request(call_id)
+                break
+            except LLMRateLimited:
+                raise
+            except BaseException as e:
+                if isinstance(e, Exception) and is_provider_unavailable(e):
+                    await asyncio.shield(
+                        self._ledger.finish(
+                            call_id,
+                            outcome="provider_unavailable",
+                            input_tokens=None,
+                            output_tokens=None,
+                            cost_usd=None,
+                            latency_ms=None,
+                            rate_limit_wait_ms=int(waited_s * 1000),
+                        )
+                    )
+                    unavailable_attempts += 1
+                    streak = self._note_unavailable(ctx)
+                    log.warning(
+                        "provider unavailable",
+                        extra={
+                            "model": model.id,
+                            "call_id": call_id,
+                            "attempt": unavailable_attempts,
+                            "run_streak": streak,
+                            "error": type(e).__name__,
+                        },
+                    )
+                    if streak >= self._breaker_streak:
+                        raise ProviderCircuitOpen(
+                            f"run {ctx.run_id}: {streak} consecutive provider-unavailable "
+                            f"responses (last: {type(e).__name__}); the run is aborted as an "
+                            "infrastructure failure"
+                        ) from e
+                    if unavailable_attempts > self._unavailable_retries:
+                        raise ProviderUnavailable(
+                            f"{model.id}: provider unavailable on {unavailable_attempts} "
+                            f"attempts: {type(e).__name__}: {e}"
+                        ) from e
+                    delay = self._unavailable_backoff_s * 2 ** (unavailable_attempts - 1)
+                    await self._sleep(delay + random.uniform(0, delay / 4))  # noqa: S311
+                    self._raise_if_open(ctx)  # another call may have opened it while we waited
+                    call_id = await admit()
+                    continue
+                # Any other failure, cancellation included: complete the row, then propagate.
+                await asyncio.shield(
+                    self._ledger.finish(
+                        call_id,
+                        outcome="error",
+                        input_tokens=None,
+                        output_tokens=None,
+                        cost_usd=None,
+                        latency_ms=None,
+                        rate_limit_wait_ms=int(waited_s * 1000),
+                    )
                 )
-            )
-            if isinstance(e, Exception):
-                log.exception("LLM call failed", extra={"model": model.id, "call_id": call_id})
-                raise LLMCallFailed(f"{model.id}: {type(e).__name__}: {e}") from e
-            raise
+                if isinstance(e, Exception):
+                    log.exception("LLM call failed", extra={"model": model.id, "call_id": call_id})
+                    raise LLMCallFailed(f"{model.id}: {type(e).__name__}: {e}") from e
+                raise
+        self._note_ok(ctx)
 
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)

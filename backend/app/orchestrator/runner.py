@@ -34,7 +34,7 @@ from psycopg_pool import AsyncConnectionPool
 from app.core.budgeted_run import RunFacts, end_run, fail_run, resume_run, suspend_run
 from app.core.infrastructure import classify_infrastructure_failure
 from app.core.pipeline import PIPELINE_STEPS
-from app.errors import BrandverseError, BudgetExceeded, StepTimeout
+from app.errors import BrandverseError, BudgetExceeded, ProviderCircuitOpen, StepTimeout
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunFailed, RunStarted, StepEvent, StepStatus
 from app.orchestrator import progress
@@ -305,7 +305,13 @@ class Pipeline:
             log.warning("run failed", extra={"infrastructure_failure": infrastructure})
             last = progress.last_started(run_id)
             failure: dict[str, Any] = {
-                "kind": "step_timeout" if isinstance(e, StepTimeout) else "exception",
+                "kind": (
+                    "step_timeout"
+                    if isinstance(e, StepTimeout)
+                    else "circuit_breaker"
+                    if isinstance(e, ProviderCircuitOpen)
+                    else "exception"
+                ),
                 "step": last[0] if last else None,
                 "step_name": last[1] if last else None,
                 "exception": type(e).__name__,

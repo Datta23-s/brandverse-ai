@@ -34,7 +34,7 @@ from app.core.gates import Finding, GateReport, Statement, evaluate, finding_dic
 from app.core.pipeline import PIPELINE_STEPS
 from app.core.timing import collecting
 from app.core.truth import ProductTruth
-from app.errors import BrandverseError, BudgetExceeded, StepTimeout
+from app.errors import ABORTS, BrandverseError, StepTimeout
 from app.memory.writeback import MemoryStage
 from app.models.runs import StepEvent, StepStatus
 from app.orchestrator import progress
@@ -250,7 +250,7 @@ class Nodes:
             return {"status": "skipped", "unbacked": [], "backed": 0}
         try:
             statements = await self.d.check_brief(ctx, {"brief": brief})
-        except BudgetExceeded:
+        except ABORTS:
             raise
         except Exception as e:
             log.warning("the brief check failed; recorded as unavailable", exc_info=True)
@@ -338,7 +338,7 @@ class Nodes:
         try:
             ctx = await self.context(run, AGENTS_STEP)
             out = await self.d.agents[agent_id].run(run, ctx)
-        except BudgetExceeded:
+        except ABORTS:
             raise
         except Exception as e:
             log.warning("agent failed; the run continues with a gap", extra={"agent": agent_id})
@@ -395,7 +395,7 @@ class Nodes:
         try:
             ctx = await self.context(state, CREATIVE_STEP, round_)
             out = await self.d.agents["A6"].run(state, ctx)
-        except BudgetExceeded:
+        except ABORTS:
             raise
         except Exception as e:
             return {
@@ -476,7 +476,7 @@ class Nodes:
                     ctx.on,
                     neutral_terms=naming_terms(state),
                 )
-            except BudgetExceeded:
+            except ABORTS:
                 raise
             except Exception as e:
                 log.exception("claim extraction failed; blocking the copy")
@@ -505,7 +505,7 @@ class Nodes:
             risk = await self.d.agents["A7"].run(state, ctx)
             # A model opinion, stored apart from `findings` and never counted in `outcome`.
             validation["advisory"] = risk.model_dump(mode="json")
-        except BudgetExceeded:
+        except ABORTS:
             raise
         except Exception as e:
             validation["advisory"] = None

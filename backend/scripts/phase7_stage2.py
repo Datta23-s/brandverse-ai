@@ -583,6 +583,11 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
             "where status in ('queued', 'awaiting_approval')"
         ).rowcount
     print(f"closed {closed} stale in-progress run(s) left by an earlier attempt", flush=True)
+    remaining = calls_remaining(url)
+    print(f"development calls remaining under the ceiling: {remaining}", flush=True)
+    if (refusal := budget_floor_refusal(remaining)) is not None:
+        print("REFUSED:", refusal)
+        return 1
     inputs_all = request_inputs()
     reqs = brand_requests()
     cfg = load_scoring()
@@ -731,6 +736,34 @@ def _db_exists() -> bool:
 
 def _db_url() -> str:
     return ADMIN_URL.rsplit("/", 1)[0] + "/" + DB_NAME
+
+
+BUDGET_FLOOR = 30
+
+
+def budget_floor_refusal(remaining: int, floor: int = BUDGET_FLOOR) -> str | None:
+    """Owner ruling, 5 November 2026: the development ceiling holds at 250 and is not raised
+    quietly. When fewer than `floor` calls remain, no attempt starts; the owner decides."""
+    if remaining < floor:
+        return (
+            f"only {remaining} of the development ceiling's calls remain (floor {floor}): "
+            "come back to the owner; the ceiling is not raised quietly"
+        )
+    return None
+
+
+def calls_remaining(url: str) -> int:
+    """Calls left under the ceiling: the ceiling minus the owner's figure at the ruling plus what
+    this database has logged since (the ledger's own sum, config/dev_budget.yaml)."""
+    from app.llm.dev_budget import load_dev_budget
+
+    budget = load_dev_budget()
+    with psycopg.connect(url, autocommit=True) as c:
+        row = c.execute(
+            "select count(*) filter (where outcome <> 'refused') from llm_calls"
+        ).fetchone()
+    made_here = int(row[0]) if row else 0
+    return budget.ceiling_calls - budget.total(DB_NAME, made_here)
 
 
 def tally(url: str) -> dict[str, int]:

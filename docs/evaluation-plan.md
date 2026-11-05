@@ -86,6 +86,39 @@ gate, `failed` for any other reason — is a result. The primary attempt for a p
 lowest-numbered attempt with no infrastructure-failure reason; a pair whose attempts all ended in
 infrastructure failure has no primary result and is reported as such, never dropped (A2).
 
+#### Amendment 1 (2026-11-05): a fifth infrastructure failure, `provider_unavailable`
+
+*Pre-registration amendment, dated 5 November 2026, by the project owner. The rule of 2026-10-17 above is unchanged and is still reported alongside this amendment (the rule's own instruction for any later change).*
+
+**The amendment.** The list of infrastructure failures gains a fifth kind: **the provider answered with a server-side unavailability, any 5xx (503 "high demand", 500, 502, 504).** It joins rate-limit rejection, network error, process crash and daily-quota exhaustion; everywhere above that says "the four" now reads "the five". A 429 stays `rate_limited` and a transport failure stays `network_error`; nothing else qualifies, and a run that completed and produced poor, blocked or empty output is still a RESULT.
+
+**Reasoning.** A provider outage is not a property of the arm being measured. On 5 November 2026 the standard-tier model answered `503 UNAVAILABLE: This model is currently experiencing high demand` to most agent calls for over an hour; the runs ended `completed` with the agents recorded as failed, which the rule would have counted as the arm's own result. Classifying an outage that way would penalise whichever arm happened to be running during it, and would make the comparison a function of the provider's load rather than of the method.
+
+**No evaluation data existed when this amendment was made, which is what distinguishes it from fitting a rule to results.** Read-only against the live project on 2026-11-05: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`; `runs` has no experiment columns beyond `arm`. The outage was seen only in development runs in a scratch database (`brandverse_stage2`, the Phase 7 freeze-gate check), which is not evaluation data under the membership rule above. The amendment is a classification rule decided before any measurement it could change, in the same position as the rule of 2026-10-17.
+
+**How it is applied mechanically (no judgement afterwards).**
+
+1. *Classification* is by the exception that ended the attempt, as for the others (`app/core/infrastructure.py`): `ProviderUnavailable` (every attempt the gateway was allowed answered 5xx) or `ProviderCircuitOpen` (the run's breaker, below), or a LiteLLM 5xx in the cause chain. The run is ended `failed`, the kind is written to `runs.failure.infrastructure_failure` (migration 0046), and no memory commits (as for every infrastructure failure).
+2. *Bounded retries.* The gateway retries a 5xx at most twice, with exponential backoff (2 s, then 4 s). Each retry is a row of its own with the outcome `provider_unavailable` (migration 0047) on the one that failed. Under the existing spend-versus-work rule those rows are **spend** (the provider was asked: quota, the run's call cap, the cost report) and **never work**, exactly as orphaned calls are, so a retry cannot inflate ARR: the row that finally succeeded is the work.
+3. *Run-level circuit breaker.* **Three consecutive provider-unavailable responses in one run abort that run** as an infrastructure failure, and every later call in the run is refused without a request, instead of grinding through the budget against an outage.
+4. *Reporting.* An attempt ended this way is reported with its kind, the superseded attempt stays in the table, and the primary result for the request-arm pair is the first attempt that ended without any infrastructure failure, as the rule already says. Re-running is permitted.
+
+**Not resolved, flagged for the owner.** The rule classifies how an attempt ENDED. A campaign in which one call exhausted its retries while other calls succeeded in between (the breaker needs three in a row) ends `completed` with a declared gap whose error is `ProviderUnavailable`. By the rule as it stands that is a result. Whether such a gap should make the attempt re-runnable is a ruling not yet made; until it is, the gap is recorded and the outage-window record below identifies the run.
+
+#### Run order: interleaved arms (registered 2026-11-05, before any evaluation call)
+
+The evaluation does not run arm by arm. **For each request the three arms run adjacently**, so a provider outage lands across arms and not inside one. The order is fixed by a registered seed and committed as `evaluation/run_order.yaml` (90 runs; `backend/app/evaluation/schedule.py`; `backend/tests/test_run_order.py` recomputes it and fails on any difference).
+
+* **Seed: 20261105.** Chosen as the date it was registered; not derived from anything, not tried against an outcome, not to be changed after the first evaluation call.
+* **Method:** each item is sorted by `sha256("<seed>|<label>")` with the labels `brand:B05` and `arm:R13:proposed`. No pseudo-random generator and no library version; anyone can recompute it by hand.
+* **What is randomised:** the order of the 10 brand blocks, and the order of the three arms inside each request, so no arm is systematically first (of 30 requests, each arm is first at least 5 times, asserted).
+* **What is NOT, and why this differs from "randomise the request order":** a brand's campaigns keep their registered position 1, 2, 3. The test set's campaign pattern is sequential by design (campaign 1 is a cold start; 2 and 3 read the memory the brand's earlier approved campaigns wrote), so shuffling all 30 requests would change what the Proposed arm remembers. The randomisation is at the level that does not. *This adjustment to the instruction is the developer's and is flagged for the owner's confirmation.*
+* **Registered brand order:** B05, B07, B04, B10, B03, B01, B02, B06, B09, B08.
+
+#### Outage windows (recorded from 2026-11-05)
+
+Every provider outage window observed is recorded, so any run that touched one can be identified afterwards: by hand in `evaluation/outage_windows.yaml` for the window that predates migration 0047 (O-001, 2026-11-05 from 12:54 UTC), and from migration 0047 on derived from the rows (`llm_calls.outcome = 'provider_unavailable'`) by `backend/app/evaluation/outages.py`, which clusters them into windows and lists the runs that overlapped one. A run that overlapped a window is identified, not discarded.
+
 *Memory interaction (Proposed arm).* Later requests for a brand read memory that earlier approved
 campaigns wrote (`Memory.md` §6). Only the primary attempt may write back. Primacy is known only
 when an attempt ends, and `memory_items` rows can never be deleted (0010, 0011), so the rule is

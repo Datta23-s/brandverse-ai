@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # Rate-limit waits (Rules.md C10) are capped: no wait loop runs unbounded against a model.
     llm_max_rate_limit_waits: int = Field(default=3, ge=0, le=10)
     llm_max_rate_limit_wait_s: float = Field(default=90.0, gt=0, le=600)
+    # Provider-unavailable answers (any 5xx; owner ruling 2026-11-05): at most 2 retries per call,
+    # exponential backoff from this base (2 s, then 4 s), each retry its own llm_calls row (spend,
+    # never work); N consecutive such answers in one run abort it as an infrastructure failure.
+    llm_unavailable_retries: int = Field(default=2, ge=0, le=5)
+    llm_unavailable_backoff_s: float = Field(default=2.0, ge=0, le=60)
+    llm_circuit_breaker_streak: int = Field(default=3, ge=1, le=20)
     # A 'pending' llm_calls row older than this is an abandoned reservation (its process died
     # between admission and finish) and stops counting toward caps and quotas. It must exceed the
     # longest a live call can stay pending — (waits + 1) x timeout + total wait = 330 s at the

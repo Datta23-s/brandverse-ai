@@ -53,7 +53,7 @@ log = logging.getLogger(__name__)
 # Advisory-lock keys: hashtextextended('llm:run:<id>') and ('llm:model:<id>'), taken in that order.
 _LOCK_SQL = "select pg_advisory_xact_lock(hashtextextended(%s, 0))"
 
-Outcome = Literal["ok", "invalid_output", "error", "rate_limited"]
+Outcome = Literal["ok", "invalid_output", "error", "rate_limited", "provider_unavailable"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,6 +378,7 @@ class ModelDay:
     invalid_output: int
     error: int
     rate_limited: int
+    provider_unavailable: int
     pending: int
     abandoned: int
     refused: int
@@ -388,7 +389,14 @@ class ModelDay:
     @property
     def calls(self) -> int:
         """Calls counted against caps and quota: everything but refusals and abandoned rows."""
-        return self.ok + self.invalid_output + self.error + self.rate_limited + self.pending
+        return (
+            self.ok
+            + self.invalid_output
+            + self.error
+            + self.rate_limited
+            + self.provider_unavailable
+            + self.pending
+        )
 
 
 _REPORT_SQL = """
@@ -401,6 +409,7 @@ select model, tier,
   count(*) filter (where outcome = 'invalid_output'),
   count(*) filter (where outcome = 'error'),
   count(*) filter (where outcome = 'rate_limited'),
+  count(*) filter (where outcome = 'provider_unavailable'),
   count(*) filter (where outcome = 'pending'
                    and created_at > now() - %(expiry)s * interval '1 second'),
   count(*) filter (where outcome = 'pending'

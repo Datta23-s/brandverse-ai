@@ -24,7 +24,14 @@ from pydantic import BaseModel
 
 from app.core.budgeted_run import Step, run_steps
 from app.core.infrastructure import classify_infrastructure_failure
-from app.errors import BudgetExceeded, LLMCallFailed, LLMRateLimited, QuotaExhausted
+from app.errors import (
+    BudgetExceeded,
+    LLMCallFailed,
+    LLMRateLimited,
+    ProviderCircuitOpen,
+    ProviderUnavailable,
+    QuotaExhausted,
+)
 from app.memory.embeddings import HashingEncoder
 from app.memory.writeback import Correction, MemoryStage, MemoryWrite, WritebackRefused
 from tests.db.conftest import Seed
@@ -182,6 +189,9 @@ IN_PROCESS_FAILURES = [
     ("rate_limited", LLMRateLimited("still rate-limited after 3 waits")),
     ("quota_exhausted", QuotaExhausted("daily quota used up")),
     ("network_error", _network_error()),
+    # The fifth kind (amendment of 2026-11-05): both the retries-exhausted error and the breaker.
+    ("provider_unavailable", ProviderUnavailable("503 high demand on 3 attempts")),
+    ("provider_unavailable", ProviderCircuitOpen("3 consecutive provider-unavailable")),
 ]
 
 

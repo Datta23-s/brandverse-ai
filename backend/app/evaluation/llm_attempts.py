@@ -91,7 +91,8 @@ class CallRow:
 
 @dataclass(frozen=True, slots=True)
 class CallTotals:
-    """spend = work + resume duplicates + orphaned, exactly (`test_orphan_accounting.py`)."""
+    """spend = work + resume duplicates + orphaned + provider-unavailable, exactly
+    (`test_orphan_accounting.py`, `test_provider_unavailable.py`)."""
 
     spend_calls: int
     spend_cost_usd: float
@@ -103,16 +104,27 @@ class CallTotals:
     # spend (they may have reached the provider), never in work.
     orphaned_calls: int = 0
     orphaned_cost_usd: float = 0.0
+    # Calls the provider answered with a 5xx (migration 0047): in spend (it was asked, the quota
+    # and the call cap were used), never in work. A retry is a row of its own, so the row that
+    # finally succeeded is the work and the failed ones are only spend: ARR is unaffected.
+    unavailable_calls: int = 0
+    unavailable_cost_usd: float = 0.0
+
+
+# Outcomes that are spend and never work.
+NOT_WORK = ("orphaned", "provider_unavailable")
 
 
 def totals(rows: Iterable[CallRow]) -> CallTotals:
     """Spend counts every call the provider may have been asked for (a refused call never reached
-    it); work counts the last attempt's, and never an orphaned row; the difference is reported in
-    two named parts (re-executions, orphans), not dropped."""
+    it); work counts the last attempt's, and never an orphaned or provider-unavailable row; the
+    difference is reported in three named parts (re-executions, orphans, outage answers), not
+    dropped."""
     spend = [r for r in rows if r.outcome != "refused"]
     orphaned = [r for r in spend if r.outcome == "orphaned"]
-    work = [r for r in spend if r.last_attempt and r.outcome != "orphaned"]
-    duplicates = [r for r in spend if not r.last_attempt and r.outcome != "orphaned"]
+    unavailable = [r for r in spend if r.outcome == "provider_unavailable"]
+    work = [r for r in spend if r.last_attempt and r.outcome not in NOT_WORK]
+    duplicates = [r for r in spend if not r.last_attempt and r.outcome not in NOT_WORK]
     return CallTotals(
         spend_calls=len(spend),
         spend_cost_usd=_cost(spend),
@@ -122,6 +134,8 @@ def totals(rows: Iterable[CallRow]) -> CallTotals:
         resume_duplicate_cost_usd=_cost(duplicates),
         orphaned_calls=len(orphaned),
         orphaned_cost_usd=_cost(orphaned),
+        unavailable_calls=len(unavailable),
+        unavailable_cost_usd=_cost(unavailable),
     )
 
 

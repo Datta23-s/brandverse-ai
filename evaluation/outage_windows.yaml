@@ -1,0 +1,26 @@
+# Provider outage windows observed (owner ruling, 5 November 2026), so that any run that touched one
+# can be identified afterwards. Append a window the first time an outage is seen; close it when
+# calls succeed again. From migration 0047 on, the rows themselves carry the evidence
+# (llm_calls.outcome = 'provider_unavailable'); app/evaluation/outages.py derives windows from them
+# and finds the runs that overlapped one. Entries below that PREDATE 0047 were reconstructed by hand
+# from rows recorded as 'error' with the 503 text in the worker log, and say so.
+#
+# A run that overlapped a window is not discarded: it is IDENTIFIED. The attempt rule (amended
+# 2026-11-05, docs/evaluation-plan.md) already treats an attempt ended by the outage as an
+# infrastructure failure and re-runnable.
+windows:
+  - id: O-001
+    provider: Google Gemini API, model gemini-3.5-flash-lite (the standard tier)
+    error: "503 UNAVAILABLE: This model is currently experiencing high demand."
+    first_error_utc: "2026-11-05T12:54:26Z"        # 18:24 IST
+    last_error_observed_utc: "2026-11-05T13:28:05Z"
+    status: OPEN at the last observation; closes at the first successful AGENT call after it
+    evidence:
+      database: brandverse_stage2 (a development scratch database)
+      rows: "38 calls errored and 10 succeeded from 12:50Z; the successes were almost all the short
+        brief-check (ADMISSION) calls. In the 36 hours before 12:50Z: 1 error and 9 ok."
+      before_migration_0047: true   # recorded as outcome 'error'; the 503 text is in the worker log
+    runs_touched: "9 development runs in brandverse_stage2 (the 18:18 and 18:51 interim attempts)"
+    evaluation_data_existed: false   # no evaluation run, organisation or experiment existed
+    consequence: "interim attempt 3 (18:18 IST) reported 'failed' on empty inputs and is INVALID
+      (decision-log 2.27); attempt 4 (18:51 IST) was stopped by the campaign integrity guard"
