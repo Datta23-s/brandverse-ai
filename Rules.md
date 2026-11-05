@@ -56,6 +56,14 @@ Source and document files are changed with the Edit tool (or created with Write)
 
 psycopg's async mode refuses Windows' `ProactorEventLoop` (`Architecture.md` section 11). `app/core/event_loop.py` raises `WrongEventLoop` at once where a database connection is made (`create_db_pool`, `open_checkpointer`), and `backend/tests/test_event_loop.py` fails if any `asyncio.run(` in `app/` or `scripts/` does not pass `loop_factory=asyncio.SelectorEventLoop`.
 
+### 1.7 Instrumentation is code, and can be the fault (added 2026-11-05, after six of seven crashes were the diagnostic's own)
+
+Instrumentation added during an investigation (a logger, a timer, a stack dumper, a probe flag, a thread cap, a lock) is code on the path being measured, and it can itself be the fault. **Before any observation collected under a new instrument is recorded as a finding** (in a decision-log entry, a limitation, a rate, a registered statement, a report to the owner) **the instrument must be shown inert for the behaviour recorded**, in one of two ways, and the record says which: (a) the behaviour is reproduced with the instrument removed, or (b) it is established, and the reason given, that the instrument cannot affect the path being measured. Until then the observation is recorded as "observed under <instrument>, NOT shown inert", and no rate, hypothesis or invalidation is built on it.
+
+*The instance, 4 November 2026.* Six of the seven worker and replay-script crashes in the stage-2 investigation were produced by `faulthandler.dump_traceback_later`, a repeating stack dump added that afternoon, which reads other threads' frames without the GIL. In each log the line `File ` is cut off by `Windows fatal exception`. A crash rate (V25: 4 of 13, about 31 percent), a hypothesis that the platform or a preview OS was at fault, and the invalidation of the extraction lock were all recorded as findings before anyone asked whether the instrument was inert; each was withdrawn (`docs/decision-log.md` 2.25). Only the first crash, before the dumper existed, stands (n = 1).
+
+*Enforcement.* For that instrument: `backend/tests/test_diagnostic_settings.py::test_nothing_in_the_code_arms_a_repeating_stack_dump` fails if any code in `app/` or `scripts/` arms it (`faulthandler.enable()`, which acts only at a fatal signal, is allowed). This rule is the generalisation: a test pins one instrument, the rule is the check before recording any. A measurement that is later found to have been made under a non-inert instrument is withdrawn in the same place it was recorded, with the evidence, not edited away.
+
 ---
 
 ## 2. Hard prohibitions
