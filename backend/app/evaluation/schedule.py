@@ -16,6 +16,11 @@ the Proposed arm remembers, so the randomisation is at the level that does not:
 * inside a campaign the three arms run adjacently, in a seeded order that differs by request, so
   no arm is systematically first.
 
+DO NOT "FIX" THE IN-BRAND ORDER. Owner, 5 November 2026: shuffle the brand blocks and the arm order
+within each request, never the campaigns within a brand. Campaigns 1, 2 and 3 are the memory
+progression (the experiment's independent variable), and a full shuffle would destroy what it
+measures. `tests/test_run_order.py` fails if a brand's campaigns leave positions 1, 2, 3.
+
 The "random" order is a hash ordering, not a pseudo-random generator: each item is sorted by
 sha256("<seed>|<label>"). That is fully specified, depends on no library version, and anyone can
 recompute it by hand.

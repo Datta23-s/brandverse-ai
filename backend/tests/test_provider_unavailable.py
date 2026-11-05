@@ -207,9 +207,11 @@ async def test_a_success_resets_the_streak() -> None:
 
 
 async def test_a_connection_error_is_a_network_error_not_an_outage() -> None:
-    """LiteLLM gives APIConnectionError status_code 500 by default; a transport failure is
-    `network_error`, never the fifth kind, and never opens the breaker (found 5 November: the
-    offline request-body test, which cannot reach the provider, tripped it)."""
+    """KEEP THIS TEST (owner, 5 November 2026). LiteLLM gives APIConnectionError status_code 500 by
+    default; a transport failure is `network_error`, never the fifth kind, and never opens the
+    breaker. Read as an outage it would have aborted and re-run healthy runs for the wrong reason,
+    silently (found 5 November: the offline request-body test, which cannot reach the provider,
+    tripped the breaker)."""
     connection = _litellm.APIConnectionError(message="no route", llm_provider="gemini", model="m")
     assert connection.status_code == 500
     assert not is_provider_unavailable(connection)

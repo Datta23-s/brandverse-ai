@@ -13,6 +13,11 @@
 # because campaign 2 and 3 read the memory that the earlier approved campaigns wrote (test_set.yaml
 # campaign_pattern). A shuffle of all 30 requests would change what the Proposed arm remembers.
 #
+# DO NOT "FIX" THIS BY SHUFFLING THE CAMPAIGNS WITHIN A BRAND. Owner, 2026-11-05: "Campaigns 1, 2 and
+# 3 are the memory progression and a full shuffle would destroy what the experiment measures." The
+# in-brand order is the experiment's independent variable (cold start, then memory from one
+# campaign, then from two), not noise to be randomised away.
+#
 # Method: each item is sorted by sha256("<seed>|<label>"), labels "brand:B05" and "arm:R13:proposed".
 # No pseudo-random generator, no library version: anyone can recompute it by hand.
 version: 1
