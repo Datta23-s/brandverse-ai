@@ -400,6 +400,7 @@ def print_table(brand: str, scores: Sequence[CampaignScore]) -> None:
         )
 
 
+ATTEMPT_STAMP = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 CRASH_LOG = Path("C:/BrandverseData/logs/stage2-crashes.jsonl")
 MAX_WORKER_RESTARTS = 12
 # What the runner is doing right now, for the crash log (updated by `run_brand` before each POST).
@@ -611,7 +612,9 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
     def launch(incarnation: int) -> tuple[Any, Path]:
         # One log file per incarnation, so a restart does not overwrite what the dead one wrote.
         suffix = "" if incarnation == 0 else f".{incarnation}"
-        log_path = Path(tempfile.gettempdir()) / f"stage2_worker{suffix}.log"
+        # One file per ATTEMPT as well as per incarnation: a retried interim used to overwrite the
+        # worker log of the attempt before it, which lost the evidence of why it failed.
+        log_path = Path(tempfile.gettempdir()) / f"stage2_worker_{ATTEMPT_STAMP}{suffix}.log"
         proc = subprocess.Popen(  # noqa: S603, ASYNC220
             [sys.executable, "-m", "app.workers"],
             env=worker_env,
