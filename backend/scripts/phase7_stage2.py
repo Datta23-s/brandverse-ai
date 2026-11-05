@@ -680,6 +680,12 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
                 raise  # cancelled from outside, not by the supervisor
             print(f"STOPPED: {supervisor.gave_up}; no result.", flush=True)
             return 2
+        except InvalidCampaign as e:
+            print(
+                f"INVALID RUN, NO REPORT WRITTEN: {e}. TALLY (this database): {tally(url)}",
+                flush=True,
+            )
+            return 3
         finally:
             watcher.cancel()
     finally:
@@ -786,6 +792,11 @@ async def run_brand(
         vectors.append(vec)
         if pos == 3:
             break
+        with psycopg.connect(url, autocommit=True) as c:
+            before = c.execute(
+                "select count(*) from memory_items where brand_id = %s", (brand_id,)
+            ).fetchone()
+        items_before = int(before[0]) if before else 0
         resp = await client.post(
             "/api/v1/runs",
             json={
@@ -815,13 +826,52 @@ async def run_brand(
             wrote = c.execute(
                 "select count(*) from memory_items where brand_id = %s", (brand_id,)
             ).fetchone()
+            ended = c.execute(
+                "select status, declared_gaps from runs where id = %s", (run_id,)
+            ).fetchone()
         print(
             f"{rid}: campaign {pos} approved; "
-            f"memory items for the brand now {wrote[0] if wrote else '?'}"
+            f"memory items for the brand now {wrote[0] if wrote else '?'}",
+            flush=True,
         )
+        problem = campaign_problem(
+            ended[0] if ended else None,
+            list(ended[1]) if ended else [],
+            items_before,
+            int(wrote[0]) if wrote else 0,
+        )
+        if problem is not None:
+            raise InvalidCampaign(f"{rid} (campaign {pos}): {problem}")
         if pos >= stop_after:
             break
     return scores
+
+
+class InvalidCampaign(RuntimeError):
+    """A live campaign did not produce what the measurement needs, so nothing scored from it, or
+    after it, can mean anything. Stops the run; no report is written."""
+
+
+def campaign_problem(
+    status: str | None, gaps: Sequence[dict[str, Any]], items_before: int, items_after: int
+) -> str | None:
+    """Why a live campaign cannot be scored, or None. Found 5 November 2026: the provider answered
+    503 to every agent call, the runs still ended `completed` (with declared gaps, no copy and no
+    personas), no memory was written, every later campaign recalled nothing, and the interim
+    reported 'failed' on empty inputs after 30 minutes and 53 calls. A campaign that did not write
+    memory is not an observation of how memory changes R."""
+    if status != "completed":
+        return f"the run ended {status!r}, not 'completed'"
+    failed = sorted({str(g["agent"]) for g in gaps if g.get("agent")})
+    if failed:
+        errors = sorted({str(g.get("error")) for g in gaps if g.get("agent")})
+        return (
+            f"agents failed ({', '.join(failed)}; {', '.join(errors)}): the campaign has no "
+            "complete copy and writes no memory"
+        )
+    if items_after <= items_before:
+        return f"it added no memory ({items_before} items before, {items_after} after)"
+    return None
 
 
 def _as_dict(i: Any) -> dict[str, object]:
