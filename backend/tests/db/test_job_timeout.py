@@ -75,6 +75,7 @@ async def test_a_job_that_runs_out_of_time_ends_its_run_failed_naming_the_step(
             await run_pipeline(
                 {"pipeline": pipeline, "settings": ctx_settings}, _payload(seed, run_id)
             )
+        await asyncio.sleep(1.5)  # as below: let the cancelled agent tasks finish unwinding
 
     # The terminal state: failed, with an ending time, no longer an orphan, and the reason.
     assert run_row(db_url, run_id) == ("failed", True)
@@ -108,6 +109,10 @@ async def test_a_worker_shutdown_is_not_a_timeout_and_the_run_stays_resumable(
         task.cancel()  # what ARQ does at shutdown: a cancellation that is not our deadline
         with pytest.raises(asyncio.CancelledError):
             await task
+        # The pipeline's own agent tasks are cancelled with it and are still unwinding their
+        # database I/O. Let them finish before the pool and the loop close, or the test runner's
+        # teardown meets a closed socket (Windows: WinError 10038), intermittently.
+        await asyncio.sleep(1.5)
     assert run_row(db_url, run_id)[0] == "queued"  # nothing written: the checkpoint is the record
     assert _failure(db_url, run_id) is None
     assert run_id in await orphaned_runs(pool)  # the sweep will continue it
