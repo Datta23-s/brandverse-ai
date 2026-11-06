@@ -56,6 +56,7 @@ class RunState(TypedDict, total=False):
     research: dict[str, Any] | None
     findings: Annotated[list[dict[str, Any]], add]
     selected_agents: list[str]
+    agent_rationale: dict[str, str]  # why each pool agent ran or did not (step 7)
     agent_outputs: Annotated[dict[str, Any], merge_dicts]
     personas: list[dict[str, Any]]
     strategy: dict[str, Any] | None

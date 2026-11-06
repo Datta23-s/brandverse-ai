@@ -27,6 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Send
 
 from app.agents.base import AgentContext
+from app.agents.market import PAGES_BY_DEPTH
 from app.core.admission import AdmissionInputs, RestrictedClaim, decide_admission
 from app.core.brief_check import assess, reconcile
 from app.core.citation_terms import neutral_stems
@@ -370,7 +371,24 @@ class Nodes:
         if d0:
             await self.emit(state, RESEARCH_STEP, StepStatus.SKIPPED, "D0: no research")
         fan_out = [a for a in FAN_OUT_AGENTS if not (a == "A2" and d0)]
-        return {"selected_agents": [*fan_out, "A6", "A7"], "_detail": ", ".join(fan_out)}
+        # The rule and its reason are kept with the run (Phases.md Phase 7: persisted rationale).
+        # A2 reads the pages research fetched, so it runs iff the depth is not D0; A1, A3, A6 and
+        # A7 always run (A3's personas feed C and write-back; A6/A7 are the copy and its read).
+        depth = state.get("depth", "D1")
+        rationale = {
+            "A2": "skipped: depth D0 does no research, so there are no pages to read"
+            if d0
+            else f"runs: depth {depth} fetched pages (reads {PAGES_BY_DEPTH[depth]})",
+            "A1": "always runs",
+            "A3": "always runs (its personas feed C and write-back)",
+            "A6": "always runs",
+            "A7": "always runs",
+        }
+        return {
+            "selected_agents": [*fan_out, "A6", "A7"],
+            "agent_rationale": rationale,
+            "_detail": ", ".join(fan_out),
+        }
 
     def fan_out(self, state: RunState) -> list[Send]:
         run = cast(RunState, dict(state))

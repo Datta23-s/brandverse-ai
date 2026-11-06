@@ -33,6 +33,7 @@ from app.errors import (
     StepTimeout,
 )
 from app.llm.ledger import CallContext
+from app.memory.scoring import load_scoring
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunEvent, RunFailed, RunStarted, StepEvent
 from app.orchestrator.adapters import PageEvidence, driver_research
@@ -44,6 +45,7 @@ from app.orchestrator.deps import (
     no_memory,
 )
 from app.orchestrator.graph import build_graph
+from app.orchestrator.nodes import PipelineInputError
 from app.orchestrator.runner import (
     NotAwaitingApproval,
     NotRecoverable,
@@ -183,6 +185,7 @@ class Harness:
         *,
         brief: str | None = None,
         depth: str = "D1",
+        depth_policy: str = "requested",
         brief_check: dict[str, Any] | None = None,
     ) -> PipelineOutcome:
         return await self.pipeline.start(
@@ -192,6 +195,7 @@ class Harness:
             product_id=PRODUCT,
             brief=brief,
             depth=depth,  # type: ignore[arg-type]
+            depth_policy=depth_policy,  # type: ignore[arg-type]
             brief_check=brief_check,
         )
 
@@ -269,6 +273,51 @@ async def test_d0_skips_research_and_the_market_agent() -> None:
     out = await h.start(depth="D0")
     assert (6, "skipped") in h.sink.steps() and (6, "started") not in h.sink.steps()
     assert sorted(out.state["agent_outputs"]) == ["A1", "A3"]
+
+
+def _engine(h: Harness, similarities: list[float], novelty: float) -> None:
+    """Wire the necessity engine into a harness whose recall returns these similarities."""
+
+    async def retrieve(state: RunState, personas: Any = None) -> MemoryResult:
+        return MemoryResult([], 0.0, 0, 2, similarities)
+
+    async def n(state: RunState) -> float:
+        return novelty
+
+    h.deps.retrieve, h.deps.necessity, h.deps.novelty = retrieve, load_scoring().necessity, n
+
+
+async def test_the_engine_sets_the_depth_and_a2_runs_iff_the_depth_is_not_d0() -> None:
+    """Phases.md Phase 7: the engine chooses the depth; A2 follows the CHOSEN depth, not the
+    requested one, and the rule and its reason are kept with the run."""
+    cold = Harness()
+    _engine(cold, [], 1.0)
+    out = await cold.start(depth="D0", depth_policy="necessity")  # asked for D0, R says D2
+    assert out.state["depth"] == "D2" and out.state["necessity"]["requested"] == "D0"
+    assert "A2" in out.state["selected_agents"] and (6, "started") in cold.sink.steps()
+    assert out.state["agent_rationale"]["A2"].startswith("runs: depth D2")
+
+    warm = Harness()
+    _engine(warm, [0.9] * 12, 0.02)
+    out = await warm.start(depth="D2", depth_policy="necessity")  # asked for D2, R says D0
+    assert out.state["depth"] == "D0" and out.state["research_score"] == out.state["necessity"]["r"]
+    assert (6, "skipped") in warm.sink.steps() and (6, "started") not in warm.sink.steps()
+    assert sorted(out.state["agent_outputs"]) == ["A1", "A3"]
+    assert "A2" not in out.state["selected_agents"]
+    assert out.state["agent_rationale"]["A2"].startswith("skipped: depth D0")
+
+
+async def test_a_requested_depth_still_wins_under_the_requested_policy_and_r_is_advice() -> None:
+    h = Harness()
+    _engine(h, [0.9] * 12, 0.02)
+    out = await h.start(depth="D2")
+    assert out.state["depth"] == "D2" and out.state["necessity"]["advised"] == "D0"
+
+
+async def test_asking_for_the_engine_on_a_pipeline_without_one_fails_the_run() -> None:
+    h = Harness()
+    with pytest.raises(PipelineInputError, match="no necessity engine"):
+        await h.start(depth_policy="necessity")
 
 
 async def test_a_research_step_over_its_timeout_fails_naming_the_step() -> None:
