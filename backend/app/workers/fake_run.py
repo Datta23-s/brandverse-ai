@@ -4,7 +4,8 @@ No LLM call, no search, no database write. Each step of `PIPELINE_STEPS` emits `
 `step_delay_ms`, then emits `completed` — or `failed` when the request asks for a simulated
 failure. Step 6 runs at EVERY depth, D0 included: D0 is one fresh query, not no research
 (decision-log 2.36), and the fake run now says so instead of skipping the step. The events
-are the same contract the LangGraph pipeline will emit from Phase 6, so the SSE endpoint and the UI are built and debugged against them now.
+are the same contract the LangGraph pipeline will emit from Phase 6, so the SSE endpoint and
+the UI are built and debugged against them now.
 """
 
 import asyncio
