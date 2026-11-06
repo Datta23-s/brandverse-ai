@@ -534,14 +534,20 @@ class WorkerSupervisor:
         )
 
 
-async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> int:
+async def run_live(
+    brands: Sequence[str], stage: str, probe: bool = False, confirm: bool = False
+) -> int:
     """Campaigns 1 and 2 live per brand, campaign 3 from recall; resumable per brand.
 
     `probe`: ONE brand (the first), campaign 1 only, then stop. It writes NO report (a report would
     read as an interim result and wake the recording queue) and is for finding out whether a live
     run completes at all (stage-2 interim, 2026-11-04: step 6 never finished)."""
-    if probe:
+    if probe or confirm:
         brands = list(brands)[:1]
+    # `confirm` (owner, 2026-11-06): the END-TO-END confirmation of the Phase 7 mechanism on real
+    # models, ONE brand, all THREE campaigns live, depth chosen by the necessity engine
+    # (depth_policy "necessity"), memory injected into A6. It writes NO report (it is not an
+    # interim result and gates nothing) and prints what each run did, read back from the database.
     # Imported here so the pure functions above (and their tests) load without the app, the encoder
     # or a database.
     import httpx
@@ -686,8 +692,10 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
                             wait_for_end,
                             stop_after=1 if probe else 3,
                             spent_at_start=spent_at_start,
+                            depth_policy="necessity" if confirm else "requested",
+                            live_through=3 if confirm else 2,
                         )
-                        if not probe:
+                        if not probe and not confirm:
                             print_table(b, results[b])
         except asyncio.CancelledError:
             if supervisor.gave_up is None:
@@ -712,8 +720,9 @@ async def run_live(brands: Sequence[str], stage: str, probe: bool = False) -> in
         "crashes / research steps started, counted from the worker logs",
     }
     print("WORKER CRASH RATE:", rate, flush=True)
-    if probe:
-        print("PROBE COMPLETE (no report written). TALLY (this database):", tally(url))
+    if probe or confirm:
+        what = "PROBE" if probe else "CONFIRMATION RUN"
+        print(f"{what} COMPLETE (no report written). TALLY (this database):", tally(url))
         return 0
     OUT.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240 - one local directory, at the end
     verdict = interim_verdict(results) if stage == "interim" else None
@@ -842,6 +851,8 @@ async def run_brand(
     wait_for_end: Any,
     stop_after: int = 3,
     spent_at_start: int = 0,
+    depth_policy: str = "requested",
+    live_through: int = 2,
 ) -> list[CampaignScore]:
     """One brand: its own organisation (so no memory crosses brands), campaign 1 live, campaign 2
     live, campaign 3 scored from recall. Each campaign is SCORED before it runs, from the memory
@@ -879,7 +890,7 @@ async def run_brand(
         )
         scores.append(score)
         vectors.append(vec)
-        if pos == 3:
+        if pos > live_through:  # the interim runs 1 and 2 live and SCORES 3 from recall
             break
         # The attempt's own cap, checked before the campaign starts (never mid-campaign), so the
         # attempt cannot exceed it (owner, 2026-11-05).
@@ -898,7 +909,8 @@ async def run_brand(
                 "product_id": str(product),
                 "brief": inp.brief,
                 "audience": inp.audience,
-                "depth": RUN_DEPTH[pos],
+                "depth": RUN_DEPTH.get(pos, "D1"),
+                "depth_policy": depth_policy,
             },
             headers=headers,
         )
@@ -936,9 +948,44 @@ async def run_brand(
         )
         if problem is not None:
             raise InvalidCampaign(f"{rid} (campaign {pos}): {problem}")
+        if depth_policy == "necessity":
+            print(f"CONFIRMATION {rid} campaign {pos}: {run_evidence(url, run_id)}", flush=True)
         if pos >= stop_after:
             break
     return scores
+
+
+def run_evidence(url: str, run_id: UUID) -> dict[str, Any]:
+    """What the confirmation run reads back from a finished run, no model call: the depth the
+    ENGINE chose and R, what was injected and in which band (the campaign's strategy), the prompt
+    versions of the calls, and how many pages A2 read."""
+    with psycopg.connect(url, autocommit=True) as c:
+        run = c.execute(
+            "select depth, research_score, selected_agents, llm_call_count from runs where id = %s",
+            (run_id,),
+        ).fetchone()
+        strat = c.execute(
+            "select strategy from campaigns where run_id = %s order by 1 limit 1", (run_id,)
+        ).fetchone()
+        prompts = c.execute(
+            "select prompt_id || '@' || prompt_version, count(*) from llm_calls "
+            "where run_id = %s and outcome <> 'refused' group by 1 order by 1",
+            (run_id,),
+        ).fetchall()
+    injection = ((strat or [None])[0] or {}).get("injection") or {}
+    return {
+        "depth_chosen": run[0] if run else None,
+        "r": float(run[1]) if run and run[1] is not None else None,
+        "agents": list(run[2]) if run and run[2] else None,
+        "calls": run[3] if run else None,
+        "injected": [
+            (i["id"][:8], i["band"], round(i["m"], 3)) for i in injection.get("items", [])
+        ],
+        "injection_counts": {
+            k: injection.get(k) for k in ("considered", "below_floor", "over_cap", "cap")
+        },
+        "prompts": {p: n for p, n in prompts},
+    }
 
 
 async def wait_parked_or_ended(
@@ -1072,9 +1119,17 @@ def main() -> int:
         action="store_true",
         help="one brand, campaign 1 only, no report: does a live run complete at all?",
     )
+    p.add_argument(
+        "--confirm",
+        action="store_true",
+        help="one brand, three campaigns live, depth chosen by the necessity engine, memory "
+        "injected: the end-to-end confirmation of Phase 7 (no report, gates nothing)",
+    )
     a = p.parse_args()
-    if a.probe and a.stage != "interim":
-        p.error("--probe is for the interim stage only")
+    if (a.probe or a.confirm) and a.stage != "interim":
+        p.error("--probe and --confirm are for the interim stage only")
+    if a.probe and a.confirm:
+        p.error("--probe and --confirm are different runs")
     if a.dry_run:
         return dry_run(a.stage)
     if a.stage == "rest":
@@ -1084,7 +1139,8 @@ def main() -> int:
             return 1
     brands = INTERIM_BRANDS if a.stage == "interim" else REST_BRANDS
     return asyncio.run(
-        run_live(brands, a.stage, probe=a.probe), loop_factory=asyncio.SelectorEventLoop
+        run_live(brands, a.stage, probe=a.probe, confirm=a.confirm),
+        loop_factory=asyncio.SelectorEventLoop,
     )
 
 

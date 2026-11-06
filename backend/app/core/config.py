@@ -13,6 +13,8 @@ from uuid import UUID
 from pydantic import Field, HttpUrl, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.call_budget import logical_calls, worst_case_calls
+
 # backend/app/core/config.py -> repository root, where `.env` lives (Architecture.md §11).
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -217,6 +219,17 @@ class Settings(BaseSettings):
             )
         if self.environment == "production" and self.pipeline_agents == "mock":
             raise ValueError("pipeline_agents must be 'real' in production")
+        if self.environment == "production":
+            # The per-run call cap must cover the registered worst case of one run (the cap audit,
+            # decision-log 2.36): a cap below it turns a run that is working into a refused one.
+            worst = worst_case_calls(self.max_revision_rounds, self.llm_unavailable_total_cap)
+            if self.max_llm_calls_per_run < worst:
+                raise ValueError(
+                    f"max_llm_calls_per_run ({self.max_llm_calls_per_run}) is below the worst "
+                    f"case of one run ({worst}: {logical_calls(self.max_revision_rounds)} calls "
+                    f"with {self.max_revision_rounds} revision rounds plus "
+                    f"{self.llm_unavailable_total_cap} provider-unavailable retries)"
+                )
         longest_pending_s = (
             self.llm_max_rate_limit_waits + 1
         ) * self.llm_call_timeout_s + self.llm_max_rate_limit_wait_s

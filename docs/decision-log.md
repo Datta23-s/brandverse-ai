@@ -817,6 +817,31 @@ Full text: `docs/phase7-first-decision.md` section 7a. (1) Stage 2 computes **OL
 
 **Examined and left alone, as ruled:** the 5-word screen (it removed items again, each a genuine run), A2's prompt, the other unregistered constants (2.35 item 4).
 
+### 2.38 Rulings on the fresh slot's reach, the documents, the order, and what attempt 24 established (6 November 2026, owner)
+**1. A2 stays OFF at D0; D0's page budget stays 0; component 2 is not revised. The freshness floor is PARTIAL.** Stated before anyone reads the results: at D0 the one fresh query surfaces new SOURCES to A3 as evidence titles, but **writes no new memory**, because extraction (A2) is skipped to preserve the agent-selection reduction. *Why the experiment is not exposed:* over a brand's three-campaign sequence, campaigns 1 and 2 run at D2 and D1 and both write memory, so the echo chamber the floor guards against (memory feeding on memory with no new material) cannot form inside the experiment. *Sustained production use WOULD be exposed* (a brand that runs at D0 campaign after campaign writes nothing new), and that is on the **production-hardening list beside process isolation**. **A correction to the 6 November fresh-slot reasoning (2.36 item 1): it overstated what option (a) delivers. It buys a fresh SOURCE, not fresh MEMORY.** The SRR treatment stands unchanged: the query costs a search and is counted.
+
+**2. Documents.** `fake_run.py`, `Architecture.md`, `Memory.md` and `Phases.md` are amended so that none still says D0 is zero searches (inconsistent documentation is how the next unexamined constant gets written).
+
+**3. Remaining order:** cap audit, then the confirmation run (about 65 calls; 259 remain, so one repeat fits), then the documents. A1 injection only if everything else is green.
+
+**4. What attempt 24 established (2.37), stated as strongly as the evidence allows.** OLD's registered prediction held in **4 of 4** brands and FLOOR's in **4 of 4**, exactly as written: **the system's behaviour is predictable; it is the discrimination that is thin.** A model that predicts its own failure correctly is evidence that the model is sound. **COUNT fell from 2 of 4 to 1 of 4 after the page repair, while recall at campaign 2 rose from a mean of 4.5 to 7.5: the repair moved the quantity, and moved brands OUT of COUNT's window rather than into it** (B01 and B03, at 9 and 12 items, overshot the window in which campaign 2 stays a D1 slot). It is the clearest evidence yet that **the binding constraint is the per-campaign yield variance (3 to 12 items from one stochastic call), not any definition of U.**
+
+### 2.39 The cap audit (6 November 2026; ZERO model calls; `tests/test_cap_audit.py`, `app/core/call_budget.py`)
+Each cap on the evaluation path, the registered parameter it bounds, that parameter's worst case, and the result. A cap is wrong when nothing says what it bounds; each row below is now a test.
+
+| cap | value | bounds | worst case (derivation) | result |
+|---|---|---|---|---|
+| production calls per run (`MAX_LLM_CALLS_PER_RUN`, Architecture 12) | 20 | calls in one run | 13 logical (brief check 1, A1/A2/A3 3, 3 per draft x 3 drafts) + 6 provider-unavailable retry rows = **19** | covers it, **margin 1**. A structured repair (7 in 340 calls measured) is not in the 19; a second repair at the very worst case is refused and the run ends partial, declared. *Finding, not changed (registered figure).* |
+| the same, as a start-up check | production only | the figure above | `worst_case_calls(max_revision_rounds, total cap)` | **NEW:** a production configuration below it does not start (e.g. `max_revision_rounds` raised to 5 with a cap of 20 is refused) |
+| stage-2 `PER_RUN_CALL_CAP` | 15 | one stage-2 campaign | 13 logical | covers it plus a repair; **does not cover the six retries**, so an outage can reach the cap before the provider-unavailable abort (that run is invalidated on its gap either way). Not on the evaluation path. |
+| stage-2 `ATTEMPT_CALL_CAP` | 125 | one interim attempt | 8 live campaigns x 15 = 120 | covers it |
+| A2 pages (`PAGES_BY_DEPTH`) | 0 / 6 / 10 | pages read per depth | D2 >= round(D1 x 1.657, the measured fetch ratio) | covers it; rises with depth |
+| worker job timeout | 1800 s | wall time of one run | research at its timeout 900 s + 11 sequential calls x 60 s = **1560 s** (no repair or retry); longest measured run 516 s, longest call 277 s | covers it. A repair or retry on EVERY call passes 1800 s: that is the timeout doing its job (a visible failure). |
+| research step timeout | **off by default** | the research step | the evaluation worker sets 900 s (as stage 2 does) | *Finding:* the default is None, so the only bound on a stuck research step is the 1800 s job timeout. The evaluation worker MUST set `RESEARCH_STEP_TIMEOUT_S=900`; to go in the runbook. |
+| injection cap | 12 | injected items per run | the frozen `item_cap`; U saturates at the same 12 | equal by construction |
+| evaluation call budget | 660 + 300 = 960 | evaluation calls | plan 660 + one re-run in three | **built (2.36 item 4)**; disjoint from the development ceiling by test |
+| strong tier | 20 a day | strong calls in a day | the plan expects 18 to 24 in the regulated runs | **the worst case is ABOVE the cap**: a scheduling requirement (spread those runs over two days by hand), asserted by a test so it is not silent; a T4 call is never downgraded |
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
