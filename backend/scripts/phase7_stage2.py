@@ -748,13 +748,28 @@ def _db_url() -> str:
 
 
 # The worker's per-run cap (MAX_LLM_CALLS_PER_RUN below reads this, so the two cannot drift).
-PER_RUN_CALL_CAP = 10
+#
+# RAISED from 10 to 15 on 2026-11-06, because 10 CONTRADICTED THE DESIGN IT IS MEASURING. Measured
+# in attempt 22: a campaign costs 7 or 8 calls with no revision round (brief check 1, A1/A2/A3 3,
+# A6 1, A7 2 — the claim classifier and the risk reader both log as A7), and **3 more per revision
+# round** (A6 once, A7 twice). `max_revision_rounds` is 2 by registered design (Phases.md chunk B),
+# so a campaign's own worst case is 7 + 6 = 13: at a cap of 10, a campaign that used its allowed
+# rounds could not finish, and B02's campaign 2 ended `partial` at exactly that point. 15 leaves
+# room for a repair call (Rules.md C8) on top of the registered worst case. Changing
+# `max_revision_rounds` instead was REJECTED: the rounds are part of what the evaluation measures.
+PER_RUN_CALL_CAP = 15
 # The most calls ONE attempt may spend (owner, 2026-11-05: "no attempt can exceed a stated
 # number"). A campaign starts only when its own worst case still fits under this, so the number is
-# a bound and not an estimate. Arithmetic: a clean interim is 8 live campaigns at about 7 calls
-# plus a brief check each, about 64; campaigns therefore start while at most 65 are spent
-# (75 - 10), which a clean interim never reaches; and the attempt can never exceed 75.
-ATTEMPT_CALL_CAP = 75
+# a bound and not an estimate.
+#
+# RAISED from 75 to 125 on 2026-11-06. The 75 came from MY arithmetic of about 7 calls a campaign
+# (8 x 7 + brief checks, about 64), and that arithmetic was wrong in the same way "about 5 calls
+# per attempt" was: it ignored revision rounds. Measured costs in attempt 22 were 7, 10, 8 and 10.
+# Honest figures now: 8 live campaigns at the per-run worst case of 15 is 120, so the bound is 125;
+# campaigns start while at most 110 are spent; a typical attempt is nearer 70 to 80.
+# STATED CONSEQUENCE: one attempt can therefore consume most of the remaining development budget,
+# which is what the 400-call report tripwire is for.
+ATTEMPT_CALL_CAP = 125
 
 
 def attempt_cap_refusal(

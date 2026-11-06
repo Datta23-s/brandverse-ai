@@ -56,14 +56,16 @@ def test_an_attempt_cannot_exceed_its_stated_call_cap() -> None:
         attempt_cap_refusal,
     )
 
-    assert (ATTEMPT_CALL_CAP, PER_RUN_CALL_CAP) == (75, 10)
-    # A clean interim is about 64 calls, so it never reaches the threshold.
-    assert attempt_cap_refusal(64) is None
-    assert attempt_cap_refusal(65) is None  # the last campaign that may start
-    refusal = attempt_cap_refusal(66)  # 66 + 10 would exceed 75
-    assert refusal is not None and "attempt cap is 75" in refusal
+    assert (ATTEMPT_CALL_CAP, PER_RUN_CALL_CAP) == (125, 15)
+    # The per-run cap must allow a campaign's registered worst case: 7 base + 3 per revision round
+    # with max_revision_rounds = 2 is 13 (measured 2026-11-06), plus a repair call.
+    assert PER_RUN_CALL_CAP >= 13
+    # A typical interim is 70 to 80 calls, so it never reaches the threshold.
+    assert attempt_cap_refusal(80) is None
+    assert attempt_cap_refusal(110) is None  # the last campaign that may start
+    refusal = attempt_cap_refusal(111)  # 111 + 15 would exceed 125
+    assert refusal is not None and "attempt cap is 125" in refusal
     # The bound holds however the calls were spent, and the worst case is the cap itself.
-    assert attempt_cap_refusal(75) is not None
     assert all(
         attempt_cap_refusal(spent) is not None
         for spent in range(ATTEMPT_CALL_CAP - PER_RUN_CALL_CAP + 1, ATTEMPT_CALL_CAP + 1)
