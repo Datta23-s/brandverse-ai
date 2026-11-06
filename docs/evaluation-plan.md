@@ -123,6 +123,8 @@ infrastructure failure has no primary result and is reported as such, never drop
 
 **How it is applied mechanically.** `LLMGateway.structured` records every infrastructure attempt in the sequence and marks a failure that ends it (`infrastructure_in_sequence`); `classify_infrastructure_failure` reads the mark (first kind wins; a direct infrastructure failure is unchanged). The agent's recorded gap then carries the infrastructure kind, and Amendment 1's invalidation applies unchanged: **only `provider_unavailable` invalidates** (the rate-limit and network questions stay open). **Interaction with the 2-re-run cap:** the rule changes WHAT is classified infrastructure, not how many re-runs there are: the original and two re-runs, and a third failure comes to the owner (`reruns.next_action`, tested in `tests/test_sequence_classification.py`). A campaign whose sequences are repeatedly caught by the rule therefore costs at most two re-runs before it is escalated, not an unbounded loop.
 
+**A successful answer after a retry is KEPT (owner, 2026-11-06), flagged, and checked for sensitivity.** Discarding successes would cost enormous re-runs to remove a speculative effect. A campaign that contained a provider-unavailable answer is **flagged** (derived from `llm_calls`, `app/evaluation/provider_retries.py`), and the analysis reports every headline figure **with and without the flagged campaigns**.
+
 **No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`.
 
 #### Run order: interleaved arms (registered 2026-11-05, before any evaluation call)
