@@ -120,8 +120,8 @@ async def run(
 URLS = {r: [f"https://site{r}.example/a", f"https://site{r}.example/b"] for r in range(1, 9)}
 
 
-async def test_d0_searches_nothing_d1_the_first_pass_d2_all_of_it():
-    for depth, asked in (("D0", []), ("D1", [1, 2, 3, 4]), ("D2", [1, 2, 3, 4, 5, 6, 7, 8])):
+async def test_d0_is_one_fresh_query_d1_the_first_pass_d2_all_of_it():
+    for depth, asked in (("D0", [1]), ("D1", [1, 2, 3, 4]), ("D2", [1, 2, 3, 4, 5, 6, 7, 8])):
         s, p = Searches(URLS), Pages({})
         out = await run(s, p, depth)
         assert s.asked == asked and out.searches_issued == len(asked)

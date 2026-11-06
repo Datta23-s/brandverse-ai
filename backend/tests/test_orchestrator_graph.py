@@ -268,10 +268,14 @@ async def test_a_rejection_is_a_completed_run_with_a_rejected_campaign_and_needs
     assert h.ledger.calls[-1][:2] == ("end", "completed")
 
 
-async def test_d0_skips_research_and_the_market_agent() -> None:
+async def test_d0_runs_the_one_fresh_query_and_skips_only_the_market_agent() -> None:
+    """Decision-log 2.36: D0 is "one fresh query", so step 6 RUNS at D0 (it is not skipped), the
+    research is asked for depth D0 (the planner takes one query for it), and only A2 is left out."""
     h = Harness()
     out = await h.start(depth="D0")
-    assert (6, "skipped") in h.sink.steps() and (6, "started") not in h.sink.steps()
+    assert (6, "started") in h.sink.steps() and (6, "completed") in h.sink.steps()
+    assert (6, "skipped") not in h.sink.steps()
+    assert out.state["research"] == {"depth": "D0"}
     assert sorted(out.state["agent_outputs"]) == ["A1", "A3"]
 
 
@@ -285,6 +289,10 @@ def _engine(h: Harness, similarities: list[float], novelty: float) -> None:
         return novelty
 
     h.deps.retrieve, h.deps.necessity, h.deps.novelty = retrieve, load_scoring().necessity, n
+
+
+def warm_research_depth(out: PipelineOutcome) -> Any:
+    return out.state["research"]["depth"]
 
 
 async def test_the_engine_sets_the_depth_and_a2_runs_iff_the_depth_is_not_d0() -> None:
@@ -301,7 +309,8 @@ async def test_the_engine_sets_the_depth_and_a2_runs_iff_the_depth_is_not_d0() -
     _engine(warm, [0.9] * 12, 0.02)
     out = await warm.start(depth="D2", depth_policy="necessity")  # asked for D2, R says D0
     assert out.state["depth"] == "D0" and out.state["research_score"] == out.state["necessity"]["r"]
-    assert (6, "skipped") in warm.sink.steps() and (6, "started") not in warm.sink.steps()
+    assert (6, "started") in warm.sink.steps()  # even a D0 run does its one fresh query
+    assert warm_research_depth(out) == "D0"
     assert sorted(out.state["agent_outputs"]) == ["A1", "A3"]
     assert "A2" not in out.state["selected_agents"]
     assert out.state["agent_rationale"]["A2"].startswith("skipped: depth D0")

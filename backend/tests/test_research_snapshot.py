@@ -137,7 +137,7 @@ async def test_replay_can_serve_any_depth_as_a_prefix_of_the_recorded_list(tmp_p
     await capture(store, "R01", LiveSearch(plan, urls_for(plan)), LivePages())
     d1, d0 = await replay(store, depth="D1"), await replay(store, depth="D0")
     assert (d1.searches_issued, d1.pages_fetched) == (4, 8)
-    assert (d0.searches_issued, d0.pages_fetched) == (0, 0)
+    assert (d0.searches_issued, d0.pages_fetched) == (1, 2)  # the one fresh query (2.36)
 
 
 # ── Whole or nothing ─────────────────────────────────────────────────────────────────────────

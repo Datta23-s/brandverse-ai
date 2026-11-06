@@ -1,7 +1,8 @@
 """The query planner (docs/evaluation-plan.md section 8, Architecture.md section 6).
 
 One request in, ONE ranked query list out. It runs once per request, before any arm picks a depth,
-from the request alone; D0 takes none of the list, D1 the first pass, D2 all of it. Every arm that
+from the request alone; D0 takes the FIRST query only (the forced fresh slot: decision-log 2.36),
+D1 the first pass, D2 all of it. Every arm that
 researches draws from this one list, so the evidence available to an arm is identical and only how
 much of it an arm consumes varies.
 
@@ -50,6 +51,9 @@ TEMPLATE_VERSION = "v1"
 
 Facet = Literal["competitor_positioning", "audience_needs", "reference_facts", "sector_rules"]
 Depth = Literal["D0", "D1", "D2"]
+# Queries a D0 run still performs: the forced fresh research slot (Memory.md section 9; owner,
+# 2026-11-06, option (a)). D0 means "one fresh query", not "no search".
+FRESH_SLOT_QUERIES = 1
 
 # Who uses each facet (a facet without a consumer would not exist).
 CONSUMER: dict[Facet, str] = {
@@ -132,9 +136,10 @@ class QueryPlan:
         return len(self.facets)
 
     def for_depth(self, depth: Depth) -> tuple[PlannedQuery, ...]:
-        """D0 none, D1 the first pass (every facet once), D2 all of it."""
+        """D0 ONE query (the highest-priority facet's first: the forced fresh slot, so that no run
+        is memory alone; decision-log 2.36), D1 the first pass (every facet once), D2 all of it."""
         if depth == "D0":
-            return ()
+            return self.queries[:FRESH_SLOT_QUERIES]
         if depth == "D1":
             return self.queries[: self.first_pass_size]
         return self.queries

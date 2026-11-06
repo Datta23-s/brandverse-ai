@@ -12,6 +12,7 @@ import pytest
 from app.memory.scoring import load_scoring
 from app.research.planner import (
     CONSUMER,
+    FRESH_SLOT_QUERIES,
     PRIORITY,
     TEMPLATES,
     PlanRequest,
@@ -53,7 +54,9 @@ def test_the_shipped_configuration_gives_q_of_eight_and_leaves_the_fetch_cap_uns
 
 def test_depth_is_a_prefix_of_the_one_list():
     p = plan(request())
-    assert p.for_depth("D0") == ()
+    # D0 is ONE fresh query, never none: the forced fresh slot (decision-log 2.36).
+    assert p.for_depth("D0") == p.queries[:1] and len(p.for_depth("D0")) == FRESH_SLOT_QUERIES == 1
+    assert p.for_depth("D1")[:1] == p.for_depth("D0")
     assert p.for_depth("D1") == p.queries[:4]
     assert p.for_depth("D2") == p.queries
     assert p.for_depth("D2")[: len(p.for_depth("D1"))] == p.for_depth("D1")

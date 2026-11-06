@@ -368,15 +368,16 @@ class Nodes:
     # ── step 7 ────────────────────────────────────────────────────────────────────────────────
     async def select_agents(self, state: RunState) -> dict[str, Any]:
         d0 = state.get("depth") == "D0"
-        if d0:
-            await self.emit(state, RESEARCH_STEP, StepStatus.SKIPPED, "D0: no research")
         fan_out = [a for a in FAN_OUT_AGENTS if not (a == "A2" and d0)]
         # The rule and its reason are kept with the run (Phases.md Phase 7: persisted rationale).
         # A2 reads the pages research fetched, so it runs iff the depth is not D0; A1, A3, A6 and
         # A7 always run (A3's personas feed C and write-back; A6/A7 are the copy and its read).
+        # At D0 the one fresh query's findings are in the run and reach A3 (as evidence titles);
+        # A2 does not read them (PAGES_BY_DEPTH D0 = 0): a stated limit of the forced fresh slot.
         depth = state.get("depth", "D1")
         rationale = {
-            "A2": "skipped: depth D0 does no research, so there are no pages to read"
+            "A2": "skipped: depth D0 reads no pages (its one fresh query feeds A3's evidence, "
+            "not A2)"
             if d0
             else f"runs: depth {depth} fetched pages (reads {PAGES_BY_DEPTH[depth]})",
             "A1": "always runs",

@@ -7,8 +7,8 @@ It is ONE piece of code run live or replayed: the search provider and the page s
 behind their protocols, so the evaluation's recording runs it against the live web and the arms run
 it against the frozen snapshot, and nothing here knows which. The arms never need the network.
 
-**What it takes from the plan.** `plan.for_depth(depth)`: D0 searches nothing, D1 the first pass, D2
-the whole ranked list. The cap on pages considered per query is the plan's `max_pages_per_query`, a
+**What it takes from the plan.** `plan.for_depth(depth)`: D0 the ONE fresh query (decision-log
+2.36), D1 the first pass, D2 the whole ranked list. The cap on pages considered per query is the plan's `max_pages_per_query`, a
 safety bound that never binds in normal operation.
 
 **Two modes that want opposite things (owner, 2026-10-28). The driver is told which it is in, and

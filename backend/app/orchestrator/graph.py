@@ -45,6 +45,9 @@ def build_graph(
     g.add_node("validate_product_truth", n.stepped(3, n.validate_product_truth))
     g.add_node("retrieve_memory", n.stepped(4, n.retrieve_memory))
     g.add_node("assess_research_necessity", n.stepped(5, n.assess_research_necessity))
+    # D0 is not "no research": it is the ONE fresh query that no run goes without (decision-log
+    # 2.36), so step 6 runs at every depth.
+    g.add_node("fresh_research", n.research_node("D0"))
     g.add_node("focused_research", n.research_node("D1"))
     g.add_node("deep_research", n.research_node("D2"))
     g.add_node("select_agents", n.stepped(7, n.select_agents, complete=False))
@@ -71,8 +74,9 @@ def build_graph(
     g.add_conditional_edges(
         "assess_research_necessity",
         n.route_depth,
-        {"D0": "select_agents", "D1": "focused_research", "D2": "deep_research"},
+        {"D0": "fresh_research", "D1": "focused_research", "D2": "deep_research"},
     )
+    g.add_edge("fresh_research", "select_agents")
     g.add_edge("focused_research", "select_agents")
     g.add_edge("deep_research", "select_agents")
     g.add_conditional_edges("select_agents", n.fan_out, ["run_agent"])
