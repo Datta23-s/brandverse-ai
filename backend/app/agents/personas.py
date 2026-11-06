@@ -31,8 +31,8 @@ MAX_TITLES = 10
 # the logged errors show why: most were JSON CUT OFF at about 4.6 to 4.8 thousand characters, the
 # 1024-token cap, which three personas with three lists each reach (the repair is asked the same
 # question with the same cap and is cut at the same place). A2, with the longest answer, has had
-# 2048 since it was written. A cap is a bound on a registered quantity (three personas, each with up to
-# three jobs, objections and channels), and this one did not cover it (decision-log 2.40).
+# 2048 since it was written. A cap is a bound on a registered quantity (three personas, each with
+# up to three jobs, objections and channels), and this one did not cover it (decision-log 2.40).
 MAX_OUTPUT_TOKENS = 2048
 
 
