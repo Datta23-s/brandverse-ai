@@ -1,0 +1,325 @@
+{
+ "stage": "interim",
+ "at": "2026-11-06T06:25:50.069872+00:00",
+ "registration_commit": "80ddb8081d13b6ba640fc0349567572b329a0c6d",
+ "brands": {
+  "B01": [
+   {
+    "request_id": "R01",
+    "position": 1,
+    "novelty": 1.0,
+    "n_floor": 0,
+    "n_count": 0,
+    "n_recalled": 0,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.0,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 1.0,
+    "r_old": 0.7857142857142857,
+    "r_floor": 0.7857142857142857,
+    "r_count": 0.7857142857142857,
+    "depth_old": "D2",
+    "depth_floor": "D2",
+    "depth_count": "D2",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R02",
+    "position": 2,
+    "novelty": 0.16570174197293264,
+    "n_floor": 0,
+    "n_count": 6,
+    "n_recalled": 6,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7032412538512596,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 0.5,
+    "r_old": 0.4281578894169711,
+    "r_floor": 0.4281578894169711,
+    "r_count": 0.24958646084554256,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D1",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R03",
+    "position": 3,
+    "novelty": 0.13525935023550673,
+    "n_floor": 2,
+    "n_count": 12,
+    "n_recalled": 13,
+    "slots_filled": 1,
+    "slots_total": 2,
+    "best_m": 0.8230191807903514,
+    "u_old": 0.5,
+    "u_floor": 0.8333333333333334,
+    "u_count": 0.0,
+    "r_old": 0.23653972152950284,
+    "r_floor": 0.3555873405771219,
+    "r_count": 0.0579682929580743,
+    "depth_old": "D0",
+    "depth_floor": "D2",
+    "depth_count": "D0",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   }
+  ],
+  "B02": [
+   {
+    "request_id": "R04",
+    "position": 1,
+    "novelty": 1.0,
+    "n_floor": 0,
+    "n_count": 0,
+    "n_recalled": 0,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.0,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 1.0,
+    "r_old": 0.7857142857142857,
+    "r_floor": 0.7857142857142857,
+    "r_count": 0.7857142857142857,
+    "depth_old": "D2",
+    "depth_floor": "D2",
+    "depth_count": "D2",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R05",
+    "position": 2,
+    "novelty": 0.13832024215138217,
+    "n_floor": 0,
+    "n_count": 5,
+    "n_recalled": 5,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.6994027708436228,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 0.5833333333333333,
+    "r_old": 0.4164229609220209,
+    "r_floor": 0.4164229609220209,
+    "r_count": 0.2676134371124971,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D1",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R06",
+    "position": 3,
+    "novelty": 0.22533805373567384,
+    "n_floor": 0,
+    "n_count": 6,
+    "n_recalled": 6,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7777333954771242,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 0.5,
+    "r_old": 0.45371630874386015,
+    "r_floor": 0.45371630874386015,
+    "r_count": 0.2751448801724316,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D1",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   }
+  ],
+  "B03": [
+   {
+    "request_id": "R07",
+    "position": 1,
+    "novelty": 1.0,
+    "n_floor": 0,
+    "n_count": 0,
+    "n_recalled": 0,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.0,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 1.0,
+    "r_old": 0.7857142857142857,
+    "r_floor": 0.7857142857142857,
+    "r_count": 0.7857142857142857,
+    "depth_old": "D2",
+    "depth_floor": "D2",
+    "depth_count": "D2",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R08",
+    "position": 2,
+    "novelty": 0.15597045250891983,
+    "n_floor": 1,
+    "n_count": 6,
+    "n_recalled": 6,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7237523763103456,
+    "u_old": 1.0,
+    "u_floor": 0.9166666666666666,
+    "u_count": 0.5,
+    "r_old": 0.42398733678953704,
+    "r_floor": 0.3942254320276322,
+    "r_count": 0.2454159082181085,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D1",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R09",
+    "position": 3,
+    "novelty": 0.17873017157524296,
+    "n_floor": 3,
+    "n_count": 12,
+    "n_recalled": 13,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7846121878012279,
+    "u_old": 1.0,
+    "u_floor": 0.75,
+    "u_count": 0.0,
+    "r_old": 0.4337415021036755,
+    "r_floor": 0.34445578781796127,
+    "r_count": 0.0765986449608184,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D0",
+    "depth_floor_at": {
+     "0.50": "D1",
+     "0.60": "D2"
+    }
+   }
+  ],
+  "B05": [
+   {
+    "request_id": "R13",
+    "position": 1,
+    "novelty": 1.0,
+    "n_floor": 0,
+    "n_count": 0,
+    "n_recalled": 0,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.0,
+    "u_old": 1.0,
+    "u_floor": 1.0,
+    "u_count": 1.0,
+    "r_old": 0.7857142857142857,
+    "r_floor": 0.7857142857142857,
+    "r_count": 0.7857142857142857,
+    "depth_old": "D2",
+    "depth_floor": "D2",
+    "depth_count": "D2",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R14",
+    "position": 2,
+    "novelty": 0.13837890678549503,
+    "n_floor": 1,
+    "n_count": 1,
+    "n_recalled": 1,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7170519442208354,
+    "u_old": 1.0,
+    "u_floor": 0.9166666666666666,
+    "u_count": 0.9166666666666666,
+    "r_old": 0.4164481029080692,
+    "r_floor": 0.3866861981461645,
+    "r_count": 0.3866861981461645,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D2",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   },
+   {
+    "request_id": "R15",
+    "position": 3,
+    "novelty": 0.14200157077760944,
+    "n_floor": 1,
+    "n_count": 7,
+    "n_recalled": 7,
+    "slots_filled": 0,
+    "slots_total": 2,
+    "best_m": 0.7760917714861679,
+    "u_old": 1.0,
+    "u_floor": 0.9166666666666666,
+    "u_count": 0.41666666666666663,
+    "r_old": 0.41800067319040396,
+    "r_floor": 0.38823876842849925,
+    "r_count": 0.2096673398570707,
+    "depth_old": "D1",
+    "depth_floor": "D2",
+    "depth_count": "D1",
+    "depth_floor_at": {
+     "0.50": "D2",
+     "0.60": "D2"
+    }
+   }
+  ]
+ },
+ "verdict": {
+  "passed": false,
+  "brands": 4,
+  "separating": {
+   "old": 1,
+   "floor": 0,
+   "count": 2
+  },
+  "adopted": null,
+  "needed": 3
+ },
+ "llm_calls": {
+  "standard": 265,
+  "cheap": 1
+ },
+ "worker_supervision": {
+  "worker_crashes": 0,
+  "research_steps_started": 8,
+  "crash_log": "C:\\BrandverseData\\logs\\stage2-crashes.jsonl",
+  "note": "STOPGAP supervision for the interim only (decision-log 2.25); the rate is crashes / research steps started, counted from the worker logs",
+  "crashes": []
+ }
+}
