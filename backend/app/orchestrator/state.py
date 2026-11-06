@@ -60,6 +60,8 @@ class RunState(TypedDict, total=False):
     agent_outputs: Annotated[dict[str, Any], merge_dicts]
     personas: list[dict[str, Any]]
     strategy: dict[str, Any] | None
+    # Step 9: what memory injects into the copy writer, with each item's band (injection.py).
+    injection: dict[str, Any] | None
     creative: dict[str, Any] | None
     validation: dict[str, Any] | None
     revision_round: int

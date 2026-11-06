@@ -1,4 +1,5 @@
-"""A6, the copy writer (Phases.md Phase 6 chunk B; prompt `a6_copy@v2`).
+"""A6, the copy writer (Phases.md Phase 6 chunk B; prompt `a6_copy@v3`: v2 plus the memory the
+run injects, app/memory/injection.py; every arm uses v3, an arm with no memory shows "(none)").
 
 The model writes a headline, a body and a call to action and NOTHING ELSE:
 
@@ -39,8 +40,9 @@ from app.core.gates import FindingKind, required_disclaimers
 from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
+from app.memory.injection import memory_block
 
-A6_COPY = ("a6_copy", "v2")
+A6_COPY = ("a6_copy", "v3")
 
 PROBLEM_WORDS: Mapping[FindingKind, str] = {
     "statement_not_in_copy": "a statement was reported that is not in the copy",
@@ -137,6 +139,7 @@ class CopyWriter:
             positioning=strategy.get("positioning") or "(none given)",
             audience="; ".join(personas) or "(none given)",
             market=market_notes(state),
+            memory=memory_block(state.get("injection")),
             brief=state.get("brief") or "(none given)",
             problems=problems_text(state.get("validation")),
         )

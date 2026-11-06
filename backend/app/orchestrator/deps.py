@@ -14,6 +14,7 @@ from uuid import UUID
 from app.agents.base import Agent, AgentContext, EvidenceReader
 from app.core.gates import GateReport, Statement, Superlatives
 from app.core.truth import ProductTruth
+from app.memory.injection import InjectionPolicy
 from app.memory.scoring import Necessity
 from app.memory.writeback import MemoryStage
 from app.models.runs import RunEvent
@@ -95,6 +96,9 @@ class GraphDeps:
     # the requested depth (nodes.assess_research_necessity).
     necessity: Necessity | None = None
     novelty: Novelty | None = None
+    # Memory injection (app/memory/injection.py): the bands and the cap of 12. None: nothing is
+    # injected (an arm with no memory); the Proposed arm's pipeline always sets it.
+    injection: InjectionPolicy | None = None
 
 
 async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:

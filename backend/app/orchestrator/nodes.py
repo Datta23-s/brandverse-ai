@@ -37,6 +37,7 @@ from app.core.pipeline import PIPELINE_STEPS
 from app.core.timing import collecting
 from app.core.truth import ProductTruth
 from app.errors import ABORTS, BrandverseError, StepTimeout
+from app.memory.injection import select_injection
 from app.memory.necessity import decide
 from app.memory.writeback import MemoryStage
 from app.models.runs import StepEvent, StepStatus
@@ -445,14 +446,24 @@ class Nodes:
         gaps = [
             a for a in FAN_OUT_AGENTS if a in state.get("selected_agents", []) and a not in outputs
         ]
+        # Memory injection (decision-log 2.36): from the recall re-scored with the personas at
+        # step 8, banded and capped at 12, recorded with the strategy so a campaign shows what it
+        # reused. It reaches A6 (and only A6).
+        injection = (
+            None
+            if self.d.injection is None
+            else select_injection(state.get("memory_hits", []), self.d.injection).record()
+        )
         return {
+            "injection": injection,
             "strategy": {
                 "positioning": outputs.get("A1", {}).get("positioning"),
                 "claims": outputs.get("A1", {}).get("claim_inventory", []),
                 "personas": [p["id"] for p in state.get("personas", [])],
                 "market": outputs.get("A2"),
                 "gaps": gaps,
-            }
+                "injection": injection,
+            },
         }
 
     async def generate_creative(self, state: RunState) -> dict[str, Any]:

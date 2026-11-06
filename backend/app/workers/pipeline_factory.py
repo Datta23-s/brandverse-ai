@@ -39,6 +39,7 @@ from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
 from app.llm.registry import registry_from
 from app.memory.embeddings import HashingEncoder, default_encoder
+from app.memory.injection import InjectionPolicy
 from app.memory.scoring import load_scoring
 from app.orchestrator.adapters import (
     PageEvidence,
@@ -194,6 +195,7 @@ async def open_pipeline(
                 pool, TimedEncoder(encoder, "encoder_recall_ms"), scoring, today=today
             ),
             # The necessity engine, with its frozen parameters and N's source (decision-log 2.21).
+            injection=InjectionPolicy(scoring.memory.bands, scoring.necessity.item_cap),
             necessity=scoring.necessity,
             novelty=request_novelty(pool, TimedEncoder(encoder, "encoder_recall_ms")),
             research=research,

@@ -447,7 +447,7 @@ async def test_a6_is_shown_the_derived_summaries_and_never_a_quote_or_a_page() -
     assert "- Sellers make returns easy" in prompt
     assert payload not in prompt and "cures anxiety" not in prompt and "rival.example" not in prompt
     (row,) = ledger.rows.values()
-    assert row["prompt"].prompt_version == "v2"
+    assert row["prompt"].prompt_version == "v3"  # v2 plus the injected memory (decision-log 2.36)
     assert market_notes({}) == "(none)" and market_notes({"agent_outputs": {"A2": {}}}) == "(none)"
 
 
