@@ -1,8 +1,9 @@
 """The fake 15-step run (Phases.md Phase 1): real progress events, no pipeline work.
 
 No LLM call, no search, no database write. Each step of `PIPELINE_STEPS` emits `started`, waits
-`step_delay_ms`, then emits `completed` — or `skipped` (step 6 at depth D0), or `failed` when the
-request asks for a simulated failure. The events are the same contract the LangGraph pipeline
+`step_delay_ms`, then emits `completed` — or `failed` when the request asks for a simulated
+failure. Step 6 runs at EVERY depth, D0 included: D0 is one fresh query, not no research
+(decision-log 2.36), and the fake run now says so instead of skipping the step. The events are the same contract the LangGraph pipeline
 will emit from Phase 6, so the SSE endpoint and the UI are built and debugged against them now.
 """
 
@@ -26,7 +27,7 @@ from app.models.runs import (
 log = logging.getLogger(__name__)
 
 RESEARCH_STEP = 6
-_RESEARCH_NODE = {"D1": "focused_research", "D2": "deep_research"}
+_RESEARCH_NODE = {"D0": "fresh_research", "D1": "focused_research", "D2": "deep_research"}
 
 
 class EventSink(Protocol):
@@ -60,18 +61,6 @@ async def execute_fake_run(job: FakeRunJob, sink: EventSink, sleep: Sleep = asyn
     log.info("fake run started", extra={"depth": request.depth})
 
     for step in PIPELINE_STEPS:
-        if step.number == RESEARCH_STEP and request.depth == "D0":
-            await sink.append(
-                StepEvent(
-                    run_id=run_id,
-                    step=step.number,
-                    name=step.name,
-                    status=StepStatus.SKIPPED,
-                    detail="fake: D0, memory sufficient, no research",
-                )
-            )
-            continue
-
         await sink.append(
             StepEvent(
                 run_id=run_id,

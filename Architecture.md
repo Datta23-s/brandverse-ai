@@ -591,7 +591,7 @@ Default weights `wₙ=0.30, wᵤ=0.25, w_f=0.20, wₛ=0.15, wₑ=0.10`. **Weight
 
 | R range | Depth | Behaviour |
 |---|---|---|
-| `R < 0.35` | **D0** | Reuse memory only. Zero searches. |
+| `R < 0.35` | **D0** | Reuse memory plus **ONE fresh query** (the forced fresh slot, `Memory.md` section 9; decision-log 2.36, 2.38): not zero searches. A2 does not run at D0, so the query surfaces new sources to A3 as evidence titles and writes no new memory: **the freshness floor is PARTIAL**, which sustained production use at D0 would expose (production-hardening list). SRR counts the query. |
 | `0.35 ≤ R < 0.70` | **D1** | Focused research: the planner's first pass, 4 queries, one per facet |
 | `R ≥ 0.70` | **D2** | Deep research: the planner's whole list, 8 queries (4 facets × 2). Multi-hop was considered and dropped on scope (`docs/evaluation-plan.md` §8); q = 8 stands: the within-facet overlap measured 0.10 (cross-facet 0.01), `docs/evaluation-plan.md` §8 |
 

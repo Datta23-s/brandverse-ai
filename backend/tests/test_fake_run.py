@@ -58,15 +58,19 @@ async def test_default_run_emits_every_step_started_then_completed() -> None:
     assert sleeps == [0.4] * 15
 
 
-async def test_d0_skips_research_without_waiting() -> None:
+async def test_d0_still_runs_step_6_it_is_one_fresh_query_not_no_research() -> None:
+    """Decision-log 2.36: D0 is one fresh query, so the fake run no longer skips step 6."""
     ok, events, sleeps = await run(depth="D0", step_delay_ms=50)
     assert ok
     step6 = [s for s in steps(events) if s[0] == 6]
-    assert step6 == [(6, "research", "skipped")]
-    assert sleeps == [0.05] * 14
+    assert step6 == [(6, "research", "started"), (6, "research", "completed")]
+    assert sleeps == [0.05] * 15
 
 
-@pytest.mark.parametrize(("depth", "node"), [("D1", "focused_research"), ("D2", "deep_research")])
+@pytest.mark.parametrize(
+    ("depth", "node"),
+    [("D0", "fresh_research"), ("D1", "focused_research"), ("D2", "deep_research")],
+)
 async def test_research_detail_names_the_node(depth: str, node: str) -> None:
     _, events, _ = await run(depth=depth)
     started6 = next(e for e in events if isinstance(e, StepEvent) and e.step == 6)

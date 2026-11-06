@@ -266,7 +266,7 @@ about whether those rules match any regulation (`Rules.md` A6).
 | Metric | Formula |
 |---|---|
 | ARR | `(Calls_baseline − Calls_proposed) / Calls_baseline × 100` |
-| SRR | `(Searches_baseline − Searches_proposed) / Searches_baseline × 100` |
+| SRR | `(Searches_baseline − Searches_proposed) / Searches_baseline × 100`. **Reported PRIMARILY WITH the mandatory fresh query included** (a D0 run issues one search, so it saves 7 of 8, never all: decision-log 2.36). A decomposition showing the floor's contribution separately may be given, labelled as a decomposition and never as an alternative headline. |
 | CR  | `(Cost_baseline − Cost_proposed) / Cost_baseline × 100` |
 | LR  | `(T_baseline − T_proposed) / T_baseline × 100` — **but see below: T cannot be observed for the web part; LR is reported as counts and DERIVED as time** |
 
@@ -1308,8 +1308,8 @@ the experiment.
 **Depths cut one shared ranked list — RULED 2026-10-26 (owner; this closes the question the rule
 above left open).** The arms do not research equally by design: Baseline A does no research,
 Baseline B researches at full depth (D2), and Proposed chooses a depth (D0, D1, D2) per request. The
-planner runs once per request and emits **one ranked query list**. **D0 takes none, D1 takes a
-prefix, D2 takes all.** Every arm that researches draws from the same ordered list, so the evidence
+planner runs once per request and emits **one ranked query list**. **D0 takes ONE query (the forced fresh slot,
+decision-log 2.36; it was none until 6 November 2026), D1 takes a prefix, D2 takes all.** Every arm that researches draws from the same ordered list, so the evidence
 *available* is identical and only how much an arm consumes varies. The recording covers the full
 list once; any depth replays a prefix of it. That keeps attribution clean: if Proposed at D1 beats
 Baseline B at full depth, the difference is how it selected and used evidence, not that it saw
@@ -2063,7 +2063,7 @@ fall consisted of.
 ### The query planner (design approved 2026-10-28; `backend/app/research/planner.py`)
 
 **One ranked list, from the request alone.** The planner runs once per request, before any arm picks a
-depth, and emits one list; D0 takes none, D1 the first pass, D2 all of it (the rulings above). **Facets**,
+depth, and emits one list; D0 takes its first query only (decision-log 2.36), D1 the first pass, D2 all of it (the rulings above). **Facets**,
 each with a named consumer (a facet without a consumer does not exist): (1) competitor and category
 positioning, A2; (2) audience needs and objections, A3; (3) independent reference facts for the product's
 attributes, A1 and A7; (4) sector rules and advertising norms, sector risk and A7. A fifth, a timeliness
