@@ -31,7 +31,11 @@ def test_under_the_frozen_bands_novelty_alone_can_never_take_the_engine_below_d2
     below D2 is produced by U, that is by memory, and the memory share is 100 percent by
     construction of the bands; the data checks that the logged inputs obey it."""
     floor = decompose(W, COUNT_BANDS, novelty=0.0, u=1.0, s_sector=0.0)
-    assert floor.r == pytest.approx(0.25 / 0.70) and floor.r > CFG.d2_from
+    # If this fails the weights or the bands MOVED: the registered attribution ("accumulated memory
+    # is necessary for any depth reduction", evaluation-plan.md, decision-log 2.45) was derived from
+    # them and must be RECOMPUTED and re-registered, not carried over.
+    assert floor.r == pytest.approx(0.25 / 0.70), "weights changed: recompute the attribution"
+    assert floor.r > CFG.d2_from, "bands changed: recompute the attribution claim (2.45)"
     assert floor.depth == floor.counterfactual_depth == "D2"
     for nov in (0.0, 0.15, 0.5, 1.0):
         assert decompose(W, COUNT_BANDS, novelty=nov, u=1.0, s_sector=0.0).depth == "D2"
