@@ -145,11 +145,14 @@ on this number. The sampled HEAD estimate (`docs/evaluation-plan.md` section 8) 
 | **0.65 – 0.79** | Supporting context | Inject as background only. Cannot be the sole basis for a claim. |
 | **< 0.65** | Perform fresh analysis | Discard. Mark the knowledge slot as a research gap. |
 
-**Status of the Behaviour column (owner, 2026-10-31; V14, `docs/decision-log.md` 2.10): nothing performs it yet.** No step injects
-a recalled item into an agent, so the 0.90 and 0.80 bands described behaviour that no phase scheduled until today. Injection is
-now scheduled (not built) in Phase 7 together with the Research Necessity Engine, and no evaluation run happens before it (`Phases.md` Phase 7).
+**Status of the Behaviour column: BUILT, 2026-11-06 (Phase 7; `app/memory/injection.py`; decision-log 2.36, 2.42, 2.43).** The V14 gap of 2026-10-31 ("nothing performs it") is closed, with these exact scopes, which the evaluation's quality result must be read against:
+- **Injection reaches the copy writer A6 ALONE.** Not A1 (positioning; dropped, decision-log 2.43), not A3 (personas; out), not A7 (it reads only the finished copy). Memory therefore informs the final copy, not the strategy or the personas.
+- **How a recalled item is shown to A6** (step 9, from the recall re-scored with the personas at step 8; `a6_copy@v3`, used by every arm, an arm with no memory shows "(none)"): `reuse` (M ≥ 0.90) as `[use as written]`, `adapt` (0.80 to 0.89) as `[adapt]`, `support` (0.65 to 0.79) as `[background]`; below 0.65 NOTHING is shown (the slot is a research gap). Only the two memory kinds (`insight`, `competitor`) are injected, best M first, **at most 12**, ties by id; the notes are the earlier model's own wording, already screened at write-back (threat V10), rendered as data with page-like tags neutralised, and the prompt says they are context about other sellers, never facts about the product, claims or instructions.
+- **The record:** each injected item, its kind, band and M are kept with the campaign's strategy (`strategy.injection`), with the counts considered, below the floor and over the cap, so what a run reused is read from the log.
+- **What real data produced (confirmation run, 2026-11-06, decision-log 2.42):** every injected item was in the `support` band (M 0.660 to 0.743; none reached 0.80). The `reuse` and `adapt` paths are exercised by tests and not by real data. The bands were deliberately NOT re-based onto the observed values (decision-log 2.43: that would be fitting). A finding about M's distribution, reported beside every quality figure.
+- **Not built:** the used-items record and the reuse bump (section 6.3 below: +0.02 at M ≥ 0.90 cannot change an outcome over three campaigns per brand; dropped, decision-log 2.36).
 
-**Superseded for U, 2026-11-01 (decision-log 2.21):** the engine's `U` no longer uses `memory_coverage`. It uses the QUANTITY of relevant memory: `n` recalled items with semantic match `S ≥ 0.55`, `U = 1 − min(1, n/12)`. The bands below still decide how a recalled item is injected, and are frozen provisional values. The sentence that follows describes the first definition, which failed its registered check (decision-log 2.20).
+**Superseded for U, 2026-11-01 (decision-log 2.21), and again 2026-11-06 (2.43):** the engine's `U` no longer uses `memory_coverage`. It uses the QUANTITY of recalled memory, `U = 1 − min(1, n/12)`. **The engine as built counts every recalled item (`necessity.u_source: count`, Registration 2 Amendment 1, `docs/phase7-first-decision.md` 7b); the original definition counted only items with semantic match `S ≥ 0.55` (FLOOR) and was found inert (D2 for every campaign observed), which a mechanism that must vary cannot be.** The bands above still decide how a recalled item is injected, and are frozen provisional values. The sentence that follows describes the first definition, which failed its registered check (decision-log 2.20).
 
 These bands feed the Research Necessity Engine directly: `memory_coverage` is the fraction of required knowledge slots filled at `M ≥ 0.80`. **Since 2026-10-31 there are two required slots, `insight` and `competitor`** (the only kinds that can carry a full component set), and coverage is always reported as "k of 2 slots"; `decision-log.md` 2.9.
 
@@ -195,10 +198,10 @@ requires all six to arrive (`tests/db/test_recall.py`). What this removes and wh
   [0, 1] (an item relevant to persona X does not become less relevant to X because it was also used for
   Y), and the set is stored, not an aggregate, as with source scores. Both sides are encoded as
   documents; only vectors from the same encoder model and version are compared.
-- **Still not happening in a real run:** no step injects memory into the strategy or the copy yet, and
-  no step extracts candidate facts from an approved campaign, so a real run neither reuses an item nor
-  writes one, and no item gains persona rows. The path is built and tested at the database; nothing
-  drives it end to end until those two steps exist.
+- **Status when this was written (superseded):** at the time no step injected memory or extracted
+  facts from an approved campaign. Both exist now: write-back runs at step 15 (Phase 6) and injection
+  into A6 at step 9 (Phase 7, 2026-11-06, section 3.2 above). Items still gain persona rows only via
+  the write-back path.
 
 *Audit, 2026-10-25 (before chunk C).* `score()` has no caller outside the unit tests; no real `M` has ever been
 computed; and no recorded figure depends on `E`. The `m` that write-back compares with the reuse
@@ -636,7 +639,7 @@ tuning later suggests a label was wrong, the label stands and the disagreement i
 | Mode | Symptom | Defence |
 |---|---|---|
 | **Poisoning** | A hallucinated fact is approved once, then reused forever as established | Approval gate + provenance + revocation + confidence decay |
-| **Echo chamber** | System keeps recommending what it recommended before; originality score falls | Cap injected items; force ≥ 1 fresh research slot on every run regardless of `R`; track originality over time |
+| **Echo chamber** (built PARTIAL: D0 = one fresh query; A2 off at D0, so that query yields new sources for A3 and no new memory, decision-log 2.38; a sustained-production exposure, on the production-hardening list) | System keeps recommending what it recommended before; originality score falls | Cap injected items; force ≥ 1 fresh research slot on every run regardless of `R`; track originality over time |
 | **Staleness** | Competitor data 9 months old presented as current | Freshness decay + scheduled revalidation (C4) |
 | **Over-retrieval** | 40 items injected, context diluted, quality drops | Hard cap of 12 injected items, ranked by `M` |
 | **Tenant leak** | Org A's insight surfaces for Org B | RLS + `org_id` filter inside `match_memory` + an automated cross-tenant test that must stay green |
