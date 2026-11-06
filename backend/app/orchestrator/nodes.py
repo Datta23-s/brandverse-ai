@@ -463,6 +463,10 @@ class Nodes:
                 "market": outputs.get("A2"),
                 "gaps": gaps,
                 "injection": injection,
+                # The engine's record (R, N, U, S, n, the depth advised and used), kept with the
+                # campaign so the memory-versus-novelty decomposition can be read from the database
+                # (app/evaluation/necessity_decomposition.py; decision-log 2.45).
+                "necessity": state.get("necessity"),
             },
         }
 

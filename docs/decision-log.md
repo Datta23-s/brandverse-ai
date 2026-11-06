@@ -911,6 +911,17 @@ Neither figure may appear in the write-up without the other beside it: reduction
 
 **The 4 November citation, as ruled:** the owner dated the construct argument to 3 to 4 November; there is no 4 November entry on it, and none is cited (2.43). Words are not put in the record that are not there.
 
+### 2.45 The attribution is promoted to a registered analysis: memory versus novelty (6 November 2026, owner)
+**1. The attribution of 2.44 stays and is promoted from a note to a REGISTERED ANALYSIS** (`docs/evaluation-plan.md`, "Registered analysis: how much of the depth reduction is MEMORY, and how much is NOVELTY"), pre-registered before any evaluation run with its expected direction and a read-only confirmation that no evaluation data exists (0 runs, `llm_calls`, campaigns, approvals, memory items).
+
+**2. Built, zero calls:** `app/evaluation/necessity_decomposition.py` (per campaign: R, N's, U's and S's contributions, the depth chosen, and the counterfactual depth with U held at 1.00; the share of depth reduction attributable to accumulated memory; reads the engine's record from `campaigns.strategy -> 'necessity'`, which `build_strategy` now stores), `scripts/phase7_decomposition.py`, tests including the committed stage-2 reports and a database test of the reader. **The control the three arms do not provide:** Baseline B has no memory and runs at a fixed depth, so nothing in the arms separates "memory reduced the work" from "the request was less novel the second time".
+
+**3. Expected direction, stated in advance, with its honest reason.** Under COUNT and the frozen bands the memory share is expected to be about 100 percent, **by the algebra of the bands**: at U = 1.00 R is at least 0.25 / 0.70 = 0.357, above 0.32, so novelty alone can never take the engine below D2. The analysis therefore checks that the logged inputs obey it (an exception would be an anomaly) and says what drove the ENGINE'S depth, not whether the research needed was smaller.
+
+**4. OLD is the negative control and its column is reported beside COUNT's, with the attribution attached to both** (reduction 4 of 4 in both attempts; attribution: COUNT's reduction 100 percent memory, 9 and 13 levels; OLD's 11 percent and 0 percent memory, the rest novelty against its own bands). **OLD reducing for the wrong reason is itself evidence that the measure can move without memory.** It is not dropped because its reduction is uninteresting.
+
+**5. Remaining before the freeze, in order (owner):** the COUNT live run, the `Architecture.md` and `Memory.md` injection descriptions, then the freeze tag. R26 to R30's last attempt and the python.org removal are low priority and may slip past the freeze.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's

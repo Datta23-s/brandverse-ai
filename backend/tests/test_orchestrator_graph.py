@@ -304,6 +304,9 @@ async def test_the_engine_sets_the_depth_and_a2_runs_iff_the_depth_is_not_d0() -
     assert out.state["depth"] == "D2" and out.state["necessity"]["requested"] == "D0"
     assert "A2" in out.state["selected_agents"] and (6, "started") in cold.sink.steps()
     assert out.state["agent_rationale"]["A2"].startswith("runs: depth D2")
+    # the engine's record travels with the strategy, so the memory-vs-novelty decomposition can be
+    # read from the campaign (decision-log 2.45)
+    assert out.state["strategy"]["necessity"] == out.state["necessity"]
 
     warm = Harness()
     _engine(warm, [0.9] * 12, 0.02)
