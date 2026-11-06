@@ -136,6 +136,17 @@ def test_a_production_or_evaluation_worker_refuses_to_start_without_a_research_t
     assert make_settings(evaluation_run=True, pipeline_agents="mock").pipeline_agents == "mock"
 
 
+def test_a3s_output_cap_covers_three_personas_with_three_lists_each() -> None:
+    """Bounds: the length of A3's answer (up to 3 personas, each a 240-character summary and three
+    lists of up to 3). At 1024 tokens A3's JSON was cut off mid-string in the call log (about 4.6k
+    characters) and 8 of 37 answered requests were invalid against 0 for every other agent
+    (decision-log 2.40). It must not be below the cap of the agent with the longest answer (A2)."""
+    from app.agents import market, personas
+
+    assert personas.MAX_OUTPUT_TOKENS >= 2048
+    assert personas.MAX_OUTPUT_TOKENS >= market.MAX_OUTPUT_TOKENS
+
+
 def test_a_call_cannot_stay_pending_past_its_expiry() -> None:
     longest = (DEFAULT["llm_max_rate_limit_waits"] + 1) * DEFAULT["llm_call_timeout_s"] + DEFAULT[
         "llm_max_rate_limit_wait_s"

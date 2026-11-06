@@ -53,6 +53,7 @@ A2_MARKET = ("a2_market", "v1")
 PAGES_BY_DEPTH = {"D0": 0, "D1": 6, "D2": 10}
 MAX_PAGES = PAGES_BY_DEPTH["D1"]
 MAX_PAGE_CHARS = 2500
+MAX_OUTPUT_TOKENS = 2048  # the longest answer of any agent; A3 matches it (decision-log 2.40)
 MIN_QUOTE_CHARS = 12
 _TAGLIKE = re.compile(r"</?\s*page\b", re.IGNORECASE)
 _MARKUP = re.compile(r"[<>{}`\[\]\\]|https?:|www\.|://", re.IGNORECASE)
@@ -164,7 +165,7 @@ class MarketAnalyst:
             ),
             ctx=ctx.call_context(self.id),
             route_reason="A2 market read: default tier",
-            max_output_tokens=2048,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
         )
         dropped = 0
 

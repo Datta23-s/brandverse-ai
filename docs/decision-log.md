@@ -842,6 +842,21 @@ Each cap on the evaluation path, the registered parameter it bounds, that parame
 | evaluation call budget | 660 + 300 = 960 | evaluation calls | plan 660 + one re-run in three | **built (2.36 item 4)**; disjoint from the development ceiling by test |
 | strong tier | 20 a day | strong calls in a day | the plan expects 18 to 24 in the regulated runs | **the worst case is ABOVE the cap**: a scheduling requirement (spread those runs over two days by hand), asserted by a test so it is not silent; a T4 call is never downgraded |
 
+### 2.40 A3's invalid-output history (zero calls), the sequence rule, and the A3 output cap (6 November 2026)
+**1. A3's history, from every call log on this machine (scratch databases, zero calls).** Answered requests (an `ok` or `invalid_output` row; the repair rows are counted apart):
+
+| agent | answered | invalid output | needed the repair | failed after repair |
+|---|---|---|---|---|
+| A1 | 41 | 0 | 0 | 0 |
+| A2 | 28 | 0 | 0 | 0 |
+| **A3** | 37 | **8 (22 percent)** | 9 repair calls (6 ok) | **1** |
+| A6 | 50 | 0 | 0 | 0 |
+| A7 | 95 | 0 | 0 | 0 |
+
+**Not a flake: materially higher than every other agent (0 of 214 for the other five).** *Cause, from the gateway's own log of the validation errors:* of 7 logged invalid outputs, **4 were JSON cut off** ("EOF while parsing a string at column 4570 / 4634 / 4763", and one empty) and **2 were lists over the schema's maximum of 3** ("objections: at most 3 items, not 5 / not 7"). The cut-offs are the 1024-token output cap: three personas with three lists each reach it, and the repair is asked the same question under the same cap and is cut at the same place. **Fixed:** A3's `max_output_tokens` 1024 -> 2048 (A2, the longest answer, has had 2048 throughout), pinned by a test; no prompt change. **NOT fixed, for the owner's ruling:** the over-list cases: `a3_personas@v1` does not tell the model that jobs, objections and channels are limited to three each, though the schema enforces it; stating it is a new prompt version (v2) used by every arm. *Expected effect of the cap alone:* it removes the cut-off cause (4 of 7 logged); it cannot be shown to remove all, and the rate must be re-read after the next real runs.
+
+**2. The sequence rule** is recorded as `docs/evaluation-plan.md` Amendment 2 (the full reasoning is there) and built in `LLMGateway.structured` and `classify_infrastructure_failure`. The A3 sequence of 6 November (503, invalid, invalid repair) is now classified `provider_unavailable`, would invalidate the run, and counts against the 2-re-run cap like any infrastructure failure. The single-repair rule is untouched.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's

@@ -26,6 +26,14 @@ from app.llm.registry import Tier
 
 A3_PERSONAS = ("a3_personas", "v1")
 MAX_TITLES = 10
+# 1024 -> 2048 on 2026-11-06. From the call log (every database, zero calls): A3's structured
+# output was invalid in 8 of 37 answered requests (22 percent) against 0 for A1, A2, A6 and A7, and
+# the logged errors show why: most were JSON CUT OFF at about 4.6 to 4.8 thousand characters, the
+# 1024-token cap, which three personas with three lists each reach (the repair is asked the same
+# question with the same cap and is cut at the same place). A2, with the longest answer, has had
+# 2048 since it was written. A cap is a bound on a registered quantity (three personas, each with up to
+# three jobs, objections and channels), and this one did not cover it (decision-log 2.40).
+MAX_OUTPUT_TOKENS = 2048
 
 
 class _RawPersona(BaseModel):
@@ -70,7 +78,7 @@ class PersonaAnalyst:
             prompt=prompt,
             ctx=ctx.call_context(self.id),
             route_reason="A3 personas: default tier",
-            max_output_tokens=1024,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
         )
         return CustomerOutput(
             personas=[

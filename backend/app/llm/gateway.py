@@ -106,6 +106,17 @@ def is_provider_unavailable(error: BaseException) -> bool:
     return isinstance(status, int) and not isinstance(status, bool) and status >= 500
 
 
+SEQUENCE_ATTRIBUTE = "infrastructure_in_sequence"
+
+
+def mark_infrastructure_in_sequence(error: BaseException, kind: str) -> None:
+    """Record on a failure that an attempt EARLIER in its request's sequence was the infrastructure
+    failure `kind` (first one wins). `classify_infrastructure_failure` reads it, so the sequence
+    is classified as a whole."""
+    if getattr(error, SEQUENCE_ATTRIBUTE, None) is None:
+        setattr(error, SEQUENCE_ATTRIBUTE, kind)
+
+
 def retry_delay_s(error: Exception) -> float | None:
     """Google's suggested wait from a 429 body (`"retryDelay": "29s"`), if present."""
     match = _RETRY_DELAY.search(str(error))
@@ -245,6 +256,40 @@ class LLMGateway:
         route_reason: str,
         max_output_tokens: int = 1024,
     ) -> M:
+        """One request: the call, its provider-unavailable retries, and at most one repair.
+
+        SEQUENCE RULE (owner, 2026-11-06; evaluation-plan.md Amendment 2): if ANY attempt in this
+        sequence was an infrastructure failure, a sequence that ENDS in failure is classified as
+        that infrastructure failure, whatever the last attempt's own failure was. A retry issued
+        right after a provider failure may itself be degraded, and discarding is the safe
+        direction: over-invalidating costs a re-run, under-invalidating biases an arm."""
+        seen: list[str] = []
+        try:
+            return await self._structured(
+                schema,
+                tier=tier,
+                prompt=prompt,
+                ctx=ctx,
+                route_reason=route_reason,
+                max_output_tokens=max_output_tokens,
+                seen=seen,
+            )
+        except BaseException as e:
+            if seen:
+                mark_infrastructure_in_sequence(e, seen[0])
+            raise
+
+    async def _structured[M: BaseModel](
+        self,
+        schema: type[M],
+        *,
+        tier: Tier,
+        prompt: RenderedPrompt,
+        ctx: CallContext,
+        route_reason: str,
+        max_output_tokens: int,
+        seen: list[str],
+    ) -> M:
         messages = [{"role": "system", "content": prompt.system}] if prompt.system else []
         messages.append({"role": "user", "content": prompt.user})
         first = await self._attempt(
@@ -256,6 +301,7 @@ class LLMGateway:
             route_reason,
             max_output_tokens,
             prompt.temperature,
+            seen,
         )
         parsed, errors = _parse(schema, first.content)
         await self._finish(first, "ok" if parsed is not None else "invalid_output")
@@ -280,6 +326,7 @@ class LLMGateway:
             f"{repair_prompt.ref} after invalid output of {prompt.ref}: {route_reason}",
             max_output_tokens,
             prompt.temperature,  # the repair of a temperature-0 call is a temperature-0 call
+            seen,
         )
         parsed, errors = _parse(schema, second.content)
         await self._finish(second, "ok" if parsed is not None else "invalid_output")
@@ -333,6 +380,7 @@ class LLMGateway:
         route_reason: str,
         max_output_tokens: int,
         temperature: float | None = None,
+        seen: list[str] | None = None,
     ) -> _Attempt:
         model = self._registry.model(tier)
         if tier is Tier.STRONG:
@@ -440,6 +488,8 @@ class LLMGateway:
                         )
                     )
                     unavailable_attempts += 1
+                    if seen is not None:
+                        seen.append("provider_unavailable")
                     streak, total = self._note_unavailable(ctx)
                     log.warning(
                         "provider unavailable",

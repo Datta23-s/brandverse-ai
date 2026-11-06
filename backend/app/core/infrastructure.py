@@ -20,6 +20,14 @@ of 2026-11-05, made before any evaluation data existed):
   the worker, with `runs.failure` = `{kind: job_timeout, infrastructure_failure: process_crash,
   ...}` (migration 0046, 2026-11-04), so it no longer waits for that harness rule to find it.
 
+**The sequence rule (amendment of 2026-11-06, before any evaluation data existed).** A request is a
+sequence of attempts (the call, its provider-unavailable retries, at most one repair). If ANY
+attempt in a sequence that ends in failure was an infrastructure failure, the whole sequence is
+classified as that failure. *Reasoning:* a retry issued right after a provider failure may itself
+be degraded; over-invalidating costs re-runs, under-invalidating biases a result, so the safe
+direction is discarding data rather than attributing a provider's bad minute to an arm. It governs
+sequences that END in failure; a sequence that ends in a valid output is a result as before.
+
 Everything else — a budget stop (`partial`), a gate block, invalid model output, a provider's
 refusal of a malformed request, a bug — is not an infrastructure failure: the attempt is a result.
 Classification reads the exception's type and cause chain only; nobody decides it afterwards.
@@ -34,7 +42,7 @@ import psycopg
 
 from app.errors import LLMRateLimited, ProviderCircuitOpen, ProviderUnavailable, QuotaExhausted
 from app.llm._litellm import APIConnectionError
-from app.llm.gateway import is_provider_unavailable
+from app.llm.gateway import SEQUENCE_ATTRIBUTE, is_provider_unavailable
 
 InfrastructureFailure = Literal[
     "rate_limited", "quota_exhausted", "network_error", "process_crash", "provider_unavailable"
@@ -95,4 +103,12 @@ def classify_infrastructure_failure(exc: BaseException) -> InfrastructureFailure
         return "provider_unavailable"
     if any(isinstance(e, _NETWORK) for e in chain):
         return "network_error"
+    # The SEQUENCE rule (owner, 2026-11-06; evaluation-plan.md Amendment 2): a failure that ends a
+    # request whose earlier attempt was an infrastructure failure (an invalid output after a 503
+    # retry, say) is classified by that earlier failure. See LLMGateway.structured.
+    for e in chain:
+        marked = getattr(e, SEQUENCE_ATTRIBUTE, None)
+        for kind in INFRASTRUCTURE_FAILURES:
+            if marked == kind:
+                return kind
     return None

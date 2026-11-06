@@ -111,6 +111,20 @@ infrastructure failure has no primary result and is reported as such, never drop
 * **Every invalidation is recorded** with the outage window it overlapped and the run that replaced it (`reruns.invalidations`, from `runs.failure` and `app/evaluation/outages.py`); an invalidation with no recorded window is flagged as an anomaly, not passed.
 * **Not yet built:** the harness that performs the re-runs (Phase 10) and the experiment/attempt columns; the policy, the classifier and the record are in place and tested ahead of it.
 
+#### Amendment 2 (2026-11-06): the sequence rule — one infrastructure attempt classifies the whole failed sequence
+
+*Pre-registration amendment, dated 6 November 2026, by the project owner. Amendment 1 is unchanged.*
+
+**The amendment.** A request to the model is a **sequence** of attempts: the call, its provider-unavailable retries (at most two), and at most one structured-output repair. **If ANY attempt in a sequence that ENDS IN FAILURE was an infrastructure failure, the whole sequence is classified as that infrastructure failure**, whatever the last attempt's own failure was. It governs sequences that end in failure; a sequence that ends in a valid output is a result, as before (one extra row of spend, Amendment 1 point 2).
+
+**Gap found.** On 6 November 2026, in the development confirmation run, A3's request was a `provider_unavailable` answer, then invalid output, then an invalid repair. The agent failed with `StructuredOutputInvalid`, which is not an infrastructure kind, so the classifier read it as the agent's own failure; nothing said whether a sequence that mixes an infrastructure failure with agent failures is the provider's or the arm's.
+
+**Reasoning, stated before any evaluation data exists.** A retry issued right after a provider failure may itself be degraded; a model answering in a bad minute can return truncated or malformed output that it would not return in a good one. The safe direction is **discarding data rather than attributing a provider's bad minute to an arm: over-invalidating costs re-runs; under-invalidating biases a result.**
+
+**How it is applied mechanically.** `LLMGateway.structured` records every infrastructure attempt in the sequence and marks a failure that ends it (`infrastructure_in_sequence`); `classify_infrastructure_failure` reads the mark (first kind wins; a direct infrastructure failure is unchanged). The agent's recorded gap then carries the infrastructure kind, and Amendment 1's invalidation applies unchanged: **only `provider_unavailable` invalidates** (the rate-limit and network questions stay open). **Interaction with the 2-re-run cap:** the rule changes WHAT is classified infrastructure, not how many re-runs there are: the original and two re-runs, and a third failure comes to the owner (`reruns.next_action`, tested in `tests/test_sequence_classification.py`). A campaign whose sequences are repeatedly caught by the rule therefore costs at most two re-runs before it is escalated, not an unbounded loop.
+
+**No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`.
+
 #### Run order: interleaved arms (registered 2026-11-05, before any evaluation call)
 
 The evaluation does not run arm by arm. **For each request the three arms run adjacently**, so a provider outage lands across arms and not inside one. The order is fixed by a registered seed and committed as `evaluation/run_order.yaml` (90 runs; `backend/app/evaluation/schedule.py`; `backend/tests/test_run_order.py` recomputes it and fails on any difference).
