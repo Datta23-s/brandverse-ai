@@ -389,3 +389,31 @@ The OLD prediction is marked uncertain and **its basis is stage 1's artifact**: 
 **7. Freeze plan: 11 November with 7 brands. 9 November is upside only and is not the plan** in this or any other document. The seven are chosen from the recorded brands by the owner at the freeze; B01 to B08 are recorded, so the 7-brand branch does not depend on R26 to R30. Arithmetic with the harness removed (ruling 4): the build is 4 to 5 days (descope table), starting the day after stage 2 passes. If the ledger opens on 3 November and the interim passes that night, the build runs 4 to 8 November and the freeze is 8 November (4 days) or 9 November (5 days) with no slack. That is the upside. Every day the interim is delayed, or a rework of R is needed, moves it one-for-one; 11 November leaves two to three days of slack against 4 to 8 November, and is the plan. If the interim fails, there is no date until R is changed, and ruling 4 of 2.17 applies (cut brands, never campaigns).
 
 **8. Pushed with 1 and 2 folded in.** This section is part of the registration that precedes the run.
+
+## 7b. Registration 2, Amendment 1 (6 November 2026): the engine counts COUNT, not FLOOR
+
+*Dated pre-registration amendment, by the project owner. Everything in sections 7 and 7a stands as a record; this changes which of the three registered definitions of U the BUILT engine uses.*
+
+**The amendment.** `config/scoring.yaml` `necessity.u_source` is `count`: **U = 1 - min(1, n / 12), n = every recalled item** (no similarity floor), with the same frozen bands (D0 below 0.20, D2 from 0.32) and weights. The 0.55 floor stays in the file for the FLOOR column of the stage-2 report and for sensitivity; the engine no longer uses it. (Section 7a: 1 defines COUNT; ordering OLD, FLOOR, COUNT adopted the first that met the interim criterion, and none did, so the engine as first built used FLOOR, the registered Registration 2 definition.)
+
+**Justification, in the owner's words and not in terms of outcomes.** FLOOR makes the necessity engine inert: it returns D2 for every campaign observed, in two independent runs (the stage-2 interim, 4 of 4 brands, decision-log 2.32 and 2.37; and the end-to-end confirmation run, 3 of 3 campaigns, 2.42). A mechanism that cannot vary cannot be evaluated. The switch is made to obtain a testable experiment, not a better result. It is NOT made because COUNT met the interim criterion (it did not: 2 of 4, then 1 of 4, against 3 needed).
+
+**The construct argument against the floor is older than any stage-2 data.** Recorded 1 November (decision-log 2.21; section 2 of this document): a threshold on similarity to the current request "throws away the QUANTITY of accumulated memory, which is what the hypothesis is about", and 3 November, before any stage-2 call (decision-log 2.23; section 7a item 1, "Reason for COUNT, stated before the data"): the floor gates n on similarity to the CURRENT request, so n can fall as memory grows (the B04 figures, n 1 to 0 between campaigns 2 and 3 on the same memory), which "a quantity measure cannot do". COUNT implements that argument; FLOOR is that argument with a similarity gate left in it. *Honest limit of the citation:* the owner dates the argument to 3 to 4 November; I find it on 1 and 3 November and cite no 4 November entry on it.
+
+**No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals, 0 memory items; 3 organisations, all `is_test`. The depths below are predictions registered before any evaluation run.
+
+**Not changed, and why (owner, same ruling).** The reuse bands (0.90 / 0.80 / 0.65) are NOT touched. The same test (can the experiment be evaluated?) gives the opposite answer: nothing reached 0.80 and the highest M observed was 0.743, so only the support band fires, but memory still reaches A6 and can still affect the copy, so the quality question stays answerable. Re-basing thresholds onto observed values without the cannot-be-evaluated argument is fitting, and is refused. That only the support band fires is a finding about M's distribution and is reported beside every quality figure.
+
+**PRE-REGISTERED PREDICTIONS under COUNT, across the full structure (10 brands x 3 campaigns), before any evaluation run.** *Model, fixed here:* campaign 1 is D2 (cold start). Campaign 1 writes n1 items, n1 taken from the five first-campaign yields observed at the repaired 10-page D2 budget: 9, 6, 12, 3 (attempt 24, decision-log 2.37) and 7 (the confirmation run, 2.42); a campaign at D1 writes about 5 items, at D2 about 7, and at D0 none (A2 does not run at D0: decision-log 2.38). Campaign k recalls all the brand wrote before it. N is computed from the real request texts with the local encoder; R, U and the depth come from the frozen functions through the engine's own `decide` (`backend/scripts/phase7_count_predictions.py`, which reproduces this table; no model call). Modal is at the mean yield, n1 = 7.
+
+| brand | N (C2, C3) | campaign 1 | campaign 2 | campaign 3 |
+|---|---|---|---|---|
+| B01, B02, B03, B04, B05, B06, B08, B09 | 0.14 to 0.22 | D2 | **D1** (alt D2 if n1 <= 3; D0 if n1 >= 9) | **D0** |
+| B10 | 0.30, 0.15 | D2 | **D1** (alt D2; D0 if n1 >= 12) | **D0** |
+| B07 (regulated: S = 1) | 0.31, 0.13 | D2 | **D2** | **D1** (alt D2 if n1 <= 3) |
+
+*By the model, by n1 (campaign 2 / campaign 3):* 3: D2 / D0; 6 or 7: D1 / D0; 9 or 12: D0 / D0 (non-regulated). A regulated brand never reaches D0: its sector term alone puts R at 0.21 or more.
+
+**Predicted share of brands showing ANY depth reduction (below D2) by campaign 3: 9 of 10, 98 percent by the model** (every non-regulated brand under every observed yield; B07 in 4 of 5). **Predicted search reduction:** about 13.5 searches per brand-sequence against 24 for Baseline B, **SRR about 44 percent, WITH the mandatory fresh query counted, plausible range 35 to 55 percent.** Campaign 3 is predicted to be D0 almost everywhere, so most of the experiment's third campaigns are memory-plus-one-query runs by design.
+
+**Reported openly.** FLOOR was the registered definition. It was built, tested end to end, and found inert; the switch, its reasoning, the gate result (not met), and the predictions above appear in the write-up. Nothing about this is hidden.

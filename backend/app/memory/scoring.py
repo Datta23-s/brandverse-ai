@@ -118,6 +118,10 @@ class Necessity(_Strict):
     # U is a saturating function of the NUMBER of recalled items whose semantic match S reaches
     # this floor, against `item_cap`: coverage = min(1, n / item_cap), U = 1 - coverage.
     relevance_floor: float = Field(gt=0, lt=1)
+    # What the engine counts for U: "floor" = recalled items whose S reaches `relevance_floor`
+    # (the original Registration 2 definition, FLOOR); "count" = every recalled item (COUNT).
+    # Switched floor -> count by dated amendment, 6 November 2026 (decision-log 2.43).
+    u_source: Literal["floor", "count"]
     item_cap: int = Field(ge=1)
     # R = (wN N + wU U + wS S) / (wN + wU + wS); F and E are dropped (decision-log 2.18).
     weights: dict[Literal["N", "U", "S"], float]

@@ -10,7 +10,10 @@ CFG = load_scoring().necessity
 
 
 def test_the_frozen_values_are_the_registered_ones() -> None:
-    assert CFG.relevance_floor == 0.55
+    assert CFG.relevance_floor == 0.55  # kept for the FLOOR column and the sensitivity reading
+    # SWITCHED floor -> count by the dated amendment of 2026-11-06 (decision-log 2.43): FLOOR made
+    # the engine inert. A change back, or to anything else, needs a decision-log entry.
+    assert CFG.u_source == "count"
     assert CFG.item_cap == 12
     assert CFG.weights == {"N": 0.30, "U": 0.25, "S": 0.15}
     assert (CFG.d0_below, CFG.d2_from) == (0.20, 0.32)

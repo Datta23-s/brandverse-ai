@@ -47,17 +47,46 @@ def test_the_second_identical_request_picks_a_lower_depth() -> None:
     assert ["D0", "D1", "D2"].index(second.depth) < ["D0", "D1", "D2"].index(first.depth)
 
 
-def test_only_items_at_the_floor_count_and_the_count_saturates_at_the_cap() -> None:
-    floor = CFG.relevance_floor
+def test_every_recalled_item_counts_whatever_its_match_and_the_count_saturates_at_the_cap() -> None:
+    """The engine counts COUNT (amendment of 2026-11-06, decision-log 2.43): an item well below the
+    0.55 floor still counts, so n cannot fall when memory grows."""
+    low = [0.10, 0.30, 0.54]
     d = decide(
+        CFG, novelty=0.2, similarities=low, regulated=False, requested="D1", policy="necessity"
+    )
+    assert d.n_relevant == 3 and d.u == pytest.approx(1 - 3 / 12)
+    grown = decide(
         CFG,
         novelty=0.2,
-        similarities=[floor, floor - 0.01, 0.99] + [0.9] * 40,
+        similarities=low + [0.2] * 4,
         regulated=False,
         requested="D1",
         policy="necessity",
     )
-    assert d.n_relevant == CFG.item_cap and d.u == 0.0 and d.n_recalled == 43
+    assert grown.n_relevant == 7 and grown.u < d.u  # more memory never RAISES U
+    full = decide(
+        CFG,
+        novelty=0.2,
+        similarities=[0.99] * 43,
+        regulated=False,
+        requested="D1",
+        policy="necessity",
+    )
+    assert full.n_relevant == CFG.item_cap and full.u == 0.0 and full.n_recalled == 43
+
+
+def test_the_original_floor_definition_is_still_available_and_counts_only_the_floor() -> None:
+    floor_cfg = CFG.model_copy(update={"u_source": "floor"})
+    sims = [floor_cfg.relevance_floor, floor_cfg.relevance_floor - 0.01, 0.99]
+    d = decide(
+        floor_cfg,
+        novelty=0.2,
+        similarities=sims,
+        regulated=False,
+        requested="D1",
+        policy="necessity",
+    )
+    assert d.n_relevant == 2  # 0.55 itself passes, 0.54 does not
 
 
 def test_a_regulated_sector_raises_r() -> None:

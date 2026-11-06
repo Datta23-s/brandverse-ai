@@ -6,7 +6,8 @@ is a constant of its own.
 
     R = (0.30 N + 0.25 U + 0.15 S) / 0.70          F and E are dropped (decision-log 2.18)
     N = 1 - max cosine to the organisation's earlier requests   (1 with none)    [N-a]
-    U = 1 - min(1, n / item_cap), n = recalled items whose S reaches the floor     [quantity]
+    U = 1 - min(1, n / item_cap), n = every recalled item (u_source "count", since the
+        amendment of 2026-11-06; originally only those whose S reaches the floor)   [quantity]
     S = 1 for a regulated sector, else 0
     D0 below d0_below, D2 from d2_from, D1 between.
 
@@ -62,7 +63,7 @@ class NecessityDecision:
             "u": round(self.u, 4),
             "s_sector": self.s_sector,
             "n_recalled": self.n_recalled,
-            "n_relevant": self.n_relevant,
+            "n_relevant": self.n_relevant,  # n: the items U counted (see u_source)
             "advised": self.advised,
             "requested": self.requested,
             "depth": self.depth,
@@ -78,7 +79,10 @@ def decide(
     requested: Depth,
     policy: DepthPolicy,
 ) -> NecessityDecision:
-    n, coverage = quantity_coverage(similarities, cfg)
+    # u_source "count" (since the amendment of 2026-11-06): every recalled item counts, whatever
+    # its match to this request; "floor": only those at the relevance floor (the original FLOOR).
+    counted = [1.0] * len(similarities) if cfg.u_source == "count" else similarities
+    n, coverage = quantity_coverage(counted, cfg)
     u = 1.0 - coverage
     s_sector = 1.0 if regulated else 0.0
     r = necessity_r(novelty, u, s_sector, cfg)

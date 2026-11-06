@@ -881,6 +881,15 @@ Each cap on the evaluation path, the registered parameter it bounds, that parame
 
 **A3 after the 2048 cap (n = 3 requests, no conclusion):** campaign 1 had one provider-unavailable retry and then answered (a FLAGGED campaign under 2.41); campaign 3 had one invalid output that the single repair fixed.
 
+### 2.43 Rulings on the confirmation findings (6 November 2026, owner): the engine counts COUNT; the reuse bands are untouched; A1 injection dropped; A3 waits
+**1. The engine is switched from FLOOR to COUNT, as a dated amendment** (`docs/phase7-first-decision.md` section 7b; `necessity.u_source: count`). **Justification, as ruled: FLOOR makes the necessity engine inert, returning D2 for every campaign observed in two independent runs (2.37, 2.42), and a mechanism that cannot vary cannot be evaluated. The switch is made to obtain a testable experiment, not a better result.** The construct argument against the 0.55 floor predates any stage-2 data (2.21, 1 November; 2.23 and section 7a item 1, 3 November). Read-only on 2026-11-06: no evaluation data exists (0 runs, `llm_calls`, campaigns, approvals, memory items). **Predictions registered before any evaluation run** (section 7b): campaign 1 D2 everywhere; campaign 2 D1 (alt D2 or D0) for non-regulated brands and D2 for B07; campaign 3 D0 for non-regulated brands and D1 for B07; **9 of 10 brands show a depth reduction by campaign 3; SRR about 44 percent with the fresh query counted (range 35 to 55)**. The switch and its reasoning appear in the write-up. Built: `u_source` in the config and the engine, pinned by `test_necessity_frozen`, FLOOR kept selectable and tested.
+
+**2. The reuse bands are NOT touched.** The same test as for FLOOR, reaching the opposite answer: nothing reached 0.80 and the highest M observed was 0.743 (a finding about M's distribution, reported beside every quality figure), but unlike FLOOR it does not make the experiment untestable, since memory still reaches A6 and can still affect the copy. Re-basing thresholds onto observed values is fitting, and is refused.
+
+**3. A1 injection is DROPPED, not a stretch.** With only the background band firing it adds little and the schedule is worth more. **Recorded as a limitation beside the A6-only scope: memory informs the final copy (A6) and nothing upstream of it: not A1's positioning, not A3's personas.**
+
+**4. A3 over-listing: wait for real data** against the 22 percent baseline (8 of 37). No change.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's

@@ -71,6 +71,13 @@ necessity:
   # campaign outcome: the 99th percentile (0.531) of S between one brand's 5 memory items and the 27
   # requests of OTHER brands (135 unrelated pairs, no model call), rounded UP to the next 0.05.
   relevance_floor: 0.55
+  # What U counts: "count" = every recalled item (COUNT), "floor" = only items at or above
+  # relevance_floor (FLOOR, the original Registration 2 definition). SWITCHED floor -> count on
+  # 2026-11-06 by dated amendment (decision-log 2.43; docs/phase7-first-decision.md Registration 2,
+  # Amendment 1): FLOOR made the engine inert (D2 for every campaign observed, in two independent
+  # runs), and a mechanism that cannot vary cannot be evaluated. The floor itself stays at 0.55 for
+  # the FLOOR column of the stage-2 report; the engine no longer uses it.
+  u_source: count
   # The injection cap (Memory.md section 9): coverage saturates here.
   item_cap: 12
   # The design's weights for the three inputs that have a source; F and E dropped (decision-log 2.18).
