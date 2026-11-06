@@ -236,13 +236,23 @@ def pool_context_loader(pool: AsyncConnectionPool[AsyncConnection]) -> LoadConte
             if truth is None:
                 return None
             cur = await conn.execute(
-                "select id, brand_id, name, category from products where id = %s and org_id = %s",
+                "select p.id, p.brand_id, p.name, p.category, b.voice_guidelines "
+                "from products p join brands b on b.id = p.brand_id and b.org_id = p.org_id "
+                "where p.id = %s and p.org_id = %s",
                 (product_id, org_id),
             )
             row = await cur.fetchone()
         if row is None:
             return None
-        product = {"id": str(row[0]), "brand_id": str(row[1]), "name": row[2], "category": row[3]}
+        product = {
+            "id": str(row[0]),
+            "brand_id": str(row[1]),
+            "name": row[2],
+            "category": row[3],
+            # The brand's voice attributes: read by Baseline A's writer ONLY (no other agent takes
+            # them today; the test set's brands have none, decision-log 2.48).
+            "voice": row[4],
+        }
         return ProductContext(product, truth)
 
     return load

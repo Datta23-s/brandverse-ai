@@ -50,6 +50,14 @@ log = logging.getLogger(__name__)
 # Step 7b. A6 runs in step 10 and A7 in step 11: they need the strategy and the draft, which do not
 # exist at step 7.
 FAN_OUT_AGENTS = ("A1", "A2", "A3")
+# Baseline A's writer: one model call, registered beside the agents (agents/baseline.py).
+BASELINE_WRITER = "BASELINE_A"
+
+
+class _NoAdvisory(Exception):
+    """Internal: this arm has no A7, so no advisory is produced (not an error)."""
+
+
 ADMISSION_STEP, RESEARCH_STEP, AGENTS_STEP = 3, 6, 7
 CREATIVE_STEP, VALIDATION_STEP, MEMORY_STEP = 10, 11, 15
 
@@ -275,6 +283,17 @@ class Nodes:
     async def retrieve_memory(self, state: RunState) -> dict[str, Any]:
         # Before A3: the request's persona does not exist yet, so C is left out of every M here
         # (app/memory/recall.py). This coverage is what the research-necessity step reads.
+        if state.get("arm", "proposed") != "proposed":
+            # The baselines have NO memory (evaluation-plan section 1): they neither read nor write
+            # it, enforced here and not left to how the harness calls them (decision-log 2.48).
+            return {
+                "memory_hits": [],
+                "memory_coverage": 0.0,
+                "memory_slots": {"filled": 0, "of": 0},
+                "memory_similarities": [],
+                "memory_persona_scored": False,
+                "_detail": f"{state['arm']}: no memory by design (nothing recalled)",
+            }
         with collecting() as timings:
             found = await self.d.retrieve(state, None)
         return {
@@ -298,6 +317,18 @@ class Nodes:
         not (the same reasoning as the call caps: no silent exemption)."""
         requested: Depth = state.get("depth", "D1")
         policy = state.get("depth_policy", "requested")
+        arm = state.get("arm", "proposed")
+        if arm != "proposed":
+            # The arm decides the depth, not the request: Baseline B is D2 always, Baseline A does
+            # no research (routed past it). Enforced here so a mistaken harness cannot make a
+            # baseline adaptive (decision-log 2.48).
+            depth: Depth = "D2" if arm == "baseline_b" else "D0"
+            return {
+                "depth": depth,
+                "necessity": {"policy": arm, "depth": depth, "requested": requested},
+                "_detail": f"{arm}: "
+                + ("D2 always, no engine" if arm == "baseline_b" else "no research, no engine"),
+            }
         cfg = self.d.necessity
         if cfg is None:
             if policy == "necessity":
@@ -336,6 +367,8 @@ class Nodes:
         }
 
     def route_depth(self, state: RunState) -> str:
+        if state.get("arm") == "baseline_a":
+            return "NONE"  # Baseline A does no research at all (not even the D0 fresh query)
         return state.get("depth", "D1")
 
     # ── step 6 ────────────────────────────────────────────────────────────────────────────────
@@ -368,6 +401,15 @@ class Nodes:
 
     # ── step 7 ────────────────────────────────────────────────────────────────────────────────
     async def select_agents(self, state: RunState) -> dict[str, Any]:
+        if state.get("arm") == "baseline_a":
+            # One model call: no specialist agents, no A7 (so no advisory: the approver sees none
+            # on any arm, evaluation-plan 2026-10-29), the writer is the baseline writer.
+            await self.emit(state, RESEARCH_STEP, StepStatus.SKIPPED, "baseline_a: no research")
+            return {
+                "selected_agents": [BASELINE_WRITER],
+                "agent_rationale": {BASELINE_WRITER: "baseline_a: a single call, no agents"},
+                "_detail": "baseline_a: no specialist agents",
+            }
         d0 = state.get("depth") == "D0"
         fan_out = [a for a in FAN_OUT_AGENTS if not (a == "A2" and d0)]
         # The rule and its reason are kept with the run (Phases.md Phase 7: persisted rationale).
@@ -392,13 +434,16 @@ class Nodes:
             "_detail": ", ".join(fan_out),
         }
 
-    def fan_out(self, state: RunState) -> list[Send]:
+    def fan_out(self, state: RunState) -> list[Send] | str:
         run = cast(RunState, dict(state))
-        return [
+        sends = [
             Send("run_agent", AgentTask(agent_id=a, run=run))
             for a in state["selected_agents"]
             if a in FAN_OUT_AGENTS
         ]
+        # Baseline A has no specialist agents: go straight to the join (an empty list of Sends
+        # would leave the run with nowhere to go).
+        return sends or "agents_join"
 
     async def run_agent(self, state: AgentTask) -> dict[str, Any]:
         agent_id, run = state["agent_id"], state["run"]
@@ -424,7 +469,7 @@ class Nodes:
     async def personalise(self, state: RunState) -> dict[str, Any]:
         personas = state.get("agent_outputs", {}).get("A3", {}).get("personas", [])
         update: dict[str, Any] = {"personas": personas, "_detail": f"{len(personas)} personas"}
-        if personas:
+        if personas and state.get("arm", "proposed") == "proposed":
             # Now the persona exists: recall again so the M that reuse and write-back decisions use
             # has C (app/memory/recall.py). Replaces the persona-less hits of step 4.
             with collecting() as timings:
@@ -451,7 +496,7 @@ class Nodes:
         # reused. It reaches A6 (and only A6).
         injection = (
             None
-            if self.d.injection is None
+            if self.d.injection is None or state.get("arm", "proposed") != "proposed"
             else select_injection(state.get("memory_hits", []), self.d.injection).record()
         )
         return {
@@ -473,17 +518,18 @@ class Nodes:
     async def generate_creative(self, state: RunState) -> dict[str, Any]:
         regenerating = state.get("creative") is not None
         round_ = state.get("revision_round", 0) + (1 if regenerating else 0)
+        writer = BASELINE_WRITER if state.get("arm") == "baseline_a" else "A6"
         try:
             ctx = await self.context(state, CREATIVE_STEP, round_)
-            out = await self.d.agents["A6"].run(state, ctx)
+            out = await self.d.agents[writer].run(state, ctx)
         except ABORTS:
             raise
         except Exception as e:
             return {
                 "creative": None,
                 "revision_round": round_,
-                "errors": [_agent_error(CREATIVE_STEP, "A6", e)],
-                "_detail": "A6 failed: no creative",
+                "errors": [_agent_error(CREATIVE_STEP, writer, e)],
+                "_detail": f"{writer} failed: no creative",
             }
         return {
             "creative": out.model_dump(mode="json", by_alias=True),
@@ -583,9 +629,13 @@ class Nodes:
                 ]
             )
         try:
+            if state.get("arm") == "baseline_a":
+                raise _NoAdvisory  # a single call has no A7 and so no advisory
             risk = await self.d.agents["A7"].run(state, ctx)
             # A model opinion, stored apart from `findings` and never counted in `outcome`.
             validation["advisory"] = risk.model_dump(mode="json")
+        except _NoAdvisory:
+            validation["advisory"] = None
         except ABORTS:
             raise
         except Exception as e:
@@ -672,6 +722,10 @@ class Nodes:
     def write_memory_node(self) -> NodeFn:
         async def node(state: RunState, config: RunnableConfig) -> dict[str, Any]:
             await self.emit(state, MEMORY_STEP, StepStatus.STARTED)
+            if state.get("arm", "proposed") != "proposed":
+                # The baselines have no memory: nothing is proposed, staged or written.
+                await self.emit(state, MEMORY_STEP, StepStatus.COMPLETED, "no memory by design")
+                return {"memory": {"skipped": f"{state['arm']} has no memory"}}
             try:
                 stage = config.get("configurable", {}).get("stage")
                 if not isinstance(stage, MemoryStage):

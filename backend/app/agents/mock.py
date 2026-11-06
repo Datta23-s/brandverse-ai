@@ -72,6 +72,15 @@ class MockA6:
         )
 
 
+class MockBaselineWriter:
+    """Baseline A's writer for the mock pipeline: the same copy as MockA6 (no model call)."""
+
+    id = "BASELINE_A"
+
+    async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> CreativeOutput:
+        return await MockA6().run(state, ctx)
+
+
 async def lexical_extractor(ctx: AgentContext, copy: Mapping[str, str]) -> list[Statement]:
     """A stand-in for the claim classifier: a statement for each active verified claim whose text
     appears in the copy, citing that claim. No model, deterministic."""
@@ -87,4 +96,6 @@ class MockA7:
 
 
 def mock_agents() -> dict[str, Agent]:
-    return {a.id: a for a in (MockA1(), MockA2(), MockA3(), MockA6(), MockA7())}
+    return {
+        a.id: a for a in (MockA1(), MockA2(), MockA3(), MockA6(), MockA7(), MockBaselineWriter())
+    }

@@ -18,6 +18,8 @@ from app.models.base import Contract
 
 ResearchDepth = Literal["D0", "D1", "D2"]
 DepthPolicy = Literal["requested", "necessity"]
+# The evaluation's three arms (docs/evaluation-plan.md section 1; `runs.arm`, migration 0005).
+Arm = Literal["proposed", "baseline_a", "baseline_b"]
 # "fake": the Phase 1 fake run. "pipeline": the real LangGraph pipeline (Phase 6).
 RunMode = Literal["fake", "pipeline"]
 
@@ -79,6 +81,14 @@ class RunRequest(Contract):
         description="Who the campaign is for, in the requester's words.",
     )
     depth: ResearchDepth = Field(default="D1", description="Research depth requested.")
+    arm: Arm = Field(
+        default="proposed",
+        description=(
+            "The evaluation arm. 'proposed': adaptive memory and depth. 'baseline_b': all built "
+            "agents, D2 always, no memory. 'baseline_a': one model call, no research, no agents, "
+            "no memory. The baselines neither read nor write memory (decision-log 2.48)."
+        ),
+    )
     depth_policy: DepthPolicy = Field(
         default="requested",
         description=(

@@ -52,6 +52,8 @@ export const runRequestSchema = z.strictObject({
   depth: researchDepthSchema,
   /** "requested": the run does `depth`. "necessity": the necessity engine chooses it. */
   depth_policy: z.enum(["requested", "necessity"]).default("requested"),
+  /** The evaluation arm; the baselines neither read nor write memory (decision-log 2.48). */
+  arm: z.enum(["proposed", "baseline_a", "baseline_b"]).default("proposed"),
 });
 export type RunRequest = z.infer<typeof runRequestSchema>;
 

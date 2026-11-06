@@ -17,6 +17,8 @@ from app.core.timing import merge_timings
 
 Depth = Literal["D0", "D1", "D2"]
 Decision = Literal["approve", "revise", "reject"]
+# The evaluation arm (docs/evaluation-plan.md section 1). Absent means "proposed".
+Arm = Literal["proposed", "baseline_a", "baseline_b"]
 
 
 def merge_dicts(left: dict[str, Any] | None, right: dict[str, Any] | None) -> dict[str, Any]:
@@ -46,6 +48,7 @@ class RunState(TypedDict, total=False):
     memory_coverage_final: float  # step 8, with the personas, when A3 spoke
     memory_similarities: list[float]  # S of each recalled item, step 4: the engine's quantity
     memory_persona_scored: bool  # the hits in `memory_hits` were scored with C
+    arm: Arm
     research_score: float  # R
     depth: Depth
     # "requested": the run does the depth the request named (baselines, tuning, the stage-2 runs).

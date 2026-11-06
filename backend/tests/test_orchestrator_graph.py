@@ -187,6 +187,7 @@ class Harness:
         depth: str = "D1",
         depth_policy: str = "requested",
         brief_check: dict[str, Any] | None = None,
+        arm: str = "proposed",
     ) -> PipelineOutcome:
         return await self.pipeline.start(
             run_id=self.run_id,
@@ -196,6 +197,7 @@ class Harness:
             brief=brief,
             depth=depth,  # type: ignore[arg-type]
             depth_policy=depth_policy,  # type: ignore[arg-type]
+            arm=arm,  # type: ignore[arg-type]
             brief_check=brief_check,
         )
 

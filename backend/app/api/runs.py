@@ -183,8 +183,9 @@ async def start_run(
     run_id = uuid4()
     async with as_user(pool, identity) as conn:
         await conn.execute(
-            "insert into public.runs (id, org_id, product_id, request) values (%s, %s, %s, %s)",
-            (run_id, request.org_id, request.product_id, request.model_dump_json()),
+            "insert into public.runs (id, org_id, product_id, arm, request) "
+            "values (%s, %s, %s, %s, %s)",
+            (run_id, request.org_id, request.product_id, request.arm, request.model_dump_json()),
         )
     job = PipelineRunJob(run_id=run_id, request=request, by=identity.user_id)
     with bind_run_id(str(run_id)):

@@ -22,6 +22,7 @@ from psycopg_pool import AsyncConnectionPool
 
 import app.orchestrator  # noqa: F401  (sets the strict-msgpack switch before LangGraph is used)
 from app.agents.base import Agent, EvidenceReader
+from app.agents.baseline import BaselineWriter
 from app.agents.copywriter import CopyWriter
 from app.agents.market import MarketAnalyst
 from app.agents.mock import lexical_extractor, mock_agents
@@ -152,6 +153,7 @@ async def open_pipeline(
             "A3": PersonaAnalyst(gateway, prompts),
             "A6": CopyWriter(gateway, prompts),
             "A7": RiskReader(gateway, prompts),
+            "BASELINE_A": BaselineWriter(gateway, prompts),
         }
         # The local encoder (loaded here, 37 s): recall scores with it and items written to memory
         # carry its real vectors.

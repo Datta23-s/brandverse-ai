@@ -125,6 +125,25 @@ def problems_text(validation: Mapping[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
+def creative_from_draft(draft: "CopyDraft", ctx: AgentContext) -> CreativeOutput:
+    """The model's three fields as the run's copy, with the sector's required notices appended by
+    code as the footer. ONE function for A6 and for Baseline A's writer, so the two arms' copy is
+    assembled identically (decision-log 2.48)."""
+    copy = {
+        name: text.strip()
+        for name, text in (
+            ("headline", draft.headline),
+            ("body", draft.body),
+            ("call_to_action", draft.call_to_action),
+        )
+        if text.strip()
+    }
+    notices = required_disclaimers(copy, ctx.truth, ctx.on)
+    if notices:
+        copy["footer"] = "\n".join(notices)
+    return CreativeOutput(copy=copy)
+
+
 class CopyWriter:
     id = "A6"
 
@@ -151,16 +170,4 @@ class CopyWriter:
             route_reason="A6 creative: default tier",
             max_output_tokens=1024,
         )
-        copy = {
-            name: text.strip()
-            for name, text in (
-                ("headline", draft.headline),
-                ("body", draft.body),
-                ("call_to_action", draft.call_to_action),
-            )
-            if text.strip()
-        }
-        notices = required_disclaimers(copy, ctx.truth, ctx.on)
-        if notices:
-            copy["footer"] = "\n".join(notices)
-        return CreativeOutput(copy=copy)
+        return creative_from_draft(draft, ctx)

@@ -74,12 +74,17 @@ def build_graph(
     g.add_conditional_edges(
         "assess_research_necessity",
         n.route_depth,
-        {"D0": "fresh_research", "D1": "focused_research", "D2": "deep_research"},
+        {
+            "D0": "fresh_research",
+            "D1": "focused_research",
+            "D2": "deep_research",
+            "NONE": "select_agents",  # Baseline A: no research at all
+        },
     )
     g.add_edge("fresh_research", "select_agents")
     g.add_edge("focused_research", "select_agents")
     g.add_edge("deep_research", "select_agents")
-    g.add_conditional_edges("select_agents", n.fan_out, ["run_agent"])
+    g.add_conditional_edges("select_agents", n.fan_out, ["run_agent", "agents_join"])
     g.add_edge("run_agent", "agents_join")
     # A provider-outage gap ends the run here, before it can reach a human (Amendment 1).
     g.add_node("invalidate_infrastructure", n.invalidate_infrastructure)

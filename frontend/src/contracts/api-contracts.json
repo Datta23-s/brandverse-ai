@@ -1438,6 +1438,17 @@
       "additionalProperties": false,
       "description": "A real run (`POST /api/v1/runs`). Unlike the fake run it carries the audience: research is\nplanned from the request's stated audience, not from A3's personas, which come after it.",
       "properties": {
+        "arm": {
+          "default": "proposed",
+          "description": "The evaluation arm. 'proposed': adaptive memory and depth. 'baseline_b': all built agents, D2 always, no memory. 'baseline_a': one model call, no research, no agents, no memory. The baselines neither read nor write memory (decision-log 2.48).",
+          "enum": [
+            "proposed",
+            "baseline_a",
+            "baseline_b"
+          ],
+          "title": "Arm",
+          "type": "string"
+        },
         "audience": {
           "anyOf": [
             {

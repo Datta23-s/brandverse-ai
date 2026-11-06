@@ -41,7 +41,7 @@ from app.models.runs import RunCompleted, RunFailed, RunStarted, StepEvent, Step
 from app.orchestrator import progress
 from app.orchestrator.deps import EventSink
 from app.orchestrator.graph import APPROVAL_NODE
-from app.orchestrator.state import Decision, Depth, RunState
+from app.orchestrator.state import Arm, Decision, Depth, RunState
 
 log = logging.getLogger(__name__)
 
@@ -199,6 +199,7 @@ class Pipeline:
         depth_policy: DepthPolicy = "requested",
         audience: str | None = None,
         brief_check: dict[str, Any] | None = None,
+        arm: Arm = "proposed",
     ) -> PipelineOutcome:
         await self._events.append(RunStarted(run_id=run_id))
         initial = RunState(
@@ -209,11 +210,13 @@ class Pipeline:
             brief=brief,
             depth=depth,
             depth_policy=depth_policy,
+            arm=arm,
             audience=audience,
             brief_check=brief_check,
             request={
                 "brief": brief,
                 "depth": depth,
+                "arm": arm,
                 "depth_policy": depth_policy,
                 "audience": audience,
             },
