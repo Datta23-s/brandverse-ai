@@ -657,6 +657,59 @@ async def test_the_dev_ceiling_refuses_any_tier_and_org_and_writes_the_refusal(
     assert outcomes == [("pending", 3), ("refused", 3)]
 
 
+async def test_an_evaluation_database_is_judged_by_the_evaluation_budget_alone(
+    db_url: str, pool: AsyncConnectionPool[AsyncConnection]
+) -> None:
+    """Owner, 2026-11-06: the evaluation has its own budget scope. With the DEVELOPMENT ceiling
+    spent and its billing unset, an evaluation call is still admitted; the evaluation's own ceiling
+    refuses with its own error. (Skipped without TEST_DATABASE_URL; runs in CI.)"""
+    from datetime import date
+
+    from app.errors import EvaluationBudgetRefused
+    from app.llm.dev_budget import DevBudget
+    from app.llm.evaluation_budget import EvaluationBudget
+
+    with psycopg.connect(db_url, autocommit=True) as c:
+        row = c.execute("select current_database()").fetchone()
+        assert row is not None
+        name = row[0]
+        made = c.execute(
+            "select count(*) filter (where outcome <> 'refused') from llm_calls"
+        ).fetchone()
+        assert made is not None
+    org = fresh_org(db_url)
+    ctx = fresh_run_ctx(db_url, org)
+    exhausted_dev = DevBudget(
+        ceiling_calls=1,
+        total_at_ruling=10_000,
+        made_at_ruling={"some_development_database": 0},
+        billing_unlinked_confirmed_on=None,
+        report_to_owner_at_calls=1,
+    )
+    evaluation = EvaluationBudget(
+        ceiling_calls=int(made[0]) + 2,
+        base_calls=int(made[0]) + 1,
+        rerun_allowance_calls=1,
+        report_to_owner_at_calls=int(made[0]) + 1,
+        databases=frozenset({name}),
+        billing_unlinked_confirmed_on=date(2026, 11, 4),
+    )
+    ledger = CallLedger(
+        pool,
+        make_registry(strong_rpd=1000),
+        max_calls_per_run=100,
+        max_cost_per_run_usd=100.0,
+        pending_expiry_s=900,
+        dev_budget=exhausted_dev,
+        evaluation_budget=evaluation,
+    )
+    await ledger.admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    await ledger.admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    with pytest.raises(EvaluationBudgetRefused) as spent:
+        await ledger.admit(ctx, Tier.STANDARD, P, "test", 0.0001)
+    assert spent.value.kind == "ceiling_reached"
+
+
 async def test_the_cap_holds_under_concurrent_calls_and_ignores_other_tiers_and_orgs(
     pool: AsyncConnectionPool[AsyncConnection], db_url: str
 ) -> None:

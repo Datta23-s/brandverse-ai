@@ -148,15 +148,20 @@ class LLMGateway:
         # gateway is built and a test fixture can replace it (tests/conftest.py).
         if completion is None:
             completion = _litellm.acompletion
-        if completion is _litellm.acompletion and getattr(ledger, "dev_budget", None) is None:
+        if (
+            completion is _litellm.acompletion
+            and getattr(ledger, "dev_budget", None) is None
+            and getattr(ledger, "evaluation_budget", None) is None
+        ):
             # A real provider call with no development ceiling is a hole (owner, 2026-11-01): the
             # ceiling and the billing condition are enforced in the ledger, so a gateway that
             # reaches the provider through a ledger without them cannot be built. There is no
-            # production exemption either: when evaluation runs begin, the owner replaces the
-            # file's figures and registers the live database in it.
+            # production exemption either: the evaluation has its OWN registered scope
+            # (config/evaluation_budget.yaml, 2026-11-06), so it neither borrows from nor is
+            # refused by the development ceiling.
             raise ValueError(
                 "a gateway that calls the provider needs a ledger with a dev_budget "
-                "(config/dev_budget.yaml)"
+                "(config/dev_budget.yaml) or an evaluation_budget (config/evaluation_budget.yaml)"
             )
         self._registry = registry
         self._ledger = ledger

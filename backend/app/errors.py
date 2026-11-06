@@ -100,6 +100,12 @@ class DevBudgetRefused(CallRefused):
         self.kind = kind
 
 
+class EvaluationBudgetRefused(DevBudgetRefused):
+    """The EVALUATION's own budget (config/evaluation_budget.yaml) refused the call. A subclass of
+    the development refusal so that every site that already ends a run on that refusal ends it on
+    this one, but a different scope: the development ceiling never raises it."""
+
+
 # What must END a run instead of being turned into a "declared gap" by a node that catches a
 # failed agent. ONE name, used at every catch site in the orchestrator, so a new abort cannot be
 # swallowed at a site that forgot it (tests/test_provider_unavailable.py scans for the old form).

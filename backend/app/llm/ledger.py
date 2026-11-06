@@ -41,10 +41,12 @@ from app.errors import (
     BudgetExceeded,
     CallRefused,
     DevBudgetRefused,
+    EvaluationBudgetRefused,
     QuotaExhausted,
     StrongTierCapReached,
 )
 from app.llm.dev_budget import DevBudget
+from app.llm.evaluation_budget import EvaluationBudget, scope_refusal
 from app.llm.prompts import PromptRef
 from app.llm.registry import ModelRegistry, Tier
 
@@ -188,6 +190,7 @@ class CallLedger:
         pending_expiry_s: int,
         strong_cap: tuple[UUID, int] | None = None,
         dev_budget: DevBudget | None = None,
+        evaluation_budget: EvaluationBudget | None = None,
     ) -> None:
         self._pool = pool
         self._registry = registry
@@ -195,6 +198,8 @@ class CallLedger:
         # organisation in this database, plus the other databases' share. The gateway refuses to
         # send a real provider call through a ledger without one.
         self.dev_budget = dev_budget
+        # The evaluation's own scope (config/evaluation_budget.yaml), disjoint from the above.
+        self.evaluation_budget = evaluation_budget
         # (organisation, most strong calls it may EVER make): enforced in `admit`, under the
         # organisation's lock, from `llm_calls` (a count, never a counter: Rules.md A1).
         self.strong_cap = strong_cap
@@ -248,13 +253,17 @@ class CallLedger:
             await conn.execute(_LOCK_SQL, (f"llm:run:{ctx.run_id}",))
             await conn.execute(_LOCK_SQL, (f"llm:model:{model.id}",))
             u = await self.usage(conn, ctx, tier)
-            if self.dev_budget is not None:
+            if self.dev_budget is not None or self.evaluation_budget is not None:
                 cur = await conn.execute(_DEV_MADE_SQL)
                 dev_row = await cur.fetchone()
                 if dev_row is not None:
-                    decided = self.dev_budget.refusal(str(dev_row[0]), int(dev_row[1]))
+                    database, made = str(dev_row[0]), int(dev_row[1])
+                    decided = scope_refusal(database, made, self.dev_budget, self.evaluation_budget)
                     if decided is not None:
-                        refusal = DevBudgetRefused(decided[1], decided[0])
+                        kind, reason, is_evaluation = decided
+                        refusal = (EvaluationBudgetRefused if is_evaluation else DevBudgetRefused)(
+                            reason, kind
+                        )
             if refusal is None and (
                 tier is Tier.STRONG
                 and self.strong_cap is not None

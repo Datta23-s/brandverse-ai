@@ -1,0 +1,35 @@
+# The EVALUATION's own call budget (owner, 2026-11-06), a scope SEPARATE from the development
+# ceiling in config/dev_budget.yaml. Found in the cap audit: until this file existed the only
+# budget a real-provider gateway could be built with was the development one, which refuses any
+# database not listed in it and counts the rest against the development total, so the evaluation's
+# roughly 660 calls would have been refused on the first day. The two scopes are disjoint BY TEST
+# (tests/test_evaluation_budget.py): a database is in one or the other, never both, and nothing in
+# the development ceiling's state (spent, exhausted, billing unset on ITS side) can refuse an
+# evaluation call, because an evaluation database is dispatched to this scope before the
+# development one is consulted.
+#
+# SIZING, so the figure is not mistaken for a design number. The plan's cost is about 660 Standard
+# calls (30 requests x 3 arms, the agents of each run, and the revision rounds an approver may ask
+# for; docs/phase7-first-decision.md). The attempt rule allows up to 2 re-runs of a run that an
+# infrastructure failure invalidated, so the worst case is above the base. 300 is the allowance
+# for re-runs and for the registered chunk of unexpected rounds: 660 + 300 = 960. It is a ceiling
+# that bounds waste, not an expectation. The Standard tier's 500 requests a day is a SCHEDULING
+# limit (evaluation-plan.md, 2.16), not part of this budget.
+ceiling_calls: 960
+base_calls: 660
+rerun_allowance_calls: 300
+
+# The owner is told at this spend, and the ceiling is not raised quietly (the rule of the
+# development scope applies here too).
+report_to_owner_at_calls: 800
+
+# The databases whose calls are evaluation calls. Each counts ITS OWN non-refused llm_calls (the
+# evaluation database exists only for the evaluation, so there is no "at the ruling" figure). Name
+# the live project's database here when the owner decides where the evaluation runs; a database
+# that is not listed here and not in config/dev_budget.yaml is refused by both scopes.
+databases:
+  - brandverse_evaluation
+
+# The billing condition is the same fact as the development scope's (no billing account linked to
+# the Cloud project) and is read from config/dev_budget.yaml, not repeated, so there is one place
+# to unset it if an account turns out to be linked.
