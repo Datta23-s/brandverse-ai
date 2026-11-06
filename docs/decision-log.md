@@ -804,6 +804,19 @@ Full text: `docs/phase7-first-decision.md` section 7a. (1) Stage 2 computes **OL
 
 **6. Schedule.** The planning date is the **evening of 10 November**; the build is aimed at the 9th. The last six days lost roughly half of every plan to power, DNS and the provider, none of it coding. The 11-12 November freeze holds.
 
+### 2.37 Attempt 24 against the registered prediction (6 November 2026): criterion NOT met, as predicted; the repaired page budget works end to end; two COUNT cells missed
+**Result.** Valid, all 12 campaigns, 74 development calls (the estimate was about 65). OLD 0/4, FLOOR 0/4, COUNT 1/4 separating; **needed 3, not met, nothing adopted.** Gates nothing (2.35). Spent: 441 of 700 (259 remain, 159 before the tripwire at 600).
+
+| variant | registered prediction (all four brands) | observed |
+|---|---|---|
+| OLD | D2/D1/D1, 0/4 | **D2/D1/D1 in all four. HELD 4 of 4.** |
+| FLOOR | D2/D2/D2, 0/4 | **D2/D2/D2 in all four. HELD 4 of 4.** |
+| COUNT | D2/D0/D0, 0/4 | B01 D2/D0/D0 **held**; B03 D2/D0/D0 **held**; **B02 D2/D1/D0 missed (it separates)**; **B05 D2/D2/D0 missed**. 2 of 4 cells held; separating brands 1/4 (B02), prediction 0/4. |
+
+**Reading it.** (1) **The registered prediction that the repair would not make the criterion pass held**: 1 of 4 against 3 needed. (2) **The repair did what it was for.** A2 read exactly 10 pages in every D2 campaign and 6 in every D1 (checked from the run checkpoints, no call); the items recalled at campaign 2 rose from 6, 5, 6, 1 (mean 4.5, attempt 23) to **9, 6, 12, 3 (mean 7.5)**, +3.0 against the +3 the yield model predicted for 10 pages. n = 4 per attempt, so this is a direction and not an estimate. (3) **The yield model is right on the mean and wrong per brand**: it said every brand writes about 8 and the spread is **3 to 12**. B01 and B03 overshot (9 and 12 items, so campaign 2, a D1 slot, falls to D0 under COUNT: the predicted overshoot); B02 (6) and B05 (3) did not. (4) The two missed cells are the spread, not a new mechanism: B05's D2 campaign had A2 offer about 5 items of which 1 was removed by the copy screen, 3 reached memory. The model was told per-brand outcomes would scatter and they did. (5) **COUNT's separation is a property of write-back volume landing in a window (campaign 1 writes 4 to 7 items, cumulative 8 to 9)**, which one stochastic model call per campaign hits about one time in four; **R's realised discrimination is reported across the 30-campaign evaluation as a primary finding (2.35).**
+
+**Examined and left alone, as ruled:** the 5-word screen (it removed items again, each a genuine run), A2's prompt, the other unregistered constants (2.35 item 4).
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
