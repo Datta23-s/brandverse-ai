@@ -6,7 +6,7 @@ not built yet (memory retrieval with `C` and `E`, the research-necessity engine)
 """
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Protocol
 from uuid import UUID
@@ -14,6 +14,7 @@ from uuid import UUID
 from app.agents.base import Agent, AgentContext, EvidenceReader
 from app.core.gates import GateReport, Statement, Superlatives
 from app.core.truth import ProductTruth
+from app.memory.scoring import Necessity
 from app.memory.writeback import MemoryStage
 from app.models.runs import RunEvent
 from app.orchestrator.state import Depth, RunState
@@ -37,6 +38,9 @@ class MemoryResult:
         0  # reported as "k of N slots" (N = len(required_slots), 2 since 2026-10-31)
     )
     slots_total: int = 0
+    # S of every recalled item that has one: the necessity engine counts those at the relevance
+    # floor (quantity, not the best match; decision-log 2.21).
+    similarities: list[float] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +61,9 @@ LoadContext = Callable[[UUID, UUID], Awaitable[ProductContext | None]]
 # (app/memory/recall.py).
 Retrieve = Callable[[RunState, Sequence[str] | None], Awaitable[MemoryResult]]
 Research = Callable[[RunState, Depth], Awaitable[ResearchResult]]
+# Step 5's N: 1 - the largest cosine between this request and the organisation's earlier approved
+# requests (1.0 with none). Local encoder, no model call.
+Novelty = Callable[[RunState], Awaitable[float]]
 # Step 15: stage what the approved campaign adds to memory. Receives the run's own MemoryStage.
 WriteMemory = Callable[[RunState, MemoryStage, GateReport, ProductTruth], Awaitable[dict[str, Any]]]
 
@@ -82,6 +89,12 @@ class GraphDeps:
     record_block: RecordBlock | None = None
     # None: the research step has no timeout of its own. Set, it fails with the step's name.
     research_timeout_s: float | None = None
+    # The necessity engine's frozen parameters and the source of N. Both None: the engine is not
+    # wired, which is only allowed for a run whose depth is the request's (depth_policy
+    # "requested"); a run that asks for the engine without them FAILS rather than quietly keeping
+    # the requested depth (nodes.assess_research_necessity).
+    necessity: Necessity | None = None
+    novelty: Novelty | None = None
 
 
 async def no_memory(state: RunState, personas: Sequence[str] | None = None) -> MemoryResult:

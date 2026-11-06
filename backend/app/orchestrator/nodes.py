@@ -36,6 +36,7 @@ from app.core.pipeline import PIPELINE_STEPS
 from app.core.timing import collecting
 from app.core.truth import ProductTruth
 from app.errors import ABORTS, BrandverseError, StepTimeout
+from app.memory.necessity import decide
 from app.memory.writeback import MemoryStage
 from app.models.runs import StepEvent, StepStatus
 from app.orchestrator import progress
@@ -279,20 +280,57 @@ class Nodes:
             "memory_hits": found.hits,
             "memory_coverage": found.coverage,
             "memory_slots": {"filled": found.slots_filled, "of": found.slots_total},
+            "memory_similarities": list(found.similarities),
             "memory_persona_scored": False,
             "_detail": f"{len(found.hits)} hits, coverage {found.slots_filled} of "
             f"{found.slots_total} slots ({found.coverage:.2f}; no persona yet)",
         }
 
     async def assess_research_necessity(self, state: RunState) -> dict[str, Any]:
-        # PLACEHOLDER: the Research Necessity Engine (Architecture.md §6.1) is not built. The depth
-        # is what the request asked for, and R is the memory gap, so nothing here pretends to
-        # be a decision the engine makes.
-        depth: Depth = state.get("depth", "D1")
+        """Step 5, the Research Necessity Engine (app/memory/necessity.py, frozen parameters).
+
+        Under the "necessity" policy R chooses the depth; under "requested" the run keeps the depth
+        the request named, and R is still computed and recorded as what the engine ADVISED, so the
+        record shows what it would have done. A run that asks for the engine on a pipeline that has
+        none FAILS: falling back to the requested depth would be a run that looks adaptive and is
+        not (the same reasoning as the call caps: no silent exemption)."""
+        requested: Depth = state.get("depth", "D1")
+        policy = state.get("depth_policy", "requested")
+        cfg = self.d.necessity
+        if cfg is None:
+            if policy == "necessity":
+                raise PipelineInputError(
+                    "depth_policy is 'necessity' but this pipeline has no necessity engine wired"
+                )
+            return {
+                "depth": requested,
+                "_detail": f"depth {requested} (as requested; no necessity engine wired)",
+            }
+        if self.d.novelty is None and policy == "necessity":
+            raise PipelineInputError("depth_policy is 'necessity' but N has no source wired")
+        novelty = 1.0 if self.d.novelty is None else await self.d.novelty(state)
+        decision = decide(
+            cfg,
+            novelty=novelty,
+            similarities=state.get("memory_similarities", []),
+            regulated=bool((state.get("truth") or {}).get("regulated")),
+            requested=requested,
+            policy=policy,
+        )
+        how = (
+            "chosen by R"
+            if policy == "necessity"
+            else f"as requested; R advised {decision.advised}"
+        )
+        detail = (
+            f"depth {decision.depth} ({how}): R {decision.r:.3f}, N {decision.novelty:.3f}, "
+            f"U {decision.u:.2f} ({decision.n_relevant} relevant of {decision.n_recalled} recalled)"
+        )
         return {
-            "depth": depth,
-            "research_score": round(1.0 - state.get("memory_coverage", 0.0), 4),
-            "_detail": f"depth {depth} (as requested; the necessity engine is not built)",
+            "depth": decision.depth,
+            "research_score": round(decision.r, 4),
+            "necessity": decision.record(),
+            "_detail": detail,
         }
 
     def route_depth(self, state: RunState) -> str:

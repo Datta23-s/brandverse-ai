@@ -656,7 +656,9 @@ async def test_a_completed_run_with_a_failed_agent_is_told_from_a_whole_one_in_t
     assert facts is not None
     assert facts.declared_gaps == ({"agent": "A2", "step": 7, "error": "RuntimeError"},)
     assert (facts.depth, facts.selected_agents) == ("D1", ("A1", "A2", "A3", "A6", "A7"))
-    assert facts.memory_hit_count == 0 and facts.research_score == 1.0
+    # No necessity engine is wired in this harness, so no R is recorded (it used to be the
+    # placeholder 1 - coverage; the engine is built, decision-log 2.35).
+    assert facts.memory_hit_count == 0 and facts.research_score is None
 
 
 async def test_a_partial_run_records_its_facts_from_the_checkpoint() -> None:

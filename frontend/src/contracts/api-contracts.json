@@ -1477,6 +1477,16 @@
           "title": "Depth",
           "type": "string"
         },
+        "depth_policy": {
+          "default": "requested",
+          "description": "'requested': the run does the depth named above. 'necessity': the research necessity engine chooses the depth from R, and `depth` is only recorded as what was asked.",
+          "enum": [
+            "requested",
+            "necessity"
+          ],
+          "title": "Depth Policy",
+          "type": "string"
+        },
         "org_id": {
           "description": "The organisation the run belongs to; the caller must be its owner or editor.",
           "format": "uuid",

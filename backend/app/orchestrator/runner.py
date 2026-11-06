@@ -35,6 +35,7 @@ from app.core.budgeted_run import RunFacts, end_run, fail_run, resume_run, suspe
 from app.core.infrastructure import classify_infrastructure_failure
 from app.core.pipeline import PIPELINE_STEPS
 from app.errors import BrandverseError, BudgetExceeded, ProviderCircuitOpen, StepTimeout
+from app.memory.necessity import DepthPolicy
 from app.memory.writeback import MemoryStage, StagedMemory
 from app.models.runs import RunCompleted, RunFailed, RunStarted, StepEvent, StepStatus
 from app.orchestrator import progress
@@ -195,6 +196,7 @@ class Pipeline:
         product_id: UUID,
         brief: str | None = None,
         depth: Depth = "D1",
+        depth_policy: DepthPolicy = "requested",
         audience: str | None = None,
         brief_check: dict[str, Any] | None = None,
     ) -> PipelineOutcome:
@@ -206,9 +208,15 @@ class Pipeline:
             product_id=str(product_id),
             brief=brief,
             depth=depth,
+            depth_policy=depth_policy,
             audience=audience,
             brief_check=brief_check,
-            request={"brief": brief, "depth": depth, "audience": audience},
+            request={
+                "brief": brief,
+                "depth": depth,
+                "depth_policy": depth_policy,
+                "audience": audience,
+            },
         )
         return await self._drive(run_id, initial)
 

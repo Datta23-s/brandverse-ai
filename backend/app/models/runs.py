@@ -17,6 +17,7 @@ from app.core.pipeline import PIPELINE_STEPS, TOTAL_STEPS
 from app.models.base import Contract
 
 ResearchDepth = Literal["D0", "D1", "D2"]
+DepthPolicy = Literal["requested", "necessity"]
 # "fake": the Phase 1 fake run. "pipeline": the real LangGraph pipeline (Phase 6).
 RunMode = Literal["fake", "pipeline"]
 
@@ -78,6 +79,13 @@ class RunRequest(Contract):
         description="Who the campaign is for, in the requester's words.",
     )
     depth: ResearchDepth = Field(default="D1", description="Research depth requested.")
+    depth_policy: DepthPolicy = Field(
+        default="requested",
+        description=(
+            "'requested': the run does the depth named above. 'necessity': the research necessity "
+            "engine chooses the depth from R, and `depth` is only recorded as what was asked."
+        ),
+    )
 
 
 class RunAccepted(Contract):

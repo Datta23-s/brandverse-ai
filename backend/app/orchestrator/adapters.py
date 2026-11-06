@@ -29,6 +29,7 @@ from app.llm.gateway import LLMGateway
 from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 from app.memory.embeddings import Encoder
+from app.memory.necessity import novelty_against, request_text
 from app.memory.proposer import Proposal, propose
 from app.memory.recall import recall
 from app.memory.scoring import ScoringConfig, SourceScoring, load_scoring
@@ -38,6 +39,7 @@ from app.orchestrator.deps import (
     ExtractStatements,
     LoadContext,
     MemoryResult,
+    Novelty,
     ProductContext,
     RecordBlock,
     Research,
@@ -171,8 +173,55 @@ def memory_recaller(
                 personas=personas,
             )
         return MemoryResult(
-            [i.record() for i in found.items], found.coverage, found.slots_filled, found.slots_total
+            [i.record() for i in found.items],
+            found.coverage,
+            found.slots_filled,
+            found.slots_total,
+            [i.components["S"] for i in found.items if "S" in i.components],
         )
+
+    return run
+
+
+def request_novelty(pool: AsyncConnectionPool[AsyncConnection], encoder: Encoder) -> Novelty:
+    """N-a (decision-log 2.21): 1 - the largest cosine between this request and the organisation's
+    EARLIER requests whose campaign was approved; 1.0 with none. The earlier requests are read from
+    `runs.request` (no store, no migration) and embedded with the local encoder: no model call."""
+
+    async def run(state: RunState) -> float:
+        product = state.get("product") or {}
+        truth = state.get("truth") or {}
+        async with pool.connection() as conn:
+            cur = await conn.execute(
+                """
+                select r.request, p.category, r.created_at
+                  from runs r
+                  join campaigns c on c.run_id = r.id and c.org_id = r.org_id
+                  join products p on p.id = r.product_id and p.org_id = r.org_id
+                 where r.org_id = %s and r.id <> %s and c.status = 'approved'
+                """,
+                (UUID(state["org_id"]), UUID(state["run_id"])),
+            )
+            rows = await cur.fetchall()
+        sector = truth.get("sector")
+        mine = encoder.embed_documents(
+            [
+                request_text(
+                    product.get("category"), sector, state.get("brief"), state.get("audience")
+                )
+            ]
+        )[0]
+        if not rows:
+            return 1.0
+        priors = encoder.embed_documents(
+            [
+                request_text(
+                    category, sector, (req or {}).get("brief"), (req or {}).get("audience")
+                )
+                for req, category, _created in rows
+            ]
+        )
+        return novelty_against(mine, priors)
 
     return run
 

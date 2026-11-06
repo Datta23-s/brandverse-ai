@@ -48,6 +48,7 @@ from app.orchestrator.adapters import (
     gate_block_recorder,
     memory_recaller,
     pool_context_loader,
+    request_novelty,
     writeback_step,
 )
 from app.orchestrator.checkpoint import open_checkpointer
@@ -192,6 +193,9 @@ async def open_pipeline(
             retrieve=memory_recaller(
                 pool, TimedEncoder(encoder, "encoder_recall_ms"), scoring, today=today
             ),
+            # The necessity engine, with its frozen parameters and N's source (decision-log 2.21).
+            necessity=scoring.necessity,
+            novelty=request_novelty(pool, TimedEncoder(encoder, "encoder_recall_ms")),
             research=research,
             agents=agents,
             write_memory=writeback_step(pool, TimedEncoder(encoder, "encoder_writeback_ms")),

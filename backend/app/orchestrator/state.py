@@ -44,9 +44,15 @@ class RunState(TypedDict, total=False):
     memory_coverage: float  # 0..1; step 4, C left out (no persona yet)
     memory_slots: dict[str, int]  # {"filled": k, "of": N}: coverage is always "k of N slots"
     memory_coverage_final: float  # step 8, with the personas, when A3 spoke
+    memory_similarities: list[float]  # S of each recalled item, step 4: the engine's quantity
     memory_persona_scored: bool  # the hits in `memory_hits` were scored with C
     research_score: float  # R
     depth: Depth
+    # "requested": the run does the depth the request named (baselines, tuning, the stage-2 runs).
+    # "necessity": the engine decides (the Proposed arm, production). Absent means requested.
+    depth_policy: Literal["requested", "necessity"]
+    # Step 5's decision, whichever policy: R, N, U, n, the depth R advised and the depth used.
+    necessity: dict[str, Any] | None
     research: dict[str, Any] | None
     findings: Annotated[list[dict[str, Any]], add]
     selected_agents: list[str]

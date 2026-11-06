@@ -178,6 +178,7 @@ async def run_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[str
                 product_id=job.request.product_id,
                 brief=job.request.brief,
                 depth=job.request.depth,
+                depth_policy=job.request.depth_policy,
                 audience=job.request.audience,
             ),
         )
