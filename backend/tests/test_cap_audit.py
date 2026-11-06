@@ -59,7 +59,11 @@ def test_the_production_cap_leaves_room_for_only_one_repair_and_that_is_known() 
 
 
 def test_a_production_configuration_below_the_worst_case_does_not_start() -> None:
-    prod = {"environment": "production", "fake_runs_enabled": False}
+    prod = {
+        "environment": "production",
+        "fake_runs_enabled": False,
+        "research_step_timeout_s": 900.0,
+    }
     assert make_settings(**prod).max_llm_calls_per_run == 20  # the registered default starts
     with pytest.raises(ValueError, match="below the worst case of one run"):
         make_settings(**prod, max_llm_calls_per_run=12)
@@ -68,10 +72,12 @@ def test_a_production_configuration_below_the_worst_case_does_not_start() -> Non
         make_settings(**prod, max_revision_rounds=5)
 
 
-def test_the_stage2_per_run_cap_covers_the_logical_worst_case() -> None:
-    """Bounds: one stage-2 campaign (not on the evaluation path). 13 logical calls; the cap of 15
-    leaves a repair, and NOT the six retries (an outage invalidates the run first)."""
-    assert PER_RUN_CALL_CAP >= logical_calls(DEFAULT["max_revision_rounds"])
+def test_the_stage2_per_run_cap_matches_productions_worst_case() -> None:
+    """Bounds: one stage-2 campaign (off the evaluation path, but the confirmation run uses it, so
+    a campaign going partial on retry rows would read as an injection failure). Raised 15 -> 20 on
+    2026-11-06: it covers the 13 logical calls AND the 6 retry rows."""
+    worst = worst_case_calls(DEFAULT["max_revision_rounds"], DEFAULT["llm_unavailable_total_cap"])
+    assert PER_RUN_CALL_CAP >= worst == 19
 
 
 def test_the_attempt_cap_covers_every_live_campaign_at_its_own_cap() -> None:
@@ -107,6 +113,27 @@ def test_the_job_timeout_exceeds_a_run_that_is_slow_everywhere_but_never_repaire
     )
     assert worst_s == 1560
     assert DEFAULT["worker_job_timeout_s"] > worst_s
+
+
+def test_a_production_or_evaluation_worker_refuses_to_start_without_a_research_timeout() -> None:
+    """Owner, 2026-11-06: enforced, not documented. The range is 60 s to what the job timeout
+    leaves after the sequential model calls (1800 - 11 x 60 = 1140 s)."""
+    low, high = make_settings().research_timeout_range_s()
+    assert (low, high) == (60.0, 1140.0)
+    real = {"pipeline_agents": "real"}
+    for extra in (
+        {"environment": "production", "fake_runs_enabled": False},
+        {"evaluation_run": True},
+    ):
+        for bad in (None, 59.0, 1141.0):
+            with pytest.raises(ValueError, match="RESEARCH_STEP_TIMEOUT_S must be set"):
+                make_settings(**real, **extra, research_step_timeout_s=bad)
+        for good in (60.0, 900.0, 1140.0):
+            ok = make_settings(**real, **extra, research_step_timeout_s=good)
+            assert ok.research_step_timeout_s == good
+    # a development worker and a mock-agent worker are not asked
+    assert make_settings(**real).research_step_timeout_s is None
+    assert make_settings(evaluation_run=True, pipeline_agents="mock").pipeline_agents == "mock"
 
 
 def test_a_call_cannot_stay_pending_past_its_expiry() -> None:

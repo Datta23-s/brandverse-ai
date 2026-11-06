@@ -13,7 +13,7 @@ from uuid import UUID
 from pydantic import Field, HttpUrl, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.call_budget import logical_calls, worst_case_calls
+from app.core.call_budget import logical_calls, sequential_model_calls, worst_case_calls
 
 # backend/app/core/config.py -> repository root, where `.env` lives (Architecture.md §11).
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # stack-dump setting: `faulthandler.dump_traceback_later` reads other threads' frames without
     # the GIL and crashed this project's own processes five times on 2026-11-04; decision-log 2.25.)
     research_step_timeout_s: float | None = Field(default=None, gt=0)
+    # EVALUATION_RUN=true marks a worker that makes evaluation runs. Like production, it REFUSES TO
+    # START without a research-step timeout inside the range below (owner, 2026-11-06): a runbook
+    # step is a thing forgotten at 2 am; a refusal is not.
+    evaluation_run: bool = False
     # Cap torch's intra-op threads in the worker, set BEFORE the encoder loads (hypothesis, stage-2
     # interim 2026-11-04: torch threads multiplying against the extraction pool starve the loop).
     # None: torch's default (all cores). Environment OMP_NUM_THREADS / MKL_NUM_THREADS are set by
@@ -196,6 +200,13 @@ class Settings(BaseSettings):
             )
         return SecretStr(url)
 
+    def research_timeout_range_s(self) -> tuple[float, float]:
+        """The research-step timeout a production or evaluation worker must set: at least 60 s, and
+        at most what is left of the job timeout after the sequential model calls that follow it
+        (call_budget.sequential_model_calls, each at the per-call timeout)."""
+        after = sequential_model_calls(self.max_revision_rounds) * self.llm_call_timeout_s
+        return 60.0, float(self.worker_job_timeout_s) - after
+
     @model_validator(mode="after")
     def _within_connection_budget(self) -> "Settings":
         total = (
@@ -229,6 +240,19 @@ class Settings(BaseSettings):
                     f"case of one run ({worst}: {logical_calls(self.max_revision_rounds)} calls "
                     f"with {self.max_revision_rounds} revision rounds plus "
                     f"{self.llm_unavailable_total_cap} provider-unavailable retries)"
+                )
+        if (
+            self.environment == "production" or self.evaluation_run
+        ) and self.pipeline_agents == "real":
+            low, high = self.research_timeout_range_s()
+            t = self.research_step_timeout_s
+            if t is None or not low <= t <= high:
+                raise ValueError(
+                    f"RESEARCH_STEP_TIMEOUT_S must be set to between {low:.0f} and {high:.0f} "
+                    f"seconds for a production or evaluation worker (it is {t}): with none, a "
+                    "stuck research step is bounded only by the whole-job timeout, and above "
+                    f"{high:.0f} s the research step plus the model calls after it can no longer "
+                    f"fit inside WORKER_JOB_TIMEOUT_S ({self.worker_job_timeout_s} s)"
                 )
         longest_pending_s = (
             self.llm_max_rate_limit_waits + 1

@@ -110,9 +110,10 @@ def test_environment_variables_are_read(monkeypatch: pytest.MonkeyPatch) -> None
 def test_fake_runs_refused_in_production() -> None:
     with pytest.raises(ValidationError, match="fake_runs_enabled"):
         make_settings(environment="production")
-    assert (
-        make_settings(environment="production", fake_runs_enabled=False).fake_runs_enabled is False
+    ok = make_settings(
+        environment="production", fake_runs_enabled=False, research_step_timeout_s=900.0
     )
+    assert ok.fake_runs_enabled is False
 
 
 def test_settings_are_loaded_once() -> None:

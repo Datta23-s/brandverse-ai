@@ -766,7 +766,12 @@ def _db_url() -> str:
 # rounds could not finish, and B02's campaign 2 ended `partial` at exactly that point. 15 leaves
 # room for a repair call (Rules.md C8) on top of the registered worst case. Changing
 # `max_revision_rounds` instead was REJECTED: the rounds are part of what the evaluation measures.
-PER_RUN_CALL_CAP = 15
+#
+# RAISED again from 15 to 20 on 2026-11-06 (owner), to match production's registered cap and its
+# worst case of 19 (13 logical calls + the 6 provider-unavailable retry rows; the cap audit,
+# decision-log 2.39). At 15 a campaign could go partial on retry rows during the confirmation run,
+# which would read as an injection failure: a false negative prevented in a line.
+PER_RUN_CALL_CAP = 20
 # The most calls ONE attempt may spend (owner, 2026-11-05: "no attempt can exceed a stated
 # number"). A campaign starts only when its own worst case still fits under this, so the number is
 # a bound and not an estimate.
@@ -778,7 +783,9 @@ PER_RUN_CALL_CAP = 15
 # campaigns start while at most 110 are spent; a typical attempt is nearer 70 to 80.
 # STATED CONSEQUENCE: one attempt can therefore consume most of the remaining development budget,
 # which is what the 400-call report tripwire is for.
-ATTEMPT_CALL_CAP = 125
+# RAISED from 125 to 160 on 2026-11-06 with the per-run cap: 8 live campaigns x 20 = 160, the
+# attempt cap's own derivation (tests/test_cap_audit.py), so a cap of 20 can still finish.
+ATTEMPT_CALL_CAP = 160
 
 
 def attempt_cap_refusal(
