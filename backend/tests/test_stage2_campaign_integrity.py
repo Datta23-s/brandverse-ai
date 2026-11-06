@@ -78,15 +78,16 @@ def test_reaching_the_attempt_cap_writes_no_report_and_is_retryable() -> None:
     assert issubclass(AttemptCapReached, InvalidCampaign)  # exit 3: no report, retry
 
 
-def test_the_owner_is_told_at_400_instead_of_the_ceiling_being_raised_again() -> None:
-    """Owner, 5 November 2026 (evening): ceiling 500, report at 400. Supersedes the floor of 30."""
+def test_the_owner_is_told_at_600_instead_of_the_ceiling_being_raised_again() -> None:
+    """Owner, 6 November 2026: ceiling 700, report at 600 (it was 500 and 400 on 5 November, and a
+    floor of 30 before that)."""
     from app.llm.dev_budget import load_dev_budget
 
     budget = load_dev_budget()
-    assert (budget.ceiling_calls, budget.report_to_owner_at_calls) == (500, 400)
+    assert (budget.ceiling_calls, budget.report_to_owner_at_calls) == (700, 600)
     # `budget_report_refusal` reads the live database, so the pure decision is asserted here.
-    assert budget.report_due("brandverse_stage2", 298) is None  # total 399
-    assert budget.report_due("brandverse_stage2", 299) is not None  # total 400
+    assert budget.report_due("brandverse_stage2", 498) is None  # total 599
+    assert budget.report_due("brandverse_stage2", 499) is not None  # total 600
 
 
 def test_the_interim_stops_on_it_and_writes_no_report() -> None:

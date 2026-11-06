@@ -5,8 +5,20 @@
 # History, so the figure is not mistaken for a design number: the standing budget was 60 Standard
 # calls (2026-10-31); the agreement round was ordered without raising it and 60 became 101; the
 # owner took the overrun and set the ceiling at 250.
-ceiling_calls: 500
+ceiling_calls: 700
 
+# RAISED AGAIN from 500 to 700 (owner, 2026-11-06), with the per-attempt accounting that was asked
+# for with every raise. Of the 367 spent when this was written: 101 counted at the ruling; 9 on the
+# first crash and the two probes (useful); 105 on PROVIDER 503s (attempt 3, 44; attempt 4, 5;
+# attempts 5 to 9, 43; attempts 10 and 11, 13); 52 on a LOCAL DNS FAULT (attempts 12 to 21, this
+# laptop could not resolve the API host); 35 on attempt 22, which was my own per-run call cap (10)
+# contradicting max_revision_rounds = 2, so a campaign using its rounds could not finish; and 65 on
+# the one VALID attempt (23). So 192 of the 266 spent in the stage-2 database was infrastructure or
+# my error, and 65 was the work. The ceiling exists to bound waste, and that waste was not work.
+# Same grounds as the raise to 500: billing is confirmed unlinked, and the standard tier is
+# free-tier at 500 requests a day, so this buys no paid usage. Development scope only.
+# REPORT AT 600, not another quiet raise (`report_to_owner_at_calls`).
+#
 # RAISED from 250 to 500 (owner, 2026-11-05). Reasoning, recorded because a ceiling that moves for
 # convenience is not a ceiling: (a) the 250 figure existed to bound spend while the BILLING CONDITION
 # was unconfirmed, and billing is now confirmed unlinked by gcloud (below, 2026-11-04); (b) the
@@ -14,8 +26,7 @@ ceiling_calls: 500
 # day's free quota and buys no paid usage; (c) the 250 was consumed by a PROVIDER OUTAGE (the 5
 # November 503s cost 5 to 14 calls per interim attempt, all of it spend-not-work rows), not by the
 # work itself. DEVELOPMENT SCOPE ONLY: the evaluation gets its own budget, and this file is not it.
-# REPORT TO THE OWNER AT 400 rather than raising it again quietly (`report_to_owner_at_calls`).
-report_to_owner_at_calls: 400
+report_to_owner_at_calls: 600
 
 # Calls (any tier, not refused) made by the development work in ALL databases at the ruling, as the
 # owner counts them. A database can only see its own llm_calls, so the ledger adds this figure to

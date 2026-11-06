@@ -28,7 +28,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+
+class CapitalCity(BaseModel):
+    """The probe's schema, at module level so tests/test_llm_request_body.py can see it and check
+    that it is sent in the provider-safe form like every other structured request."""
+
+    country: str
+    city: str
+
 
 API_HOST = "generativelanguage.googleapis.com"
 API_PORT = 443
@@ -60,7 +71,6 @@ def host_unreachable(host: str = API_HOST, port: int = API_PORT) -> str | None:
 
 async def probe(database_url: str, tiers: list[str], allow_strong: bool) -> int:
     from psycopg_pool import AsyncConnectionPool
-    from pydantic import BaseModel
 
     from app.core.config import get_settings
     from app.core.infrastructure import classify_infrastructure_failure
@@ -71,10 +81,6 @@ async def probe(database_url: str, tiers: list[str], allow_strong: bool) -> int:
     from app.llm.registry import Tier, registry_from
     from scripts.llm_smoke import prepare_run
     from tests.db.target_guard import managed_supabase_hosts
-
-    class CapitalCity(BaseModel):
-        country: str
-        city: str
 
     settings = get_settings()
     if settings.google_api_key is None:
