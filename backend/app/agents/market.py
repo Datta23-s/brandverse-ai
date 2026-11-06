@@ -45,7 +45,13 @@ from app.llm.prompts import PromptLibrary
 from app.llm.registry import Tier
 
 A2_MARKET = ("a2_market", "v1")
-MAX_PAGES = 6
+# Pages A2 reads, by depth band (decision-log 2.34/2.35, 6 Nov 2026). D1 keeps the value the code
+# always had; D2 is that value scaled by the MEASURED 1.657x ratio of pages fetched at D2 against
+# D1 (R01-R25, replayed), so the depth band has a path to the quantity it is meant to influence.
+# D0 does no research and A2 does not run. A state without a depth is treated as D1, as the
+# orchestrator does.
+PAGES_BY_DEPTH = {"D0": 0, "D1": 6, "D2": 10}
+MAX_PAGES = PAGES_BY_DEPTH["D1"]
 MAX_PAGE_CHARS = 2500
 MIN_QUOTE_CHARS = 12
 _TAGLIKE = re.compile(r"</?\s*page\b", re.IGNORECASE)
@@ -115,15 +121,20 @@ class MarketAnalyst:
         self._gateway, self._prompts = gateway, prompts
 
     async def read_pages(
-        self, findings: list[Mapping[str, Any]], ctx: AgentContext
+        self,
+        findings: list[Mapping[str, Any]],
+        ctx: AgentContext,
+        depth: str = "D1",
     ) -> tuple[dict[str, str], dict[str, str]]:
-        """(id -> excerpt, id -> url) for the best readable competitor pages."""
+        """(id -> excerpt, id -> url) for the best readable competitor pages, up to the depth's
+        page budget."""
         texts: dict[str, str] = {}
         urls: dict[str, str] = {}
         if ctx.evidence is None:
             return texts, urls
+        budget = PAGES_BY_DEPTH[depth]
         for f in findings:
-            if len(texts) >= MAX_PAGES:
+            if len(texts) >= budget:
                 break
             url = f.get("url")
             if not url or f.get("first_party") is True:
@@ -136,7 +147,8 @@ class MarketAnalyst:
         return texts, urls
 
     async def run(self, state: Mapping[str, Any], ctx: AgentContext) -> MarketOutput:
-        texts, urls = await self.read_pages(list(state.get("findings", [])), ctx)
+        depth = str(state.get("depth") or "D1")
+        texts, urls = await self.read_pages(list(state.get("findings", [])), ctx, depth)
         if not texts:
             return MarketOutput()
         product = state.get("product") or {}

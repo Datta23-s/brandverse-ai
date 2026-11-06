@@ -12,7 +12,13 @@ from typing import Any
 
 import pytest
 
-from app.agents.market import MAX_PAGE_CHARS, MAX_PAGES, MarketAnalyst, excerpt
+from app.agents.market import (
+    MAX_PAGE_CHARS,
+    MAX_PAGES,
+    PAGES_BY_DEPTH,
+    MarketAnalyst,
+    excerpt,
+)
 from app.agents.mock import mock_agents
 from app.agents.product_brand import MAX_DIFFERENTIATORS, ProductBrandAnalyst
 from app.errors import BudgetExceeded
@@ -182,6 +188,23 @@ async def test_a2_skips_the_products_own_pages_and_unreadable_ones_and_caps_the_
     prompt = sent(completion)
     assert "our own site" not in prompt and OWN not in ctx.evidence.asked
     assert out.pages_read == MAX_PAGES and prompt.count("<page id=") == MAX_PAGES
+
+
+@pytest.mark.parametrize(("depth", "pages"), [("D0", 0), ("D1", 6), ("D2", 10), (None, 6)])
+async def test_a2_page_budget_follows_the_depth_band(depth: str | None, pages: int) -> None:
+    """Decision-log 2.35: D0 = 0, D1 = 6, D2 = 10, and a state with no depth is D1. Before this A2
+    read 6 pages at every depth, so the depth had no path to what A2 writes back."""
+    assert PAGES_BY_DEPTH == {"D0": 0, "D1": 6, "D2": 10}
+    completion = FakeCompletion(market())
+    gw, _ = gateway(completion)
+    urls = [f"https://r{i}.example/" for i in range(14)]
+    ctx = with_pages({u: f"text {i} " * 40 for i, u in enumerate(urls)})
+    state: dict[str, object] = {"findings": [{"url": u} for u in urls]}
+    if depth is not None:
+        state["depth"] = depth
+    out = await MarketAnalyst(gw, prompt_library()).run(state, ctx)
+    assert out.pages_read == pages
+    assert sent(completion).count("<page id=") == pages if pages else completion.calls == []
 
 
 async def test_a2_with_no_readable_page_makes_no_call() -> None:
