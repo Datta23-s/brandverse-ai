@@ -41,6 +41,17 @@ def test_a_run_that_did_not_complete_cannot_be_scored(status: str | None) -> Non
     assert problem is not None and "not 'completed'" in problem
 
 
+def test_a_campaign_the_engine_ran_at_d0_is_not_invalid_for_writing_no_memory() -> None:
+    """Found by the COUNT confirmation run (2026-11-06): R03 ran at D0, A2 did not run, nothing was
+    written, and the runner called the correct outcome invalid. Only a campaign that was NOT
+    expected to write may be silent; a failed agent or a non-completed run is still invalid."""
+    assert campaign_problem("completed", [], 14, 14) is not None  # the default: must write
+    assert campaign_problem("completed", [], 14, 14, writes_expected=False) is None
+    gaps = [{"agent": "A3", "error": "StructuredOutputInvalid"}]
+    assert campaign_problem("completed", gaps, 14, 14, writes_expected=False) is not None
+    assert campaign_problem("failed", [], 14, 14, writes_expected=False) is not None
+
+
 def test_a_clean_campaign_that_wrote_memory_passes() -> None:
     assert campaign_problem("completed", [], 0, 9) is None
     assert campaign_problem("completed", [], 9, 12) is None

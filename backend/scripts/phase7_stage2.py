@@ -968,23 +968,25 @@ async def run_brand(
                 "select count(*) from memory_items where brand_id = %s", (brand_id,)
             ).fetchone()
             ended = c.execute(
-                "select status, declared_gaps from runs where id = %s", (run_id,)
+                "select status, declared_gaps, depth from runs where id = %s", (run_id,)
             ).fetchone()
         print(
             f"{rid}: campaign {pos} approved; "
             f"memory items for the brand now {wrote[0] if wrote else '?'}",
             flush=True,
         )
+        if depth_policy == "necessity":  # printed BEFORE any verdict on the campaign
+            print(f"CONFIRMATION {rid} campaign {pos}: {run_evidence(url, run_id)}", flush=True)
+        by_engine_at_d0 = depth_policy == "necessity" and bool(ended) and ended[2] == "D0"
         problem = campaign_problem(
             ended[0] if ended else None,
             list(ended[1]) if ended else [],
             items_before,
             int(wrote[0]) if wrote else 0,
+            writes_expected=not by_engine_at_d0,
         )
         if problem is not None:
             raise InvalidCampaign(f"{rid} (campaign {pos}): {problem}")
-        if depth_policy == "necessity":
-            print(f"CONFIRMATION {rid} campaign {pos}: {run_evidence(url, run_id)}", flush=True)
         if pos >= stop_after:
             break
     return scores
@@ -1063,7 +1065,11 @@ class AttemptCapReached(InvalidCampaign):
 
 
 def campaign_problem(
-    status: str | None, gaps: Sequence[dict[str, Any]], items_before: int, items_after: int
+    status: str | None,
+    gaps: Sequence[dict[str, Any]],
+    items_before: int,
+    items_after: int,
+    writes_expected: bool = True,
 ) -> str | None:
     """Why a live campaign cannot be scored, or None. Found 5 November 2026: the provider answered
     503 to every agent call, the runs still ended `completed` (with declared gaps, no copy and no
@@ -1079,7 +1085,10 @@ def campaign_problem(
             f"agents failed ({', '.join(failed)}; {', '.join(errors)}): the campaign has no "
             "complete copy and writes no memory"
         )
-    if items_after <= items_before:
+    # A campaign the ENGINE ran at D0 writes no memory BY DESIGN (A2 does not run, decision-log
+    # 2.38): the confirmation run found the runner calling that correct outcome invalid
+    # (2026-11-06). Under the requested policy every campaign must write, as before.
+    if writes_expected and items_after <= items_before:
         return f"it added no memory ({items_before} items before, {items_after} after)"
     return None
 

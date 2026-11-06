@@ -924,6 +924,19 @@ Neither figure may appear in the write-up without the other beside it: reduction
 
 **5. Remaining before the freeze, in order (owner):** the COUNT live run, the `Architecture.md` and `Memory.md` injection descriptions, then the freeze tag. R26 to R30's last attempt and the python.org removal are low priority and may slip past the freeze.
 
+### 2.46 The COUNT live run (6 November 2026): B01 ran D2 / D1 / D0 end to end; a runner rule that called a correct D0 outcome invalid is fixed
+**Run.** `--confirm` with the COUNT engine: B01, R01 / R02 / R03 live on real models, depth chosen by the engine, memory injected into A6. 24 calls (7 + 10 + 7). Development spend 497 of 700 (203 remain, 103 before the tripwire). **n = 1 brand: it shows the mechanism working end to end, not a rate.**
+
+| campaign | depth chosen | R | N | U | memory recalled | injected into A6 | in A6's prompt |
+|---|---|---|---|---|---|---|---|
+| R01 | **D2** | 0.786 | 1.000 | 1.00 | 0 | 0 | n/a |
+| R02 | **D1** | 0.279 | 0.166 | 0.58 | 5 | 4, all `support` (M 0.656 to 0.692); 1 below the floor | 4 of 4 |
+| R03 | **D0** | 0.058 | 0.135 | 0.00 | 14 | 12, all `support` (M 0.670 to 0.779); 2 over the cap | 12 of 12 |
+
+**Established.** (1) **Three distinct depth bands in a live run** (D2 > D1 > D0), the behaviour the amendment of 2.43 was made to allow. (2) **D0 is what was registered:** R03 made exactly **one search**, ran agents A1, A3, A6, A7 and not A2, and wrote no memory (14 items before and after). (3) **The cap works:** 14 recalled, 12 injected, 2 over the cap, recorded. (4) The engine's record (`strategy.necessity`) is stored with each campaign. (5) **The decomposition on this live data** (zero calls): the two reduced campaigns removed 1 and 2 levels, and the counterfactual depth with U held at 1.00 was D2 in both (R 0.428 and 0.415), so 3 of 3 levels are memory and 0 novelty, as the algebra of the frozen bands says (2.45). (6) The highest M was 0.779: still only the `support` band, still nothing at 0.80.
+
+**A defect found and fixed: the runner called a correct outcome invalid.** `campaign_problem` required every campaign to add memory, so R03 (D0, A2 off, nothing written BY DESIGN, 2.38) ended "INVALID RUN" with exit 3 and no report, although every field above is the registered behaviour. Fixed: a campaign the ENGINE ran at D0 is not required to write; a failed agent or a non-completed run is still invalid, and under the requested policy every campaign must write as before (`writes_expected`, tested). The evidence is also now printed BEFORE any verdict on the campaign, so a verdict cannot hide it.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
