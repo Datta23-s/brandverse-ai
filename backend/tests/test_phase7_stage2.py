@@ -115,6 +115,41 @@ def test_the_interim_fails_when_no_variant_reaches_three_of_four() -> None:
     assert not v.passed and v.adopted is None
 
 
+def test_reduction_and_separation_are_always_reported_together() -> None:
+    """Owner, 2026-11-06 (decision-log 2.44): the hypothesis needs depth REDUCTION (campaign 3
+    shallower than campaign 1); the registered gate tested the stricter THREE-BAND SEPARATION.
+    Neither figure appears without the other: `both()` is the one way to print them."""
+    assert s2.reduces(["D2", "D0", "D0"]) and s2.reduces(["D2", "D2", "D1"])
+    assert not s2.reduces(["D2", "D2", "D2"]) and not s2.reduces(["D2", "D0", "D2"])
+    v = interim([(FLAT, SEP, SEP)] * 3 + [(FLAT, FLAT, SEP)])
+    text = v.both()
+    for variant in ("OLD", "FLOOR", "COUNT"):
+        assert f"{variant}: reduction" in text and "3-band separation" in text
+    assert "COUNT: reduction 4 of 4, 3-band separation 4 of 4" in text
+
+
+def test_the_committed_interim_reports_give_both_figures_as_recorded_in_2_44() -> None:
+    """Recomputed from the raw depths of the two committed reports, so the record cannot drift."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "evaluation" / "stage2"
+    expected = {
+        # file: {variant: (reduction, separation)}
+        "stage2_interim_20261106.json": {"old": (4, 1), "floor": (0, 0), "count": (4, 2)},
+        "stage2_interim_20261106_attempt24.json": {
+            "old": (4, 0),
+            "floor": (0, 0),
+            "count": (4, 1),
+        },
+    }
+    for name, by_variant in expected.items():
+        report = json.loads((root / name).read_text(encoding="utf-8"))
+        for variant, (red, sep) in by_variant.items():
+            depths = [[c[f"depth_{variant}"] for c in cs] for cs in report["brands"].values()]
+            assert (sum(map(s2.reduces, depths)), sum(map(s2.separates, depths))) == (red, sep)
+
+
 def test_an_incomplete_interim_cannot_pass() -> None:
     three = {b: brand_scores(SEP, SEP, SEP) for b in s2.INTERIM_BRANDS[:3]}
     assert not s2.interim_verdict(three).passed

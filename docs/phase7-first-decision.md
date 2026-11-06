@@ -416,4 +416,6 @@ The OLD prediction is marked uncertain and **its basis is stage 1's artifact**: 
 
 **Predicted share of brands showing ANY depth reduction (below D2) by campaign 3: 9 of 10, 98 percent by the model** (every non-regulated brand under every observed yield; B07 in 4 of 5). **Predicted search reduction:** about 13.5 searches per brand-sequence against 24 for Baseline B, **SRR about 44 percent, WITH the mandatory fresh query counted, plausible range 35 to 55 percent.** Campaign 3 is predicted to be D0 almost everywhere, so most of the experiment's third campaigns are memory-plus-one-query runs by design.
 
+**Reduction and separation are reported TOGETHER, always (owner, 2026-11-06; decision-log 2.44).** The gate tested three-band SEPARATION; the hypothesis requires only depth REDUCTION by campaign 3. Neither figure appears without the other. Attempt 24 under COUNT: reduction 4 of 4, separation 1 of 4.
+
 **Reported openly.** FLOOR was the registered definition. It was built, tested end to end, and found inert; the switch, its reasoning, the gate result (not met), and the predictions above appear in the write-up. Nothing about this is hidden.

@@ -127,6 +127,10 @@ infrastructure failure has no primary result and is reported as such, never drop
 
 **No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`.
 
+#### Reporting rule: depth reduction and three-band separation, together (owner, 2026-11-06)
+
+Wherever the necessity engine's discrimination is reported, **depth REDUCTION by campaign 3 (the property the hypothesis requires) and three-band SEPARATION (the stricter property the registered stage-2 gate tested) are reported together, each beside the other, never either alone.** Reduction alone would overstate; separation alone would understate and misrepresent the hypothesis. The reduction figure is read with its attribution (decision-log 2.44: a reduction is memory-caused only where U, and not novelty collapsing, produces it). The engine counts COUNT (Registration 2, Amendment 1, `docs/phase7-first-decision.md` 7b).
+
 #### Run order: interleaved arms (registered 2026-11-05, before any evaluation call)
 
 The evaluation does not run arm by arm. **For each request the three arms run adjacently**, so a provider outage lands across arms and not inside one. The order is fixed by a registered seed and committed as `evaluation/run_order.yaml` (90 runs; `backend/app/evaluation/schedule.py`; `backend/tests/test_run_order.py` recomputes it and fails on any difference).

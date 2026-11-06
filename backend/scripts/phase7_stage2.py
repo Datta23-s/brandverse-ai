@@ -215,13 +215,37 @@ def r_monotonic(rs: Sequence[float], margin: float = 0.05) -> bool:
     return len(rs) == 3 and rs[0] - rs[1] >= margin and rs[1] - rs[2] >= margin
 
 
+def reduces(depths: Sequence[Depth]) -> bool:
+    """DEPTH REDUCTION: the third campaign runs shallower than the first. This is the property the
+    HYPOTHESIS requires (work falls as memory accumulates). It is not three-level discrimination."""
+    return len(depths) == 3 and RANK[depths[2]] < RANK[depths[0]]
+
+
 @dataclass(frozen=True, slots=True)
 class InterimVerdict:
+    """Two figures that are ALWAYS reported together (owner, 2026-11-06; decision-log 2.44):
+
+    `reducing`   brands whose campaign 3 ran shallower than campaign 1: the property the hypothesis
+                 requires. Reported alone it would overstate.
+    `separating` brands with three DISTINCT bands (campaign 1 > 2 > 3): the stricter property the
+                 registered gate tested. Reported alone it would understate and misrepresent what
+                 the hypothesis claims. The gate itself is decided on `separating` only, as
+                 registered; neither figure is shown without the other (`both()`)."""
+
     passed: bool
     brands: int
     separating: dict[str, int]  # variant -> brands with three distinct bands
     adopted: str | None  # the FIRST variant, in the registered order, that meets the criterion
     needed: int
+    reducing: dict[str, int] = field(default_factory=dict)  # variant -> brands whose depth fell
+
+    def both(self) -> str:
+        """The two figures, side by side, per variant. The only sanctioned way to print them."""
+        return "; ".join(
+            f"{v.upper()}: reduction {self.reducing.get(v, 0)} of {self.brands}, "
+            f"3-band separation {self.separating.get(v, 0)} of {self.brands}"
+            for v in VARIANTS
+        )
 
 
 def interim_verdict(scores: dict[str, Sequence[CampaignScore]]) -> InterimVerdict:
@@ -230,9 +254,12 @@ def interim_verdict(scores: dict[str, Sequence[CampaignScore]]) -> InterimVerdic
     four brands scored: a partial interim cannot pass."""
     full = {b: s for b, s in scores.items() if len(s) == 3}
     counts = {v: sum(separates([c.depth(v) for c in s]) for s in full.values()) for v in VARIANTS}
+    reducing = {v: sum(reduces([c.depth(v) for c in s]) for s in full.values()) for v in VARIANTS}
     complete = len(full) == len(INTERIM_BRANDS) and set(full) == set(INTERIM_BRANDS)
     adopted = next((v for v in VARIANTS if complete and counts[v] >= INTERIM_NEEDS), None)
-    return InterimVerdict(adopted is not None, len(full), counts, adopted, INTERIM_NEEDS)
+    return InterimVerdict(
+        adopted is not None, len(full), counts, adopted, INTERIM_NEEDS, reducing=reducing
+    )
 
 
 def brand_requests(path: Path = TEST_SET) -> dict[str, tuple[str, str, str]]:
@@ -741,6 +768,7 @@ async def run_live(
     print("\nTALLY (this database):", report["llm_calls"])
     if verdict is not None:
         print("INTERIM VERDICT:", verdict)
+        print("REDUCTION AND SEPARATION, ALWAYS TOGETHER:", verdict.both(), flush=True)
     return 0
 
 

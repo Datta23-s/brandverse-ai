@@ -890,6 +890,27 @@ Each cap on the evaluation path, the registered parameter it bounds, that parame
 
 **4. A3 over-listing: wait for real data** against the 22 percent baseline (8 of 37). No change.
 
+### 2.44 REDUCTION is not SEPARATION: the gate over-specified the hypothesis, and the two figures are reported together, always (6 November 2026, owner)
+**THE DISTINCTION, in the owner's words and with the owner's error owned.** The 3-of-4 criterion required three DISTINCT depth bands per brand (campaign 1 > 2 > 3). **The hypothesis requires only that work falls as memory accumulates, which is REDUCTION, not three-level discrimination.** **The owner over-specified the operationalisation when the criterion was set on 1 November (2.21), and that over-specification is why four days went into a gate the thesis did not need in that form.** The gate was applied as registered and the result stands (not met); what changes is how stage 2 is *reported*.
+
+**REPORT BOTH, ALWAYS TOGETHER, NEVER EITHER ALONE:**
+- **Depth REDUCTION by campaign 3** (campaign 3 runs shallower than campaign 1): the property the hypothesis requires.
+- **Three-band SEPARATION** (D2 > D1 > D0): the stricter property the registered gate tested and did not meet.
+
+Neither figure may appear in the write-up without the other beside it: reduction alone would overstate; separation alone would understate and would misrepresent what the hypothesis claims. **Enforced in code, not left to discipline:** `InterimVerdict` carries `reducing` beside `separating`, `InterimVerdict.both()` is the one way the runner prints them, and a test recomputes both from the raw depths of the two committed reports.
+
+**Measured (recomputed from `evaluation/stage2/stage2_interim_20261106.json` and `..._attempt24.json`; 4 brands each):**
+
+| | attempt 23 (6 pages) reduction / separation | attempt 24 (10 pages) reduction / separation |
+|---|---|---|
+| OLD | 4 of 4 / 1 of 4 | 4 of 4 / 0 of 4 |
+| FLOOR | **0 of 4 / 0 of 4** | **0 of 4 / 0 of 4** |
+| **COUNT** | **4 of 4 / 2 of 4** | **4 of 4 / 1 of 4** |
+
+**Attribution, which the figures need beside them (my addition; the owner rules whether it stays).** A reduction is not automatically a reduction *caused by memory*. At campaign 1 there is no prior request, so N = 1.0 and R is high whatever memory holds; from campaign 2 N falls to about 0.15. Under COUNT that fall alone leaves R about 0.41 with an empty memory, which is D2 under the frozen bands (R >= 0.32), so **COUNT's reduction below D2 is produced by U, that is by accumulated memory.** OLD's 4 of 4 is **not**: its U stays 1.00 throughout (items start at confidence 0.60 and never fill a slot), and its different bands (D1 from 0.35) make a constant R of about 0.42 read D1. OLD's reduction therefore comes from novelty collapsing against its own bands, not from memory. FLOOR's 0 of 4 is the inert engine of 2.43. So the reduction figure that supports the hypothesis is COUNT's: 4 of 4 in both attempts, with separation 2 of 4 and 1 of 4 beside it.
+
+**The 4 November citation, as ruled:** the owner dated the construct argument to 3 to 4 November; there is no 4 November entry on it, and none is cited (2.43). Words are not put in the record that are not there.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
