@@ -1,6 +1,6 @@
 """Campaigns that contained a provider retry are flagged, and every figure can be read with and
 without them (owner, 2026-11-06). The pure sensitivity arithmetic here; the query in
-tests/db/test_provider_retry_flags.py."""
+tests/db/test_provider_retry_query.py."""
 
 from uuid import uuid4
 

@@ -864,6 +864,23 @@ Each cap on the evaluation path, the registered parameter it bounds, that parame
 
 **3. Amendment 2 accepted as built.** The practice stands: every amendment is accompanied by a read-only confirmation that no evaluation data exists (done for Amendment 2 on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals).
 
+### 2.42 The end-to-end confirmation run (6 November 2026): Phase 7 works end to end; two findings the owner must read before the freeze
+**Run.** `--confirm`: B01, R01 / R02 / R03 all live on real models, depth by the necessity engine (`depth_policy: necessity`), memory injected into A6. Valid, 23 calls (8 + 7 + 8), no report, gates nothing. Development spend 473 of 700 (227 remain, 127 before the tripwire). The first attempt (9 calls) ended on A3's invalid output after a 503 (2.40); this is the second and only other.
+
+| campaign | depth chosen | R | memory items after | injected into A6 | in A6's prompt |
+|---|---|---|---|---|---|
+| R01 (cold start) | **D2** | 0.786 | 7 | 0 | n/a (shows "(none)") |
+| R02 | **D2** | 0.398 | 14 | 7: all `support` (M 0.669 to 0.733) | 7 of 7 |
+| R03 | **D2** | 0.415 | 25 | 12 (of 14 considered: 1 below the floor, 1 over the cap): all `support` (M 0.660 to 0.743) | 12 of 12 |
+
+**What is established.** The engine runs at step 5 under the necessity policy and records R and the depth; A2 read 10 pages at D2 and ran (not D0); memory is recalled, banded, capped at 12, recorded in the campaign's `strategy`, and **reaches A6**: for each campaign the prompt A6 builds from the checkpointed run state (real prompt library, the agent's own `memory_block`, zero calls) contains every injected note under its band label, and the strategy record equals the run's injection record. `a6_copy@v3` was used by all calls.
+
+**FINDING 1: the built engine never lowered the depth.** R was 0.398 and 0.415 at campaigns 2 and 3, above the D2 threshold (0.32), so all three campaigns ran at **D2**. The engine implements the registered Registration 2 definition (U from the count of recalled items at the semantic floor 0.55, "FLOOR"), and with the memory a brand actually has, almost nothing passes 0.55 (n 0 to 1), so U stays near 1 and R stays at D2. This is the stage-2 FLOOR result (D2/D2/D2 in 4 of 4, 2.37) appearing in a live run, not a new fault. **Consequence, stated plainly: on these brands the Proposed arm researches at the depth Baseline B does, so the search-reduction metrics (SRR and the depth effects behind CR) will read near zero by construction of the engine as registered.** COUNT, which counts every recalled item, did lower the depth in some brands (2.37), but it is not the engine that is built and was not adopted (the gate failed, 2.32). Switching is a registered-definition change and the owner's to rule on; none is made here.
+
+**FINDING 2: only the weakest injection band ever fires.** Every injected item was in the `support` band (0.65 to 0.79: "[background]", context only, not to be echoed); the highest M was 0.743. No item reached `adapt` (0.80) or `reuse` (0.90), so the "[use as written]" and "[adapt]" paths are exercised by tests and not by real data. The memory effect on the copy will therefore be that of background context, by what the match scores of this system actually produce. A limitation to read beside every quality figure, in addition to 2.36 item 2.
+
+**A3 after the 2048 cap (n = 3 requests, no conclusion):** campaign 1 had one provider-unavailable retry and then answered (a FLAGGED campaign under 2.41); campaign 3 had one invalid output that the single repair fixed.
+
 ### 2.19 Who approves the ten campaigns for 8 November
 The owner's instruction was to "approve them yourself first and record how many you revised". **The approver is a human (`Rules.md` T6;
 `approvals.approver_id` is a member holding the approver role): an AI cannot approve a campaign**, and a revise count produced by an AI reading would not be the human approver's
