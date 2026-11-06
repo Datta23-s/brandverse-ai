@@ -5,8 +5,8 @@ run; this script reproduces the table there.
 
 Model, stated BEFORE any evaluation run: campaign 1 is D2 (cold start). Campaign 1 writes n1 items,
 n1 drawn from the five first-campaign yields observed at the repaired D2 budget (10 pages): 9, 6,
-12, 3 (attempt 24) and 7 (the confirmation run). A campaign at D1 writes ~5 (observed mean 4.5-5), at
-D2 ~7, at D0 nothing (A2 does not run: decision-log 2.38). Campaign k recalls everything the brand
+12, 3 (attempt 24) and 7 (the confirmation run). A campaign at D1 writes ~5 (observed mean
+4.5-5), at D2 ~7, at D0 nothing (A2 does not run: decision-log 2.38). Campaign k recalls everything the brand
 wrote before it. N is computed from the real request texts with the local encoder. R, U and the
 depth come from the frozen functions through the engine's own `decide`.
 
