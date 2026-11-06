@@ -50,6 +50,8 @@ export const runRequestSchema = z.strictObject({
   brief: z.string().max(2000, "At most 2000 characters.").nullable(),
   audience: z.string().max(500, "At most 500 characters.").nullable(),
   depth: researchDepthSchema,
+  /** "requested": the run does `depth`. "necessity": the necessity engine chooses it. */
+  depth_policy: z.enum(["requested", "necessity"]).default("requested"),
 });
 export type RunRequest = z.infer<typeof runRequestSchema>;
 
