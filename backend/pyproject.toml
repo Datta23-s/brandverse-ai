@@ -70,6 +70,15 @@ ignore_missing_imports = true
 module = ["sentence_transformers", "sentence_transformers.*", "huggingface_hub", "huggingface_hub.*"]
 ignore_missing_imports = true
 
+# torch arrives only as a transitive dependency of the `embeddings` group, so CI (which installs
+# neither optional group) cannot see it; `app/workers/pipeline_factory.py` imports it inside the
+# thread-cap branch. Without this override CI's type check has failed on every commit since
+# 27aaed3 (4 November 2026) while a developer machine with the group installed passed, which is
+# how it stayed unnoticed through the freeze tag (decision-log 2.54).
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["app.core.*", "app.agents.*", "app.evaluation.*", "app.api.*", "app.workers.*", "app.models.*", "app.llm.*", "app.research.*"]
 strict = true
