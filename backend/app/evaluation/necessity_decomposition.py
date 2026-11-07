@@ -67,7 +67,7 @@ class Decomposition:
 
 
 def decompose(
-    weights: Mapping[str, float], bands: Bands, *, novelty: float, u: float, s_sector: float
+    weights: Mapping[Any, float], bands: Bands, *, novelty: float, u: float, s_sector: float
 ) -> Decomposition:
     total = weights["N"] + weights["U"] + weights["S"]
     n_part = weights["N"] * novelty / total
@@ -123,7 +123,7 @@ def attribute(decompositions: Iterable[Decomposition]) -> Attribution:
 
 
 def from_record(
-    weights: Mapping[str, float], bands: Bands, record: Mapping[str, Any]
+    weights: Mapping[Any, float], bands: Bands, record: Mapping[str, Any]
 ) -> Decomposition:
     """A decomposition from the engine's logged record (`NecessityDecision.record()`)."""
     return decompose(

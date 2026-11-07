@@ -34,7 +34,23 @@ select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "T20"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app"]
+# `app`, and the scripts that RUN or REPORT the evaluation (owner, 7 November 2026). The other
+# scripts (probes, recording, posture) are not on that path and carry 15 files' worth of errors
+# the owner has not ruled on: see decision-log 2.51.
+files = [
+  "app",
+  "scripts/phase7_stage2.py",
+  "scripts/phase7_decomposition.py",
+  "scripts/evaluation_dry_run.py",
+  "scripts/freeze_rating_amendment.py",
+  "scripts/phase7_count_predictions.py",
+  "scripts/chunk_f_first_campaign.py",
+  "scripts/chunk_f_agreement_round.py",
+]
+# `scripts` is a namespace package that other scripts also import by bare name; without this mypy
+# finds a file under two module names.
+explicit_package_bases = true
+mypy_path = "."
 
 # PyYAML ships no type information; the parsed document is validated by Pydantic
 # (app/llm/registry.py), so nothing typed flows from the untyped call.

@@ -37,7 +37,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -248,7 +248,7 @@ class InterimVerdict:
         )
 
 
-def interim_verdict(scores: dict[str, Sequence[CampaignScore]]) -> InterimVerdict:
+def interim_verdict(scores: Mapping[str, Sequence[CampaignScore]]) -> InterimVerdict:
     """3 of 4 brands with three distinct bands under a variant; the adopted variant is the first in
     the registered order (OLD, FLOOR, COUNT) that meets it, whatever the others show. Needs all
     four brands scored: a partial interim cannot pass."""
@@ -977,7 +977,7 @@ async def run_brand(
         )
         if depth_policy == "necessity":  # printed BEFORE any verdict on the campaign
             print(f"CONFIRMATION {rid} campaign {pos}: {run_evidence(url, run_id)}", flush=True)
-        by_engine_at_d0 = depth_policy == "necessity" and bool(ended) and ended[2] == "D0"
+        by_engine_at_d0 = depth_policy == "necessity" and ended is not None and ended[2] == "D0"
         problem = campaign_problem(
             ended[0] if ended else None,
             list(ended[1]) if ended else [],
