@@ -9,7 +9,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.infrastructure import INVALIDATING_GAP_KINDS, invalidating_gaps
+from app.core.infrastructure import (
+    INFRASTRUCTURE_FAILURES,
+    INVALIDATING_GAP_KINDS,
+    invalidating_gaps,
+)
 from app.evaluation.outages import OutageWindow
 from app.evaluation.reruns import MAX_RERUNS, Attempt, invalidations, next_action, primary
 
@@ -54,14 +58,26 @@ def test_no_attempt_is_an_error_not_a_default() -> None:
         next_action([])
 
 
-def test_only_provider_unavailable_is_an_invalidating_gap_kind_so_far() -> None:
-    assert frozenset({"provider_unavailable"}) == INVALIDATING_GAP_KINDS
+def test_every_registered_infrastructure_kind_is_an_invalidating_gap_kind() -> None:
+    """Amendment 3 (owner, 2026-11-07): the open question of Amendment 1 is closed. The set IS the
+    registered kind list, so the two cannot drift; a local DNS fault is no more a property of an
+    arm than a provider outage. A gap with no infrastructure kind is the arm's own result."""
+    assert INVALIDATING_GAP_KINDS == frozenset(INFRASTRUCTURE_FAILURES)
     errors = [
         {"agent": "A1", "step": 7, "infrastructure": "provider_unavailable"},
-        {"agent": "A2", "step": 7, "infrastructure": "rate_limited"},  # not ruled
-        {"agent": "A3", "step": 7, "infrastructure": None},
+        {"agent": "A2", "step": 7, "infrastructure": "rate_limited"},
+        {"agent": "A3", "step": 7, "infrastructure": "network_error"},
+        {"agent": "A6", "step": 10, "infrastructure": "quota_exhausted"},
+        {"agent": "A7", "step": 11, "infrastructure": "process_crash"},
+        {"agent": "BASELINE_A", "step": 10, "infrastructure": None},  # the arm's own failure
     ]
-    assert [e["agent"] for e in invalidating_gaps(errors)] == ["A1"]
+    assert [e["agent"] for e in invalidating_gaps(errors)] == [
+        "A1",
+        "A2",
+        "A3",
+        "A6",
+        "A7",
+    ]
 
 
 def test_every_invalidation_is_recorded_with_its_window_and_its_rerun() -> None:

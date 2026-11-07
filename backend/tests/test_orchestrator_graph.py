@@ -476,13 +476,15 @@ async def test_the_decision_uses_the_gap_kind_alone_not_the_output() -> None:
     assert any(e["agent"] == "A1" and e["infrastructure"] is None for e in out.state["errors"])
 
 
-async def test_a_rate_limit_gap_is_not_ruled_and_is_not_invalidated() -> None:
-    """Only provider_unavailable is ruled (INVALIDATING_GAP_KINDS). Whether a rate-limit or network
-    gap should invalidate too is an open question for the owner, and the code does not assume it."""
+async def test_a_rate_limit_gap_invalidates_the_run_and_no_human_sees_its_output() -> None:
+    """Amendment 3 (owner, 2026-11-07): every registered infrastructure kind invalidates, not
+    `provider_unavailable` alone. A rate-limit gap used to park for the approver; it now ends the
+    run before the approval step, as a provider outage does, and the run is re-run (capped)."""
     agents = {**mock_agents(), "A1": Failing("A1", LLMRateLimited("still rate-limited"))}
     h = Harness(agents=agents)
     out = await h.start()
-    assert out.status == "suspended"
+    assert out.status == "invalidated"
+    assert out.state["invalidated"]["infrastructure_failure"] == "rate_limited"
     assert any(e["infrastructure"] == "rate_limited" for e in out.state["errors"])
 
 

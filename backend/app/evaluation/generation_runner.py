@@ -27,6 +27,7 @@ from uuid import UUID, uuid4
 import psycopg
 
 from app.evaluation.generation import GenerationStopped, Item, Outcome
+from app.evaluation.sequence import campaign_problem
 from app.evaluation.test_set import RequestInputs, RequestMeta, request_index, request_inputs
 
 # The depth each arm is ASKED for. The graph decides the real one (Baseline B is D2 whatever is
@@ -315,6 +316,45 @@ class ApiRunner:
             )
             row = await cur.fetchone()
         return None if row is None else str(row[0])
+
+    async def sequence_problems(self, position: int) -> list[str]:
+        """Proposed campaigns at `position` that did not leave the memory the next round reads
+        (`app/evaluation/sequence.py`). Read from the database: the run's status, its declared gaps,
+        the depth the engine chose, and the memory rows this run's own write-back committed
+        (`provenance = 'run:<id>'`, a count, never a counter)."""
+        problems: list[str] = []
+        for request_id in self._scope:
+            if self._index[request_id].position != position:
+                continue
+            runs = await self._runs(request_id, "proposed")
+            primary = [r for r in reversed(runs) if classify(r[1], r[2])[0] != "invalidated"]
+            if not primary:
+                problems.append(f"{request_id}: no primary attempt to read memory from")
+                continue
+            run_id = primary[0][0]
+            async with await psycopg.AsyncConnection.connect(self._dsn, autocommit=True) as c:
+                cur = await c.execute(
+                    "select r.status, r.declared_gaps, r.depth, r.request ->> 'depth_policy', "
+                    "(select count(*) from memory_items m "
+                    " where m.provenance = 'run:' || r.id::text) "
+                    "from runs r where r.id = %s",
+                    (run_id,),
+                )
+                row = await cur.fetchone()
+            if row is None:
+                problems.append(f"{request_id}: run {run_id} is not in the database")
+                continue
+            status, gaps, depth, policy, written = row
+            problem = campaign_problem(
+                status,
+                list(gaps or ()),
+                memory_items_written=int(written),
+                depth=depth,
+                engine_chose_depth=policy == "necessity",
+            )
+            if problem is not None:
+                problems.append(f"{request_id} (run {run_id}): {problem}")
+        return problems
 
     def approver_token(self) -> str:
         """For the DRY RUN's stand-in approver only (scripts/evaluation_dry_run.py). The generation

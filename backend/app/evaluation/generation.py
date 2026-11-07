@@ -92,6 +92,10 @@ class Runner(Protocol):
     async def decided(self, arm: str, position: int) -> bool:
         """Has EVERY run of this arm at this position had its human decision?"""
 
+    async def sequence_problems(self, position: int) -> list[str]:
+        """Why the NEXT round cannot run even though the decisions are in: Proposed campaigns at
+        `position` that wrote no memory (`app/evaluation/sequence.py`). Empty when all is well."""
+
 
 def wave_items(
     order: Iterable[tuple[str, str]], positions: dict[str, int], wave: Wave
@@ -225,6 +229,14 @@ async def generate(
             raise GenerationStopped(
                 f"{wave}: refused. Every proposed campaign at position {position - 1} needs its "
                 "human decision first, because memory is written on approval (Rules.md T6)."
+            )
+        # SEQUENCE INTEGRITY (owner, 7 November 2026): the decisions are not enough. A Proposed
+        # campaign at the previous position that wrote no memory would make this round a cold start
+        # wearing the Proposed arm's label for that brand (app/evaluation/sequence.py).
+        if problems := await runner.sequence_problems(position - 1):
+            raise GenerationStopped(
+                f"{wave}: refused. Approved, but position {position - 1} did not leave the memory "
+                "this round is supposed to read:\n  " + "\n  ".join(problems)
             )
     started_now = 0
     for item in items:

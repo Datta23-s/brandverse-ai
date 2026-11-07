@@ -66,10 +66,18 @@ _NETWORK: tuple[type[BaseException], ...] = (
 
 # A run that would END `completed` while carrying a declared gap of one of these kinds is
 # invalidated, not a result (owner ruling, 2026-11-05; docs/evaluation-plan.md Amendment 1): the
-# gap is the provider's outage, not the arm's behaviour, and leaving it in would depress whichever
-# arm the outage touched. Only `provider_unavailable` is ruled so far. Whether the same holds for
-# a rate-limit or network gap is NOT ruled and is not assumed here.
-INVALIDATING_GAP_KINDS: frozenset[str] = frozenset({"provider_unavailable"})
+# gap is infrastructure, not the arm's behaviour, and leaving it in would depress whichever arm it
+# touched.
+#
+# AMENDMENT 3 (owner, 2026-11-07, before any evaluation data exists): EVERY registered
+# infrastructure kind invalidates, not `provider_unavailable` alone. The owner's reasoning, recorded
+# with the ruling: the infrastructure list exists precisely to separate what is not the arm's
+# behaviour from what is, and a local DNS fault is no more a property of an arm than a provider
+# outage. The re-run cap is unchanged (2 re-runs, then the owner: `app/evaluation/reruns.py`).
+# `rate_limited` invalidates AND is reported as a SCHEDULING DEFECT every time it occurs
+# (`app/evaluation/metrics.py`): Baseline B makes more calls than the Proposed arm, so a binding
+# rate limit binds unevenly across arms. The scheduler must pace so it never happens.
+INVALIDATING_GAP_KINDS: frozenset[str] = frozenset(INFRASTRUCTURE_FAILURES)
 
 
 def invalidating_gaps(errors: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:

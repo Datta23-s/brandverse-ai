@@ -22,8 +22,10 @@ class FileRunner:
         die_after_start: str | None = None,
         decided_positions: frozenset[tuple[str, int]] = frozenset(),
         stuck: frozenset[str] = frozenset(),
+        sequence_problems_by_position: dict[int, list[str]] | None = None,
     ) -> None:
         self.stuck = stuck
+        self.sequence_problems_by_position = sequence_problems_by_position or {}
         self.db, self.hang_on, self.outcomes = db, hang_on, outcomes or {}
         self.die_after_start, self.decided_positions = die_after_start, decided_positions
         self.started: list[str] = []
@@ -76,6 +78,9 @@ class FileRunner:
 
     async def decided(self, arm: str, position: int) -> bool:
         return (arm, position) in self.decided_positions
+
+    async def sequence_problems(self, position: int) -> list[str]:
+        return list(self.sequence_problems_by_position.get(position, ()))
 
 
 def round_one_items() -> list[Item]:
