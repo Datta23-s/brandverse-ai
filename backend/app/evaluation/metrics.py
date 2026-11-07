@@ -50,6 +50,9 @@ from app.evaluation.necessity_decomposition import (
     attribute,
     from_record,
 )
+from app.evaluation.outages import evaluation_outages
+from app.evaluation.reruns import Invalidation
+from app.evaluation.reruns import invalidations as list_invalidations
 from app.evaluation.test_set import request_index, request_inputs
 
 BASELINE = "baseline_b"  # "Baseline is Baseline B unless stated" (evaluation-plan section 4)
@@ -549,6 +552,29 @@ class SchedulingDefect:
     agent_id: str | None
 
 
+def invalidation_lines(found: Sequence[Invalidation]) -> list[str]:
+    """Every invalidation, with the outage window it overlapped and the run that replaced it
+    (`reruns.invalidations`). Printed including when empty, and an invalidation with NO recorded
+    window is called out: either the outage record is incomplete or the classification fired for
+    another reason, and both are things to look at rather than pass over."""
+    if not found:
+        return ["INVALIDATED RUNS (re-run, in no figure): none"]
+    out = [f"INVALIDATED RUNS (re-run, in no figure): {len(found)}"]
+    for i in found:
+        replaced_by = "NO RE-RUN RECORDED" if i.rerun_run_id is None else f"re-run {i.rerun_run_id}"
+        window = (
+            f"{len(i.windows)} outage window(s)"
+            if i.window_found
+            else "NO OUTAGE WINDOW OVERLAPPED: look at this"
+        )
+        agents = ", ".join(str(g.get("agent")) for g in i.gaps) or "none recorded"
+        out.append(
+            f"  {i.run_id} {i.infrastructure_failure} ({i.kind}; agents {agents}): "
+            f"{window}; {replaced_by}"
+        )
+    return out
+
+
 def scheduling_defect_lines(defects: Sequence[SchedulingDefect]) -> list[str]:
     """Always printed, including when empty: "none" is the result the scheduler is aiming at."""
     if not defects:
@@ -565,6 +591,35 @@ def scheduling_defect_lines(defects: Sequence[SchedulingDefect]) -> list[str]:
     ]
     out += [f"  {d.at.isoformat()} {d.arm} run {d.run_id} agent {d.agent_id}" for d in defects]
     return out
+
+
+# The invalidated runs, with the run that replaced each: `supersedes_run_id` (migration 0048) read
+# from the REPLACEMENT's side, so the link is the one the backend wrote at insert, not a guess.
+INVALIDATED_RUNS_SQL = """
+select r.id, r.created_at, coalesce(r.completed_at, now()), r.failure,
+       (select s.id from public.runs s where s.supersedes_run_id = r.id)
+from public.runs r
+join public.organisations o on o.id = r.org_id
+where r.org_id = any(%(org_ids)s)
+  and not o.is_practice
+  and not o.is_test
+  and r.failure is not null
+order by r.created_at
+"""
+
+
+async def evaluation_invalidations(
+    conn: AsyncConnection, org_ids: Collection[UUID]
+) -> list[Invalidation]:
+    """Every invalidated run with the outage window it overlapped and the run that replaced it.
+
+    Built on 7 November 2026 (decision-log 2.53 item 6): `reruns.invalidations` was written on
+    5 November and called by nothing, so an invalidation would have been re-run and never
+    reported. The outage windows are derived from the call log, over each run's ACTIVE time."""
+    windows, _touched = await evaluation_outages(conn, list(org_ids))
+    cur = await conn.execute(INVALIDATED_RUNS_SQL, {"org_ids": list(org_ids)})
+    rows = [(r[0], r[1], r[2], r[3], r[4]) for r in await cur.fetchall()]
+    return list_invalidations(rows, windows)
 
 
 async def scheduling_defects(
@@ -589,6 +644,7 @@ class Report:
     positions: Mapping[str, Mapping[int, Efficiency]]
     depth: DepthResult
     defects: Sequence[SchedulingDefect] = ()
+    invalidations: Sequence[Invalidation] = ()
     quality_sample: str = (
         "Human quality rating uses a random subset of 15 requests, 45 campaigns per rater "
         "(decision-log 2.18); it is declared wherever a quality result is reported."
@@ -614,6 +670,7 @@ class Report:
             for position, figures in self.positions[arm].items():
                 out += [f"  position {position}:", *[f"    {x}" for x in figures.lines()]]
         out += ["── the engine ──", *self.depth.lines()]
+        out += ["── infrastructure ──", *invalidation_lines(self.invalidations)]
         out += ["── scheduling ──", *scheduling_defect_lines(self.defects)]
         out += ["── sample ──", f"  {self.quality_sample}"]
         return out
@@ -628,6 +685,7 @@ def build_report(
     arms: Sequence[str] = ("proposed", "baseline_a"),
     baseline_arm: str = BASELINE,
     defects: Sequence[SchedulingDefect] = (),
+    invalidations: Sequence[Invalidation] = (),
 ) -> Report:
     """Everything, from the run records: selection, pairing, the four figures twice, by position,
     and the depth pair with its attribution."""
@@ -648,6 +706,7 @@ def build_report(
         },
         depth=depth_result(paired, bands, weights),
         defects=defects,
+        invalidations=invalidations,
     )
 
 

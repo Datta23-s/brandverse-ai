@@ -14,7 +14,7 @@ import psycopg
 import pytest
 from psycopg import AsyncConnection, sql
 
-from app.evaluation.metrics import run_records, scheduling_defects
+from app.evaluation.metrics import evaluation_invalidations, run_records, scheduling_defects
 from app.evaluation.test_set import request_inputs
 
 pytestmark = [pytest.mark.anyio, pytest.mark.db]
@@ -114,6 +114,30 @@ async def test_practice_and_test_organisations_are_not_evaluation_data(
         a_run(db_url, org, "R01", "proposed", status="completed")
         assert await run_records(conn, [org]) == []
         assert await scheduling_defects(conn, [org]) == []
+
+
+async def test_an_invalidation_is_read_with_the_run_that_replaced_it(
+    conn: AsyncConnection, db_url: str
+) -> None:
+    """The link comes from the REPLACEMENT's `supersedes_run_id` (migration 0048), so the report
+    names the run that actually replaced it rather than inferring one."""
+    org = organisation(db_url)
+    invalid = a_run(
+        db_url, org, "R01", "proposed", status="failed",
+        failure={
+            "kind": "infrastructure_gap", "invalidated": True,
+            "infrastructure_failure": "network_error",
+            "gaps": [{"step": 7, "agent": "A2", "error": "LLMCallFailed"}],
+        },
+    )  # fmt: skip
+    rerun = a_run(db_url, org, "R01", "proposed", status="completed", supersedes_run_id=invalid)
+    found = await evaluation_invalidations(conn, [org])
+    assert [i.run_id for i in found] == [invalid]
+    assert found[0].rerun_run_id == rerun
+    assert found[0].infrastructure_failure == "network_error"
+    # a run that merely failed, with no invalidation marker, is not an invalidation
+    a_run(db_url, org, "R02", "proposed", status="failed", failure={"kind": "job_timeout"})
+    assert [i.run_id for i in await evaluation_invalidations(conn, [org])] == [invalid]
 
 
 async def test_a_rate_limited_call_is_read_as_a_scheduling_defect_with_its_arm(

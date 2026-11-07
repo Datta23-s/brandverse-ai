@@ -291,6 +291,41 @@ def test_a_brand_missing_a_campaign_is_not_counted_as_reduced_or_separated() -> 
 # ── the scheduling defect ────────────────────────────────────────────────────────────────────
 
 
+def test_every_invalidation_is_reported_with_its_window_and_its_rerun() -> None:
+    """`reruns.invalidations` was written on 5 November and called by NOTHING: an invalidated run
+    would have been re-run and never reported (decision-log 2.53 item 6)."""
+    from app.evaluation.metrics import invalidation_lines
+    from app.evaluation.outages import OutageWindow
+    from app.evaluation.reruns import invalidations as list_invalidations
+
+    assert invalidation_lines([]) == ["INVALIDATED RUNS (re-run, in no figure): none"]
+    window = OutageWindow(T0, T0 + timedelta(minutes=40), 12)
+    invalid, replacement, no_window = uuid4(), uuid4(), uuid4()
+    failure = {
+        "kind": "infrastructure_gap",
+        "invalidated": True,
+        "infrastructure_failure": "network_error",
+        "gaps": [{"step": 7, "agent": "A2", "error": "LLMCallFailed"}],
+    }
+    found = list_invalidations(
+        [
+            (invalid, T0 + timedelta(minutes=5), T0 + timedelta(minutes=9), failure, replacement),
+            (no_window, T0 + timedelta(hours=9), T0 + timedelta(hours=10), failure, None),
+        ],
+        [window],
+    )
+    text = "\n".join(invalidation_lines(found))
+    assert f"{invalid} network_error" in text and f"re-run {replacement}" in text
+    # the two things that must never pass quietly
+    assert "NO OUTAGE WINDOW OVERLAPPED: look at this" in text
+    assert "NO RE-RUN RECORDED" in text
+
+
+def test_the_report_always_carries_the_invalidation_block() -> None:
+    report = build_report(complete_set(), bands=BANDS, weights=WEIGHTS)
+    assert "INVALIDATED RUNS (re-run, in no figure): none" in "\n".join(report.lines())
+
+
 def test_a_rate_limit_that_bound_is_reported_as_a_scheduling_defect_with_its_arm() -> None:
     from app.evaluation.metrics import SchedulingDefect
 
