@@ -367,6 +367,16 @@ def test_a_recording_with_no_fetch_instrumentation_refuses_to_give_a_unit_cost(
         UnitCosts.from_snapshot(committed, seconds_per_search=3.41)
 
 
+def test_every_report_line_is_printable_on_a_cp1252_console() -> None:
+    """Found running the report on the dry run's own rows: a box-drawing rule raised
+    UnicodeEncodeError on this Windows console and killed the print half way through. A figure a
+    reader cannot print is not reported, so the lines are ASCII by test."""
+    report = build_report(complete_set(), bands=BANDS, weights=WEIGHTS, unit_costs=UNITS)
+    for line in report.lines():
+        line.encode("cp1252")  # raises if a character cannot be printed here
+        assert line.isascii(), line
+
+
 def test_the_baseline_is_baseline_b_unless_stated() -> None:
     assert BASELINE == "baseline_b"
     report = build_report(complete_set(), bands=BANDS, weights=WEIGHTS)

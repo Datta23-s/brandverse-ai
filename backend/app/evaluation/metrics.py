@@ -665,14 +665,17 @@ class Report:
                 *[f"  {x}" for x in self.linkage_disagreements],
             ]
         for arm, sens in self.sensitivities.items():
-            out += [f"── {arm} ──", *sens.lines()]
+            out += [f"-- {arm} --", *sens.lines()]
             out.append("by campaign position:")
             for position, figures in self.positions[arm].items():
                 out += [f"  position {position}:", *[f"    {x}" for x in figures.lines()]]
-        out += ["── the engine ──", *self.depth.lines()]
-        out += ["── infrastructure ──", *invalidation_lines(self.invalidations)]
-        out += ["── scheduling ──", *scheduling_defect_lines(self.defects)]
-        out += ["── sample ──", f"  {self.quality_sample}"]
+        # ASCII ONLY, deliberately: this console is cp1252 (found running the report on the dry
+        # run's rows, 7 November 2026 — box-drawing rules raised UnicodeEncodeError and killed the
+        # print half way). A figure a reader cannot print is not reported.
+        out += ["-- the engine --", *self.depth.lines()]
+        out += ["-- infrastructure --", *invalidation_lines(self.invalidations)]
+        out += ["-- scheduling --", *scheduling_defect_lines(self.defects)]
+        out += ["-- sample --", f"  {self.quality_sample}"]
         return out
 
 

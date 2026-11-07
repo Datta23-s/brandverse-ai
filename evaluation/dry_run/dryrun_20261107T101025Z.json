@@ -1,0 +1,349 @@
+{
+ "target": {
+  "host": "127.0.0.1",
+  "port": 55432,
+  "database": "brandverse_dryrun_eval"
+ },
+ "refused_before_round1": "round:2: refused. Every proposed campaign at position 1 needs its human decision first, because memory is written on approval (Rules.md T6).",
+ "kill": {
+  "killed": true,
+  "in_flight": "R01:baseline_b",
+  "run_id": "24fe1b6a-083a-450e-95a6-7ad15ba17f69",
+  "events_at_kill": 8
+ },
+ "round1_resume": {
+  "started": [],
+  "skipped_done": [
+   "R01:proposed",
+   "R01:baseline_a"
+  ],
+  "reconciled": [
+   "R01:baseline_b"
+  ],
+  "interrupted": [],
+  "reruns": []
+ },
+ "refused_while_round1_undecided": "round:2: refused. Every proposed campaign at position 1 needs its human decision first, because memory is written on approval (Rules.md T6).",
+ "approval": {
+  "submitter_status": 403,
+  "stand_in_status": 202
+ },
+ "evidence": {
+  "runs": [
+   {
+    "run_id": "5251ef1a-050d-499c-b2c9-3cad981e4eae",
+    "organisation": "EVAL B01 proposed",
+    "arm": "proposed",
+    "status": "completed",
+    "depth": "D2",
+    "r": 0.786,
+    "calls": 7,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "604479f3740e0915d347039b5b0a1f2860e2d7eae38d9a5edbeeea90f46c859f",
+    "brief": "Launch awareness for the neckband. Audience: College students who commute and work out.",
+    "created_at": "2026-11-07T10:12:21.471949+00:00"
+   },
+   {
+    "run_id": "239abab1-3474-414b-9f99-2beeb13bfa24",
+    "organisation": "EVAL B01 baseline_a",
+    "arm": "baseline_a",
+    "status": "awaiting_approval",
+    "depth": "D0",
+    "r": null,
+    "calls": 0,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "604479f3740e0915d347039b5b0a1f2860e2d7eae38d9a5edbeeea90f46c859f",
+    "brief": "Launch awareness for the neckband. Audience: College students who commute and work out.",
+    "created_at": "2026-11-07T10:14:24.145696+00:00"
+   },
+   {
+    "run_id": "24fe1b6a-083a-450e-95a6-7ad15ba17f69",
+    "organisation": "EVAL B01 baseline_b",
+    "arm": "baseline_b",
+    "status": "awaiting_approval",
+    "depth": "D2",
+    "r": null,
+    "calls": 0,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "604479f3740e0915d347039b5b0a1f2860e2d7eae38d9a5edbeeea90f46c859f",
+    "brief": "Launch awareness for the neckband. Audience: College students who commute and work out.",
+    "created_at": "2026-11-07T10:14:33.746865+00:00"
+   },
+   {
+    "run_id": "3964d451-3376-42b3-9685-1beb41c99836",
+    "organisation": "EVAL B01 baseline_b",
+    "arm": "baseline_b",
+    "status": "awaiting_approval",
+    "depth": "D2",
+    "r": null,
+    "calls": 0,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "7abe32938f2ad2b0e94ddc4d8ae220dca752b993b611ef340ee9197da08b0bad",
+    "brief": "Launch awareness for the ANC earbuds. Audience: College students who commute and want noise cancellation.",
+    "created_at": "2026-11-07T10:16:57.050876+00:00"
+   },
+   {
+    "run_id": "3dccb12c-a7a9-4488-94a0-1ea7b955f67a",
+    "organisation": "EVAL B01 proposed",
+    "arm": "proposed",
+    "status": "awaiting_approval",
+    "depth": "D1",
+    "r": 0.22,
+    "calls": 0,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "7abe32938f2ad2b0e94ddc4d8ae220dca752b993b611ef340ee9197da08b0bad",
+    "brief": "Launch awareness for the ANC earbuds. Audience: College students who commute and want noise cancellation.",
+    "created_at": "2026-11-07T10:19:26.888401+00:00"
+   },
+   {
+    "run_id": "0569bd8f-adfa-4103-ae45-551da485395f",
+    "organisation": "EVAL B01 baseline_a",
+    "arm": "baseline_a",
+    "status": "awaiting_approval",
+    "depth": "D0",
+    "r": null,
+    "calls": 0,
+    "declared_gaps": [],
+    "failure": null,
+    "brief_check_status": "checked",
+    "brief_check_sha": "7abe32938f2ad2b0e94ddc4d8ae220dca752b993b611ef340ee9197da08b0bad",
+    "brief": "Launch awareness for the ANC earbuds. Audience: College students who commute and want noise cancellation.",
+    "created_at": "2026-11-07T10:20:40.416240+00:00"
+   }
+  ],
+  "memory_items_by_organisation": {
+   "EVAL B01 proposed": 7
+  },
+  "llm_calls_by_tier_and_outcome": [
+   [
+    "standard",
+    "invalid_output",
+    1
+   ],
+   [
+    "standard",
+    "ok",
+    31
+   ]
+  ],
+  "llm_calls_by_arm_and_prompt": [
+   [
+    "baseline_a",
+    "baseline_a_copy",
+    2
+   ],
+   [
+    "baseline_a",
+    "claim_extract",
+    2
+   ],
+   [
+    "baseline_b",
+    "a1_positioning",
+    2
+   ],
+   [
+    "baseline_b",
+    "a2_market",
+    2
+   ],
+   [
+    "baseline_b",
+    "a3_personas",
+    2
+   ],
+   [
+    "baseline_b",
+    "a6_copy",
+    3
+   ],
+   [
+    "baseline_b",
+    "a7_risk",
+    3
+   ],
+   [
+    "baseline_b",
+    "claim_extract",
+    3
+   ],
+   [
+    "proposed",
+    "a1_positioning",
+    2
+   ],
+   [
+    "proposed",
+    "a2_market",
+    2
+   ],
+   [
+    "proposed",
+    "a3_personas",
+    2
+   ],
+   [
+    "proposed",
+    "a6_copy",
+    2
+   ],
+   [
+    "proposed",
+    "a7_risk",
+    2
+   ],
+   [
+    "proposed",
+    "claim_extract",
+    2
+   ],
+   [
+    "proposed",
+    "structured_repair",
+    1
+   ]
+  ],
+  "refused_calls": 0,
+  "decisions": [
+   [
+    "5251ef1a-050d-499c-b2c9-3cad981e4eae",
+    "approve",
+    null
+   ]
+  ]
+ },
+ "worker_crashes": [],
+ "round2_run_evidence": {
+  "depth_chosen": "D1",
+  "r": 0.22,
+  "agents": [
+   "A1",
+   "A2",
+   "A3",
+   "A6",
+   "A7"
+  ],
+  "calls": 0,
+  "injected": [
+   [
+    "90243fb2",
+    "support",
+    0.743
+   ],
+   [
+    "ed2b4944",
+    "support",
+    0.72
+   ],
+   [
+    "30b27b31",
+    "support",
+    0.711
+   ],
+   [
+    "430c1e76",
+    "support",
+    0.702
+   ],
+   [
+    "37b20fc9",
+    "support",
+    0.686
+   ],
+   [
+    "35a64377",
+    "support",
+    0.679
+   ],
+   [
+    "8a67da72",
+    "support",
+    0.676
+   ]
+  ],
+  "injection_counts": {
+   "considered": 7,
+   "below_floor": 0,
+   "over_cap": 0,
+   "cap": 12
+  },
+  "prompts": {
+   "a1_positioning@v2": 1,
+   "a2_market@v1": 1,
+   "a3_personas@v1": 1,
+   "a6_copy@v3": 1,
+   "a7_risk@v2": 1,
+   "claim_extract@v3": 1
+  }
+ },
+ "model_calls_at_or_before_step_4": 0,
+ "run_record": [
+  [
+   "proposed",
+   "completed",
+   319,
+   241,
+   true,
+   false,
+   "D2"
+  ],
+  [
+   "baseline_a",
+   "awaiting_approval",
+   null,
+   null,
+   true,
+   false,
+   "D0"
+  ],
+  [
+   "baseline_b",
+   "awaiting_approval",
+   319,
+   241,
+   true,
+   false,
+   "D2"
+  ],
+  [
+   "baseline_b",
+   "awaiting_approval",
+   283,
+   222,
+   true,
+   false,
+   "D2"
+  ],
+  [
+   "proposed",
+   "awaiting_approval",
+   186,
+   143,
+   true,
+   false,
+   "D1"
+  ],
+  [
+   "baseline_a",
+   "awaiting_approval",
+   null,
+   null,
+   true,
+   false,
+   "D0"
+  ]
+ ],
+ "calls_made": 32,
+ "real_budget_file_unchanged": true,
+ "findings": []
+}
