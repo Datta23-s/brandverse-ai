@@ -88,7 +88,7 @@ class Ledger:
     async def status(self, run_id: UUID) -> str | None:
         return self.current
 
-    async def suspend(self, run_id: UUID) -> None:
+    async def suspend(self, run_id: UUID, facts: RunFacts | None = None) -> None:
         self.calls.append(("suspend",))
 
     async def resumed(self, run_id: UUID) -> None:

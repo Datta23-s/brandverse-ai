@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import yaml
 
-from app.evaluation.outages import OutageWindow, outage_windows, runs_touching
+from app.evaluation.outages import OutageWindow, active_spans, outage_windows, runs_touching
 from app.evaluation.schedule import ARMS, RUN_ORDER, SEED, interleaved_order, registered_order
 
 REGISTERED = yaml.safe_load(RUN_ORDER.read_text(encoding="utf-8"))
@@ -101,3 +101,26 @@ def test_a_run_that_overlapped_a_window_is_identified_and_the_others_are_not() -
         (after, at(41), at(60)),
     ]
     assert set(runs_touching([window], spans)) == {inside, straddling}
+
+
+def test_the_time_a_run_waits_for_its_approver_is_not_time_it_could_be_hit_by_an_outage() -> None:
+    """R3 (owner, 2026-11-07): a run parked for hours across an outage window was reported as
+    having touched it, which flags nearly every parked run. Its active time excludes the wait."""
+    window = OutageWindow(at(100), at(110), 4)
+    # runs 0..10, parks 10..300 (the outage is inside the wait), resumes and finishes 300..305
+    spans = active_spans(at(0), at(305), [(at(10), at(300))])
+    assert spans == [(at(0), at(10)), (at(300), at(305))]
+    run = uuid4()
+    assert runs_touching([window], [(run, a, b) for a, b in spans]) == {}
+    # the same run with no wait recorded WOULD be flagged: the wait is what separates them
+    assert set(runs_touching([window], [(run, at(0), at(305))])) == {run}
+    # an outage during the active part still counts, and a run in several spans is listed once
+    hit = OutageWindow(at(3), at(4), 1)
+    assert runs_touching([hit, window], [(run, a, b) for a, b in spans]) == {run: [hit]}
+
+
+def test_active_spans_handle_an_open_wait_several_waits_and_none() -> None:
+    assert active_spans(at(0), at(50), []) == [(at(0), at(50))]
+    assert active_spans(at(0), at(50), [(at(20), None)]) == [(at(0), at(20))]  # still parked
+    two = [(at(30), at(35)), (at(10), at(15))]  # unsorted on purpose
+    assert active_spans(at(0), at(50), two) == [(at(0), at(10)), (at(15), at(30)), (at(35), at(50))]

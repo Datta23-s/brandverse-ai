@@ -5,10 +5,10 @@ What it exercises, in order (every step prints what it saw; the JSON report keep
   1. the target: printed, then refused unless it is the throwaway on loopback, BEFORE any call;
   2. the database: created from the real migrations, its ledger scope registered through a TEMPORARY
      budget file (config/evaluation_budget.yaml is never written and is checked unchanged);
-  3. the baselines wave, run by a CHILD process that is KILLED while a Baseline B run is in flight,
-     then resumed: the checkpoint reconciles the run the dead harness left;
-  4. Proposed round 2 REFUSED while round 1 is undecided (the serialising rule), before and after
-     round 1 has been generated;
+  3. round 2 REFUSED before round 1 exists (the serialising rule);
+  4. round 1 (all three arms of a request adjacent, in the registered order), run by a CHILD
+     process that is KILLED while a Baseline B run is in flight, then resumed: the checkpoint
+     reconciles the run the dead harness left; round 2 is REFUSED again while round 1 is undecided;
   5. the harness cannot approve (the submitter is refused 403); a STAND-IN approver decides round 1
      ONLY HERE, in the throwaway; the real evaluation has a human (Rules.md T6);
   6. Proposed round 2, generated after the decision, reads the memory round 1's approval wrote;
@@ -171,10 +171,8 @@ async def run_wave_here(url: str, approver_id: UUID, wave: str, checkpoint: Path
 def child_main(a: argparse.Namespace) -> int:
     """The harness process the parent kills. It does exactly what a normal invocation does."""
     verify_target(a.url)
-    asyncio.run(
-        run_wave_here(a.url, UUID(a.approver), a.wave, Path(a.checkpoint)),
-        loop_factory=asyncio.SelectorEventLoop,
-    )
+    work = run_wave_here(a.url, UUID(a.approver), a.wave, Path(a.checkpoint))
+    asyncio.run(work, loop_factory=asyncio.SelectorEventLoop)
     return 0
 
 
@@ -320,20 +318,7 @@ async def main_async() -> int:
         return 1
     watcher = asyncio.create_task(supervisor.watch(asyncio.current_task()))
     try:
-        # ── 3. baselines: killed mid-run, resumed ────────────────────────────────────────────
-        killed = await asyncio.to_thread(kill_child_mid_run, url, approver, checkpoint, "baselines")
-        steps["kill"] = killed
-        print("KILL:", killed, flush=True)
-        if not killed.get("killed"):
-            findings.append("the kill did not land on an in-flight Baseline B run")
-        report = await run_wave_here(url, approver, "baselines", checkpoint)
-        steps["baselines_resume"] = {
-            k: getattr(report, k)
-            for k in ("started", "skipped_done", "reconciled", "interrupted", "reruns")
-        }
-        print("BASELINES RESUMED:", steps["baselines_resume"], flush=True)
 
-        # ── 4. the refusal, before and after round 1 is generated ────────────────────────────
         async def refusal(wave: str) -> str | None:
             try:
                 await run_wave_here(url, approver, wave, checkpoint)
@@ -341,17 +326,30 @@ async def main_async() -> int:
                 return str(e)
             return None
 
-        steps["refused_before_round1"] = await refusal("proposed:2")
-        print("proposed:2 before round 1 exists ->", steps["refused_before_round1"], flush=True)
-        await run_wave_here(url, approver, "proposed:1", checkpoint)
-        steps["refused_while_round1_undecided"] = await refusal("proposed:2")
+        # ── 3. round 2 refused before round 1 exists (no call) ──────────────────────────────
+        steps["refused_before_round1"] = await refusal("round:2")
+        print("round:2 before round 1 exists ->", steps["refused_before_round1"], flush=True)
+
+        # ── 4. round 1 (all three arms, adjacent): killed mid-run, resumed ──────────────────
+        killed = await asyncio.to_thread(kill_child_mid_run, url, approver, checkpoint, "round:1")
+        steps["kill"] = killed
+        print("KILL:", killed, flush=True)
+        if not killed.get("killed"):
+            findings.append("the kill did not land on an in-flight Baseline B run")
+        report = await run_wave_here(url, approver, "round:1", checkpoint)
+        steps["round1_resume"] = {
+            k: getattr(report, k)
+            for k in ("started", "skipped_done", "reconciled", "interrupted", "reruns")
+        }
+        print("ROUND 1 RESUMED:", steps["round1_resume"], flush=True)
+        steps["refused_while_round1_undecided"] = await refusal("round:2")
         print(
-            "proposed:2 while round 1 is undecided ->",
+            "round:2 while round 1 is undecided ->",
             steps["refused_while_round1_undecided"],
             flush=True,
         )
         if not steps["refused_before_round1"] or not steps["refused_while_round1_undecided"]:
-            findings.append("proposed:2 was NOT refused when it should have been")
+            findings.append("round:2 was NOT refused when it should have been")
 
         # ── 5. T6, then the stand-in approver ────────────────────────────────────────────────
         async def decide(runner, client, issuer):  # type: ignore[no-untyped-def]
@@ -396,7 +394,7 @@ async def main_async() -> int:
             await asyncio.sleep(3)
 
         # ── 6. round 2 after the decision ────────────────────────────────────────────────────
-        await run_wave_here(url, approver, "proposed:2", checkpoint)
+        await run_wave_here(url, approver, "round:2", checkpoint)
     finally:
         watcher.cancel()
         supervisor.stop()
@@ -427,6 +425,21 @@ async def main_async() -> int:
                 f"{[(g.get('agent'), g.get('infrastructure')) for g in r['declared_gaps']]}: "
                 "it wrote no memory, so later rounds read nothing"
             )
+    # Migration 0048: what a run knew is on the run row WHILE IT IS PARKED, not only in the
+    # checkpoint (pages fetched for the LR fetch component, the facts, the supersession column).
+    with psycopg.connect(url, autocommit=True) as c:
+        rec = c.execute(
+            "select arm, status, pages_fetched, pages_served, facts is not null, "
+            "supersedes_run_id is not null, depth from runs order by created_at"
+        ).fetchall()
+    steps["run_record"] = [list(r) for r in rec]
+    for arm, status, pages, _served, has_facts, _sup, depth in rec:
+        if status in ("awaiting_approval", "completed") and arm != "baseline_a":
+            if pages is None or not has_facts or depth is None:
+                findings.append(
+                    f"a {status} {arm} run has no pages_fetched/facts/depth on its row "
+                    "(it would live only in the checkpoint)"
+                )
     if not any(ev["memory_items_by_organisation"].values()):
         findings.append("round 2 read NO memory: the memory leg was not exercised")
     for name, k in ev["memory_items_by_organisation"].items():

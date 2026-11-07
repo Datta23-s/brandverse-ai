@@ -58,7 +58,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
-from psycopg import AsyncConnection
+from psycopg import AsyncConnection, errors
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel
 
@@ -103,6 +103,11 @@ class RunFacts:
     brief_check: dict[str, Any] | None = None  # migration 0038; None keeps the column as it was
     # Where the run's local time went (app/core/timing.py; migration 0044); None keeps the column.
     timings: dict[str, float] | None = None
+    # Migration 0048: values the analysis needs that no other row holds and that otherwise live only
+    # in the LangGraph checkpoint (decision-log 2.52). `pages_fetched` is the LR fetch component.
+    pages_fetched: int | None = None
+    pages_served: int | None = None
+    facts: dict[str, Any] | None = None
 
 
 _CLOSE_WAITS_SQL = """
@@ -121,6 +126,9 @@ set status = %(status)s, budget_exhausted = %(exhausted)s, completed_at = now(),
     declared_gaps = %(gaps)s::jsonb,
     brief_check = coalesce(%(brief_check)s::jsonb, r.brief_check),
     timings = coalesce(%(timings)s::jsonb, r.timings),
+    pages_fetched = coalesce(%(pages_fetched)s, r.pages_fetched),
+    pages_served = coalesce(%(pages_served)s, r.pages_served),
+    facts = coalesce(%(facts)s::jsonb, r.facts),
     failure = coalesce(%(failure)s::jsonb, r.failure),
     -- active latency: wall time minus the time spent waiting for a person (migration 0036)
     latency_ms = greatest(0, (extract(epoch from (now() - r.created_at)) * 1000
@@ -167,6 +175,9 @@ async def end_run(
                 "gaps": json.dumps(list(f.declared_gaps)),
                 "brief_check": None if f.brief_check is None else json.dumps(f.brief_check),
                 "timings": None if f.timings is None else json.dumps(f.timings),
+                "pages_fetched": f.pages_fetched,
+                "pages_served": f.pages_served,
+                "facts": None if f.facts is None else json.dumps(f.facts),
                 "failure": None if failure is None else json.dumps(failure),
             },
         )
@@ -190,15 +201,94 @@ on conflict (run_id) where resumed_at is null do nothing
 """
 
 
-async def suspend_run(pool: AsyncConnectionPool[AsyncConnection], run_id: UUID) -> None:
+# What the run knows when it PARKS is written then (decision-log 2.52), not left for the run's end:
+# an approver may take days, and until then these values would exist only in the checkpoint.
+# `coalesce` keeps what a column already holds when the value is absent, so a second park (a
+# "revise" round) updates and never blanks. The end of the run writes them again, finally.
+_PARK_FACTS_SQL = """
+update public.runs set
+    depth = coalesce(%(depth)s, depth),
+    research_score = coalesce(%(research_score)s, research_score),
+    selected_agents = coalesce(%(agents)s, selected_agents),
+    memory_hit_count = coalesce(%(hits)s, memory_hit_count),
+    search_count = coalesce(%(searches)s, search_count),
+    declared_gaps = %(gaps)s::jsonb,
+    brief_check = coalesce(%(brief_check)s::jsonb, brief_check),
+    timings = coalesce(%(timings)s::jsonb, timings),
+    pages_fetched = coalesce(%(pages_fetched)s, pages_fetched),
+    pages_served = coalesce(%(pages_served)s, pages_served),
+    facts = coalesce(%(facts)s::jsonb, facts)
+where id = %(run)s
+"""
+
+
+# A run re-run after an infrastructure failure links to the run it replaced, AT RUN TIME (migration
+# 0048). Derived by the backend from what the two runs ARE (same organisation, product, arm and
+# brief; the earlier one `failed` with an infrastructure kind and not yet replaced), never supplied
+# by a caller. Without the link nothing says which run replaced which and every read counts both.
+_LINK_SUPERSESSION_SQL = """
+update public.runs r set supersedes_run_id = (
+  select p.id from public.runs p
+  where p.org_id = r.org_id and p.product_id = r.product_id and p.arm = r.arm
+    and p.request ->> 'brief' is not distinct from r.request ->> 'brief'
+    and p.id <> r.id and p.created_at < r.created_at
+    and p.status = 'failed' and p.failure ->> 'infrastructure_failure' is not null
+    and not exists (select 1 from public.runs s where s.supersedes_run_id = p.id)
+  order by p.created_at desc limit 1)
+where r.id = %(run)s and r.supersedes_run_id is null
+returning r.supersedes_run_id
+"""
+
+
+async def link_supersession(
+    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID
+) -> UUID | None:
+    """Link a newly inserted run to the infrastructure-failed run it re-runs, if there is one.
+    Returns the replaced run's id. Two re-runs racing for one failed run: the unique index lets one
+    win and the other is left unlinked, which is reported by returning None, never silently."""
+    try:
+        async with pool.connection() as conn:
+            cur = await conn.execute(_LINK_SUPERSESSION_SQL, {"run": run_id})
+            row = await cur.fetchone()
+    except errors.UniqueViolation:
+        return None
+    return None if row is None or row[0] is None else UUID(str(row[0]))
+
+
+async def suspend_run(
+    pool: AsyncConnectionPool[AsyncConnection], run_id: UUID, facts: RunFacts | None = None
+) -> None:
     """Park a run at the human-approval interrupt, and start timing the wait. A run that is
     `queued` (first time) or already waiting (a "revise" round parks it again) can be suspended; one
-    that ended cannot. Idempotent: a second call while parked opens no second wait."""
+    that ended cannot. Idempotent: a second call while parked opens no second wait. `facts` are
+    written at the same moment (see `_PARK_FACTS_SQL`)."""
     async with pool.connection() as conn, conn.transaction():
         cur = await conn.execute(_SUSPEND_SQL, {"run": run_id})
         if cur.rowcount != 1:
             raise RuntimeError(f"run {run_id} has ended or does not exist: it cannot be suspended")
         await conn.execute(_OPEN_WAIT_SQL, {"run": run_id})
+        if facts is not None:
+            await conn.execute(
+                _PARK_FACTS_SQL,
+                {
+                    "run": run_id,
+                    "depth": facts.depth,
+                    "research_score": facts.research_score,
+                    "agents": list(facts.selected_agents)
+                    if facts.selected_agents is not None
+                    else None,
+                    "hits": facts.memory_hit_count,
+                    "searches": facts.search_count,
+                    "gaps": json.dumps(list(facts.declared_gaps)),
+                    "brief_check": None
+                    if facts.brief_check is None
+                    else json.dumps(facts.brief_check),
+                    "timings": None if facts.timings is None else json.dumps(facts.timings),
+                    "pages_fetched": facts.pages_fetched,
+                    "pages_served": facts.pages_served,
+                    "facts": None if facts.facts is None else json.dumps(facts.facts),
+                },
+            )
 
 
 async def resume_run(pool: AsyncConnectionPool[AsyncConnection], run_id: UUID) -> None:

@@ -38,8 +38,12 @@ join public.organisations o on o.id = c.org_id
 where c.org_id = any(%(org_ids)s)
   and not o.is_practice
   and not o.is_test
+  and r.arm = 'proposed'
   and c.strategy ? 'necessity'
   and c.strategy -> 'necessity' <> 'null'::jsonb
+  and c.strategy -> 'necessity' ? 'novelty'
+  -- primary attempts only: a run an infrastructure failure replaced is not a result (0048)
+  and not exists (select 1 from public.runs s where s.supersedes_run_id = r.id)
 order by r.created_at
 """
 
@@ -138,6 +142,9 @@ def from_record(
 async def necessity_records(
     conn: AsyncConnection, org_ids: Collection[UUID]
 ) -> list[tuple[UUID, str, dict[str, Any]]]:
-    """(run id, arm, the engine's record) for every evaluation campaign that carries one."""
+    """(run id, arm, the engine's record) for every PROPOSED campaign that carries one, primary
+    attempts only. Baseline campaigns carry `{policy, depth, requested}` without N, U or S, which
+    `from_record` cannot read (it raised KeyError before this filter); a superseded attempt is not
+    a result."""
     cur = await conn.execute(NECESSITY_RECORDS_SQL, {"org_ids": list(org_ids)})
     return [(run_id, arm, rec) async for run_id, arm, rec in cur]

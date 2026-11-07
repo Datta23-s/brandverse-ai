@@ -258,6 +258,17 @@ class Settings(BaseSettings):
                     f"{high:.0f} s the research step plus the model calls after it can no longer "
                     f"fit inside WORKER_JOB_TIMEOUT_S ({self.worker_job_timeout_s} s)"
                 )
+        if self.evaluation_run and self.pipeline_agents == "real":
+            # Without a snapshot the pipeline installs a research function that REFUSES live
+            # search, so every D1 and D2 run (Baseline B and the Proposed arm) would fail. A
+            # runbook line is a thing forgotten at 2 am; a refusal is not (owner, 2026-11-07).
+            snap = self.research_snapshot_dir
+            if snap is None or not (snap / "committed.jsonl").is_file():
+                raise ValueError(
+                    "RESEARCH_SNAPSHOT_DIR must name the recorded evaluation snapshot (a directory "
+                    f"holding committed.jsonl) for an evaluation worker (it is {snap}): without "
+                    "it every D1 and D2 run fails, because live research is held"
+                )
         longest_pending_s = (
             self.llm_max_rate_limit_waits + 1
         ) * self.llm_call_timeout_s + self.llm_max_rate_limit_wait_s

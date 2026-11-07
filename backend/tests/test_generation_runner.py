@@ -146,7 +146,9 @@ def _ctx(p: _Recorder, *, evaluation: bool) -> dict[str, Any]:
         "settings": Settings(  # type: ignore[call-arg]
             _env_file=None,
             evaluation_run=evaluation,
-            research_step_timeout_s=900,  # an evaluation worker refuses to be built without it
+            # mock agents: the start-up refusals (timeout, snapshot) apply to real ones; this test
+            # is about what the JOB passes to the pipeline.
+            pipeline_agents="mock",
         ),
     }
 

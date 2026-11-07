@@ -27,7 +27,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 
 from app.api.deps import IdentityDep, ResourcesDep, require_db
 from app.core.admission import decide_admission, load_admission, record_block, summarise
-from app.core.budgeted_run import fail_run
+from app.core.budgeted_run import fail_run, link_supersession
 from app.core.db import as_user
 from app.core.logging import bind_run_id
 from app.core.run_events import STREAM_START, at_or_before, parse_entry_id
@@ -187,6 +187,10 @@ async def start_run(
             "values (%s, %s, %s, %s, %s)",
             (run_id, request.org_id, request.product_id, request.arm, request.model_dump_json()),
         )
+    # A re-run after an infrastructure failure links to the run it replaced, here, at run time.
+    replaced = await link_supersession(pool, run_id)
+    if replaced is not None:
+        log.info("run re-runs an infrastructure-failed run", extra={"replaces": str(replaced)})
     job = PipelineRunJob(run_id=run_id, request=request, by=identity.user_id)
     with bind_run_id(str(run_id)):
         await resources.events.append(

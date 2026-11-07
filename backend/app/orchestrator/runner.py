@@ -66,7 +66,7 @@ class RunLedger(Protocol):
 
     async def status(self, run_id: UUID) -> str | None: ...
 
-    async def suspend(self, run_id: UUID) -> None: ...
+    async def suspend(self, run_id: UUID, facts: RunFacts | None = None) -> None: ...
 
     async def resumed(self, run_id: UUID) -> None: ...
 
@@ -99,8 +99,8 @@ class PoolRunLedger:
             row = await cur.fetchone()
         return None if row is None else str(row[0])
 
-    async def suspend(self, run_id: UUID) -> None:
-        await suspend_run(self._pool, run_id)
+    async def suspend(self, run_id: UUID, facts: RunFacts | None = None) -> None:
+        await suspend_run(self._pool, run_id, facts)
 
     async def resumed(self, run_id: UUID) -> None:
         await resume_run(self._pool, run_id)
@@ -494,7 +494,9 @@ class Pipeline:
                 detail="awaiting approval",
             )
         )
-        await self._ledger.suspend(run_id)
+        # The run's facts are written NOW, not at its end (migration 0048): an approver may take
+        # days, and until then they would exist only in the checkpoint.
+        await self._ledger.suspend(run_id, facts_from_state(values))
         return PipelineOutcome("suspended", values)
 
     async def _blocked(self, run_id: UUID, values: dict[str, Any]) -> PipelineOutcome:
@@ -530,6 +532,7 @@ def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
             },
         )
     agents = values.get("selected_agents")
+    research = values.get("research") or {}
     return RunFacts(
         depth=values.get("depth"),
         research_score=values.get("research_score"),
@@ -539,4 +542,31 @@ def facts_from_state(values: Mapping[str, Any]) -> RunFacts:
         declared_gaps=tuple(gaps.values()),
         brief_check=values.get("brief_check"),
         timings=dict(values["timings"]) if values.get("timings") else None,
+        pages_fetched=research.get("pages_fetched"),
+        pages_served=research.get("pages_served"),
+        facts=_checkpoint_only_facts(values),
     )
+
+
+# State the analysis can need that no other row holds (decision-log 2.52, the audit of what lived
+# only in the LangGraph checkpoint). Plain data only, as the checkpoint serializer requires.
+_MEMORY_KEYS = {
+    "memory_coverage": "coverage",
+    "memory_slots": "slots",
+    "memory_coverage_final": "coverage_final",
+    "memory_persona_scored": "persona_scored",
+    "memory_similarities": "similarities",
+}
+
+
+def _checkpoint_only_facts(values: Mapping[str, Any]) -> dict[str, Any] | None:
+    facts: dict[str, Any] = {}
+    if values.get("research"):
+        facts["research"] = dict(values["research"])
+    memory = {out: values[key] for key, out in _MEMORY_KEYS.items() if key in values}
+    if memory:
+        facts["memory"] = memory
+    for key in ("agent_rationale", "revision_round", "findings"):
+        if values.get(key) is not None:
+            facts[key] = values[key]
+    return facts or None

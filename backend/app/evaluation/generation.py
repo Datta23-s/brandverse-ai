@@ -9,9 +9,11 @@ provider: if this dies at campaign 40 of 60 it continues from 41. The mechanism,
 * **Resume = read the file.** An item with a `done` outcome is skipped. An item with a `start` and
   no `end` (the process died while it was in flight) is RECONCILED against the run's real status:
   if it reached an outcome the outcome is recorded and the item is not repeated; if it did not, the
-  attempt is recorded as `interrupted` and the item is started again. An `intent` with no `start`
-  (killed between "decide to start" and "the id came back") is searched for an orphan run before
-  anything is started again, so a kill cannot create a second run silently.
+  attempt is recorded as `interrupted`. If it is STILL RUNNING after the wait, the batch STOPS for
+  the owner and nothing is started beside it (a second run would double every count). If the run is
+  simply gone (no id ever came back, no orphan found) the item is started again. An `intent` with
+  no `start` (killed between "decide to start" and "the id came back") is searched for an orphan
+  run before anything is started again, so a kill cannot create a second run silently.
 * **An interrupted attempt is NOT an infrastructure failure.** The re-run cap (2, `reruns.py`) is
   for the provider's outages; a killed harness is not an outage and must not use the cap up. It is
   recorded, listed in the report, and its calls stay in the ledger.
@@ -20,11 +22,13 @@ provider: if this dies at campaign 40 of 60 it continues from 41. The mechanism,
   is told, it is not re-run.
 
 The order is the registered one (`evaluation/run_order.yaml`, `schedule.py`): this module filters
-it into WAVES and never reorders it. The Baselines never read or write memory, so all 60 can be
-generated in one wave. The Proposed arm's campaign N+1 reads the memory that campaign N's APPROVAL
-writes (Rules.md T6), and the approver is a human, so it is generated in three waves, each refused
-until the previous position is decided: that gate is `Runner.decided`, checked here, not left to
-the person typing the command.
+it into three ROUNDS (one per campaign position, all three arms) and never reorders it, so the
+arms of a request stay adjacent and an outage lands across arms (owner, 7 November 2026; the
+earlier "all Baselines first" waves lost that). The Proposed arm's campaign N+1 reads the memory
+that campaign N's APPROVAL writes (Rules.md T6), and the approver is a human, so round N+1 is
+refused, whole, until every Proposed campaign of round N has its decision: that gate is
+`Runner.decided`, checked here, not left to the person typing the command. The approval sittings
+are therefore the serialising step of the whole evaluation.
 """
 
 import json
@@ -33,13 +37,17 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, NoReturn, Protocol
 
 from app.evaluation.reruns import MAX_RERUNS, Attempt, next_action
 
 BASELINE_ARMS = ("baseline_a", "baseline_b")
-Wave = Literal["baselines", "proposed:1", "proposed:2", "proposed:3"]
-WAVES: tuple[Wave, ...] = ("baselines", "proposed:1", "proposed:2", "proposed:3")
+# One wave per campaign position, ALL THREE ARMS in the registered order (owner, 7 November 2026).
+# The registered order puts the three arms of a request adjacent so that a provider outage lands
+# across arms; waves of "all Baselines, then the Proposed rounds" (decision-log 2.48 item 6) put an
+# outage inside one arm and biased the comparison. Round N+1 still waits for round N's decisions.
+Wave = Literal["round:1", "round:2", "round:3"]
+WAVES: tuple[Wave, ...] = ("round:1", "round:2", "round:3")
 
 # What a run reached, as the harness sees it.
 #   parked       the run is waiting for a human decision (the normal end of generation)
@@ -88,14 +96,14 @@ class Runner(Protocol):
 def wave_items(
     order: Iterable[tuple[str, str]], positions: dict[str, int], wave: Wave
 ) -> list[Item]:
-    """The registered order filtered to one wave. Never reordered: the filter keeps the sequence."""
+    """The registered order filtered to one round (a campaign position, every arm). Never
+    reordered: the filter keeps the sequence, so the arms of a request stay adjacent."""
     if wave not in WAVES:
         raise ValueError(f"unknown wave {wave!r}; waves are {', '.join(WAVES)}")
-    items = [Item(rid, arm, positions[rid]) for rid, arm in order]
-    if wave == "baselines":
-        return [i for i in items if i.arm in BASELINE_ARMS]
     position = int(wave.split(":")[1])
-    return [i for i in items if i.arm == "proposed" and i.position == position]
+    return [
+        i for i in (Item(rid, arm, positions[rid]) for rid, arm in order) if i.position == position
+    ]
 
 
 # ── The checkpoint ────────────────────────────────────────────────────────────────────────────
@@ -210,8 +218,9 @@ async def generate(
     """Run (or resume) one wave. `stop_after` ends the invocation after that many NEW starts, for
     tests that simulate a batch that did not finish; the checkpoint is what carries on."""
     report = Report()
-    if wave.startswith("proposed:") and (position := int(wave.split(":")[1])) > 1:
-        # Refused, not warned: campaign N+1 reads the memory that N's approval writes.
+    if (position := int(wave.split(":")[1])) > 1:
+        # Refused, not warned: campaign N+1 reads the memory that N's approval writes. The whole
+        # round waits, Baselines included, because splitting it would lose the arms' adjacency.
         if not await runner.decided("proposed", position - 1):
             raise GenerationStopped(
                 f"{wave}: refused. Every proposed campaign at position {position - 1} needs its "
@@ -228,6 +237,10 @@ async def generate(
             if await _reconcile(item, open_attempt, runner, checkpoint, report):
                 continue
             state = checkpoint.state()[item.key]
+        elif await _settle_interrupted(item, state, runner, checkpoint, report):
+            state = checkpoint.state()[item.key]
+            if state.done:
+                continue
         while True:
             action = next_action(state.counted()) if state.counted() else "rerun"
             if action == "accept":
@@ -252,6 +265,8 @@ async def generate(
             )
             report.started.append(item.key)
             outcome, failure = await runner.wait(run_id)
+            if outcome == "running":
+                _stop_for_unsettled(item, number, run_id, checkpoint, report)
             checkpoint.write(
                 {
                     "event": "end",
@@ -266,6 +281,57 @@ async def generate(
             if state.done:
                 break
     return report
+
+
+def _stop_for_unsettled(
+    item: Item, number: int, run_id: str, checkpoint: Checkpoint, report: Report
+) -> NoReturn:
+    """A run did not reach an outcome inside the wait. Record the attempt as `interrupted` (it
+    keeps its run id, and does not count against the re-run cap) and STOP THE BATCH: starting the
+    item again would put a second run beside one that may still be queued or alive, and the
+    duplicate would corrupt every count (owner, 7 November 2026; found reading the driver)."""
+    checkpoint.write(
+        {
+            "event": "end",
+            "item": item.key,
+            "attempt": number,
+            "run_id": run_id,
+            "outcome": "interrupted",
+            "infrastructure_failure": None,
+        }
+    )
+    report.interrupted.append(item.key)
+    raise GenerationStopped(
+        f"{item.key}: run {run_id} did not settle inside the wait. It is recorded as interrupted "
+        "and NOT started again: the owner decides (is the worker alive? is the run still queued?)."
+    )
+
+
+async def _settle_interrupted(
+    item: Item, state: ItemState, runner: Runner, checkpoint: Checkpoint, report: Report
+) -> bool:
+    """The item's last attempt was `interrupted` and has a run id: look at that run before anything
+    new is started. Still running: stop again. At an outcome now: record it (the attempt is then
+    settled, or invalidated and re-run as usual). True if an outcome was recorded."""
+    last = state.attempts[-1] if state.attempts else None
+    if last is None or last.outcome != "interrupted" or last.run_id is None:
+        return False
+    outcome, failure = await runner.status(last.run_id)
+    if outcome == "running":
+        _stop_for_unsettled(item, last.number, last.run_id, checkpoint, report)
+    checkpoint.write(
+        {
+            "event": "end",
+            "item": item.key,
+            "attempt": last.number,
+            "run_id": last.run_id,
+            "outcome": outcome,
+            "infrastructure_failure": failure,
+            "reconciled": True,
+        }
+    )
+    report.reconciled.append(item.key)
+    return True
 
 
 async def _reconcile(
@@ -290,23 +356,29 @@ async def _reconcile(
         outcome, failure = await runner.status(run_id)
         if outcome == "running":
             # Possibly still alive in the worker (only the harness died): let it finish rather
-            # than start a second run beside it. `wait` has a timeout; a run whose worker is gone
-            # comes back `running` and is recorded as interrupted below.
-            outcome, failure = await runner.wait(run_id)
-        if outcome != "running":
-            checkpoint.write(
-                {
-                    "event": "end",
-                    "item": item.key,
-                    "attempt": open_attempt.number,
-                    "run_id": run_id,
-                    "outcome": outcome,
-                    "infrastructure_failure": failure,
-                    "reconciled": True,
-                }
-            )
-            report.reconciled.append(item.key)
-            return outcome in ("parked", "ended")
+            # than start a second run beside it. `wait` has a timeout.
+            waited, waited_failure = await runner.wait(run_id)
+            if waited == "running":
+                # Still not settled after the wait: the worker may be gone, or merely slow. Either
+                # way a SECOND run beside it would double the counts, so the batch stops for the
+                # owner.
+                _stop_for_unsettled(item, open_attempt.number, run_id, checkpoint, report)
+            outcome, failure = waited, waited_failure
+        # Here the run is at an outcome (a still-running one stopped the batch above).
+        checkpoint.write(
+            {
+                "event": "end",
+                "item": item.key,
+                "attempt": open_attempt.number,
+                "run_id": run_id,
+                "outcome": outcome,
+                "infrastructure_failure": failure,
+                "reconciled": True,
+            }
+        )
+        report.reconciled.append(item.key)
+        return outcome in ("parked", "ended")
+    # No run id ever came back and no orphan was found: nothing exists to wait for.
     checkpoint.write(
         {
             "event": "end",

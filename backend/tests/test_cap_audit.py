@@ -115,15 +115,33 @@ def test_the_job_timeout_exceeds_a_run_that_is_slow_everywhere_but_never_repaire
     assert DEFAULT["worker_job_timeout_s"] > worst_s
 
 
-def test_a_production_or_evaluation_worker_refuses_to_start_without_a_research_timeout() -> None:
+def test_an_evaluation_worker_refuses_to_start_without_the_recorded_snapshot(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """R7 (owner, 2026-11-07): without RESEARCH_SNAPSHOT_DIR the pipeline installs a research
+    function that refuses live search, so every D1 and D2 run fails. A refusal, not a line."""
+    real = {"pipeline_agents": "real", "evaluation_run": True, "research_step_timeout_s": 900.0}
+    with pytest.raises(ValueError, match="RESEARCH_SNAPSHOT_DIR"):
+        make_settings(**real)
+    with pytest.raises(ValueError, match="RESEARCH_SNAPSHOT_DIR"):
+        make_settings(**real, research_snapshot_dir=tmp_path)  # a directory with nothing recorded
+    (tmp_path / "committed.jsonl").write_text("", encoding="utf-8")
+    assert make_settings(**real, research_snapshot_dir=tmp_path).evaluation_run
+    # a development worker and a mock-agent evaluation worker are not asked
+    assert make_settings(pipeline_agents="real").research_snapshot_dir is None
+    assert make_settings(evaluation_run=True, pipeline_agents="mock").pipeline_agents == "mock"
+
+
+def test_a_production_or_evaluation_worker_refuses_to_start_without_a_research_timeout(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
     """Owner, 2026-11-06: enforced, not documented. The range is 60 s to what the job timeout
     leaves after the sequential model calls (1800 - 11 x 60 = 1140 s)."""
     low, high = make_settings().research_timeout_range_s()
     assert (low, high) == (60.0, 1140.0)
     real = {"pipeline_agents": "real"}
+    (tmp_path / "committed.jsonl").write_text("", encoding="utf-8")
     for extra in (
         {"environment": "production", "fake_runs_enabled": False},
-        {"evaluation_run": True},
+        {"evaluation_run": True, "research_snapshot_dir": tmp_path},
     ):
         for bad in (None, 59.0, 1141.0):
             with pytest.raises(ValueError, match="RESEARCH_STEP_TIMEOUT_S must be set"):

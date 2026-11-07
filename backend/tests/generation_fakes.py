@@ -78,18 +78,19 @@ class FileRunner:
         return (arm, position) in self.decided_positions
 
 
-def baseline_items() -> list[Item]:
+def round_one_items() -> list[Item]:
+    """Round 1: all three arms of the ten position-1 requests, in the registered order."""
     positions = {r["id"]: r["position"] for r in test_set_requests()}
-    return wave_items(registered_order(), positions, "baselines")
+    return wave_items(registered_order(), positions, "round:1")
 
 
 async def _main(directory: str, hang_on: str) -> None:
     d = Path(directory)
     await generate(
-        baseline_items(),
+        round_one_items(),
         FileRunner(d / "db.json", hang_on=hang_on),
         Checkpoint(d / "checkpoint.jsonl"),
-        "baselines",
+        "round:1",
     )
 
 
