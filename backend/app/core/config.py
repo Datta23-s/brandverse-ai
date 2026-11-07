@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     # Versioned prompt templates and their lock (app/llm/prompts.py).
     prompts_dir: Path = REPO_ROOT / "config" / "prompts"
     google_api_key: SecretStr | None = None
+    # The evaluation's own call budget (config/evaluation_budget.yaml, decision-log 2.36). Settable
+    # ONLY so the dry run can register its throwaway database through a temporary file and leave
+    # the real one untouched (decision-log 2.50).
+    evaluation_budget_path: Path = REPO_ROOT / "config" / "evaluation_budget.yaml"
     # Per-run hard caps (Rules.md C3), enforced from llm_calls before every call.
     max_llm_calls_per_run: int = Field(default=20, ge=1)
     max_cost_per_run_usd: float = Field(default=2.50, gt=0)

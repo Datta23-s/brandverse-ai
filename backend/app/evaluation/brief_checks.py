@@ -68,6 +68,22 @@ def stale_requests(records: dict[str, dict[str, Any]]) -> list[str]:
     ]
 
 
+def for_brief(brief: str, records: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The frozen record of the request whose brief this is, found by the brief's hash.
+
+    The API does not carry a request id (a run is a brief, a product and an audience), so the
+    evaluation worker finds the record the way the record itself is checked: by `brief_sha256`.
+    Raises if no frozen record was made from this brief, so an evaluation worker never computes a
+    run's brief check itself (three arms of one request would then be flagged by three model
+    calls instead of reading one record)."""
+    loaded = load() if records is None else records
+    want = brief_sha256(brief)
+    for record in loaded.values():
+        if record.get("brief_sha256") == want:
+            return dict(record)
+    raise FrozenBriefChecksError("no frozen brief check was made from this brief")
+
+
 def for_request(
     request_id: str, records: dict[str, dict[str, Any]] | None = None
 ) -> dict[str, Any]:

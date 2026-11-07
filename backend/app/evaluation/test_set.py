@@ -104,6 +104,23 @@ def request_inputs(path: Path = TEST_SET) -> dict[str, RequestInputs]:
     return out
 
 
+@dataclass(frozen=True, slots=True)
+class RequestMeta:
+    """Where a request sits in the design: its brand's id (B01), its product key (A or B) and its
+    position in the brand's progression (1, 2, 3)."""
+
+    brand_id: str
+    product_key: str
+    position: int
+
+
+def request_index(path: Path = TEST_SET) -> dict[str, RequestMeta]:
+    return {
+        r["id"]: RequestMeta(r["brand"], r["product"], int(r["position"]))
+        for r in _load(path)["requests"]
+    }
+
+
 def evidence_tags(path: Path = TEST_SET) -> dict[str, dict[str, str]]:
     """Per request: is its research evidence NOVEL or a REPEAT of an earlier request's?
 

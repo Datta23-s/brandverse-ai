@@ -5,7 +5,7 @@
 | Document | `docs/rating/rubric-amendment-2.md` |
 | Amends | `docs/rating/rubric-amendment-1.md` section 3 (the anchors), `docs/approval-rubric.md` as used by raters |
 | Dated | 6 November 2026 |
-| Status | **Written, not frozen.** Freezing is the owner's act (section 6) |
+| Status | **FROZEN 7 November 2026**, before the evaluation generated any output (section 6; `rubric-amendment-2.lock`) |
 
 ## 1. Provenance, recorded first and plainly
 
@@ -26,6 +26,11 @@ instrument of record for 16 November; A1's section 4 defects are resolved or ove
 4. **No AI tool touches rater output at any stage, for any purpose, including tidying.**
 
 That session is the kappa of record and it has to withstand a reader asking where the numbers came from.
+
+**Joint calibration at the start (owner, 7 November 2026).** Before the independent scoring, both raters score **three campaigns
+TOGETHER**, discuss where they differ, then score the **45 independently, in silence**. The three are **excluded from the kappa**
+(the kappa is computed on the 45 only). About fifteen minutes. There is no second chance to repair a poor kappa on the 16th.
+The three come from outside the 45 and are not part of the frozen random subset.
 
 ## 3. The fixes, each justified by the anchor text
 
@@ -52,6 +57,11 @@ That session is the kappa of record and it has to withstand a reader asking wher
    was given a voice. It is therefore not in the instrument, and no report may claim a brand-consistency result. Reinstating it needs
    voice attributes for all ten brands, given to every arm, and its own amendment.
 
+   **Recorded as a SYSTEM limitation, not a rubric one (owner, 7 November 2026).** The rubric is not what is missing: the system is.
+   No evaluation brand carries voice attributes and the brand-voice similarity gate is specified but not implemented
+   (`docs/decision-log.md` section 3.5, "The brand-voice similarity gate: specified, not implemented", which carries no V number;
+   gate-table item 17), so there is nothing for the dimension to measure. The write-up states it as a limit of the system under test.
+
 ## 4. The instrument
 
 **Four dimensions, one 0 / 1 / 2 scale, plus the outcome.** Agreement is linear-weighted Cohen's kappa per dimension beside the raw
@@ -64,13 +74,20 @@ counts (exact, within one point) and a confidence interval, as in A1 section 2.
 | **Originality** | (A1 anchor, unchanged) entirely stock phrasing; could appear in any advertisement for any product | (A1 anchor, unchanged) competent but familiar; at most one fresh element | (A1 anchor, unchanged) contains at least one line the rater has not seen before, and does not open with a stock phrase |
 | **Feasibility** | a marketing team would rewrite this before publishing it | a marketing team would publish it after small edits | a marketing team would publish it as written |
 
+**Originality risk, stated before the data (owner, 7 November 2026).** In the 6 November session originality scored at or near zero
+almost everywhere (formative; no figure from it is a result). A dimension that floors gives no discrimination and an unstable kappa.
+**If originality floors again across all three arms on 16 November, that is reported as a finding about the system's output, not as a
+rating result**, and its kappa is not read as evidence about the raters.
+
 Originality is carried over word for word because the instruction did not change it. A1 section 4, item 4 records its known defects
 (0/1 overlap; "not seen before" measures the rater). They are **not** fixed here and are not hidden: expect it to have the lowest
 kappa, and report it with that caveat.
 
 **Outcome.** The rater records approve, revise or reject for the copy they see, answering the approval rubric's own question
 (`docs/approval-rubric.md` section 1): "Would it be defensible to publish this?" Approve: yes as it stands. Revise: yes after changes.
-Reject: no. This is the rater's judgement of the copy. It is **not** the system's gate-derived outcome, which is computed by machine
+Reject: no. *Instruction on the sheet:* "Feasibility rates the WRITING. The outcome is your decision as the brand's approver, all
+things considered. They can differ, and often will." (Without it the outcome and feasibility's "a marketing team would publish it"
+would measure the same thing, the duplication that removed trustworthiness.) This is the rater's judgement of the copy. It is **not** the system's gate-derived outcome, which is computed by machine
 and reported separately.
 
 Evidence quality, cost efficiency and every T1.x to U4.x check are computed and **never shown to raters.**
@@ -82,6 +99,9 @@ tick every failed check (A1 section 6) is withdrawn for raters because raters no
 
 ## 6. Freeze
 
-Freezing is a file hash and a timestamp (`scripts/freeze_rating_amendment.py`, which today freezes A1's path only; extending it to A2
-is a small change made when the owner says to freeze). **Not frozen yet.** Nothing is scored from these sheets until it is, and a
-change after the freeze is A3, never an edit.
+Freezing is a file hash and a timestamp (`scripts/freeze_rating_amendment.py --amendment 2`). The lock
+(`docs/rating/rubric-amendment-2.lock`) covers this text AND both sheets (`rubric-sheet.html`, `scoring-sheet.html`), because the
+sheets are what the raters hold. **Frozen on 7 November 2026 on the owner's instruction, before the evaluation generated any
+campaign** (the dry run's output sits in a throwaway database and is not evaluation data), so no reader can ask whether the instrument was adjusted after results existed. `tests/test_rating_amendment_lock.py`
+fails if any of the three files differs from the lock. A change after the freeze is A3, never an edit. The lock holds the exact
+time and the hash; this text cannot state its own hash.

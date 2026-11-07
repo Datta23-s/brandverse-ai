@@ -35,6 +35,7 @@ from app.core.gates import load_superlatives
 from app.core.timing import TimedEncoder, TimedSearch
 from app.errors import BrandverseError
 from app.llm.dev_budget import load_dev_budget
+from app.llm.evaluation_budget import load_evaluation_budget
 from app.llm.gateway import LLMGateway
 from app.llm.ledger import CallLedger
 from app.llm.prompts import library_from
@@ -124,6 +125,10 @@ async def open_pipeline(
             max_cost_per_run_usd=settings.max_cost_per_run_usd,
             pending_expiry_s=settings.llm_pending_expiry_s,
             dev_budget=load_dev_budget(),
+            # The evaluation's scope was built (2.36) but never handed to the worker's ledger, so
+            # every call from an evaluation database was refused as unregistered (found reading,
+            # before the dry run; decision-log 2.50). The scopes are disjoint by database.
+            evaluation_budget=load_evaluation_budget(settings.evaluation_budget_path),
             strong_cap=(
                 (settings.llm_strong_tier_org_id, settings.llm_strong_tier_max_calls)
                 if settings.llm_strong_tier_org_id is not None

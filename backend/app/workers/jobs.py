@@ -11,6 +11,7 @@ from app.core.campaigns import audit
 from app.core.logging import bind_run_id, set_run_id
 from app.core.run_events import RunEventLog
 from app.errors import JobTimedOut
+from app.evaluation.brief_checks import for_brief as brief_check_for
 from app.models.campaigns import DecisionJob, EditOutJob, PipelineRunJob, RecoverJob
 from app.models.jobs import PingJob, PingResult
 from app.models.runs import FakeRunJob, RunFailed
@@ -167,11 +168,21 @@ async def run_pipeline(ctx: dict[str, Any], payload: dict[str, Any]) -> dict[str
     """Start a real run. The pipeline reports its own failures (`run.failed`) before re-raising."""
     job = PipelineRunJob.model_validate(payload)
     pipeline: Pipeline = ctx["pipeline"]
+    settings = ctx.get("settings")
+    # An EVALUATION worker starts every run with the request's frozen brief check, so the three
+    # arms read one record (evaluation/brief_checks.json). Found before the dry run: nothing passed
+    # it, so each run computed its own (decision-log 2.50). Server-side, never from the caller.
+    brief_check = (
+        brief_check_for(job.request.brief)
+        if settings is not None and settings.evaluation_run and job.request.brief
+        else None
+    )
     with bind_run_id(str(job.run_id)):
         outcome = await _execute(
             ctx,
             job.run_id,
             lambda: pipeline.start(
+                brief_check=brief_check,
                 run_id=job.run_id,
                 org_id=job.request.org_id,
                 user_id=job.by,

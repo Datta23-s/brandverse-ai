@@ -1,0 +1,10 @@
+{
+  "file": "rubric-amendment-2.md",
+  "sha256": "e6be35969bb93173ac1056c7dda30d189d97236d09a790a04646ff398455e496",
+  "frozen_utc": "2026-11-07T08:09:37+00:00",
+  "frozen_by": "the owner (instructed 7 November 2026); run by Claude",
+  "companions": {
+    "rubric-sheet.html": "8214d096666723064d92f8029dcbd5cf060eadaeaa81e625b36bcabb37db2dfb",
+    "scoring-sheet.html": "0d398e9cedbd6a2d03e61e9b7bb1861c295482e83d1e3e2b7970c1366532951d"
+  }
+}

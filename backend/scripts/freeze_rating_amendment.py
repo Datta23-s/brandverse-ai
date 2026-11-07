@@ -15,10 +15,17 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 RATING = Path(__file__).resolve().parents[2] / "docs" / "rating"
 AMENDMENT = RATING / "rubric-amendment-1.md"
 LOCK = RATING / "rubric-amendment-1.lock"
+# A2 (owner, 7 November 2026): frozen before the evaluation generates anything. The instrument the
+# raters hold is the two SHEETS as much as the text, so the lock covers all three files; a change
+# to any of them after the freeze is A3, never an edit.
+AMENDMENT_2 = RATING / "rubric-amendment-2.md"
+LOCK_2 = RATING / "rubric-amendment-2.lock"
+COMPANIONS_2 = (RATING / "rubric-sheet.html", RATING / "scoring-sheet.html")
 
 
 def normalised_sha256(path: Path) -> str:
@@ -27,15 +34,23 @@ def normalised_sha256(path: Path) -> str:
     return hashlib.sha256(text).hexdigest()
 
 
-def freeze(amendment: Path, lock: Path, by: str, now: datetime | None = None) -> dict[str, str]:
+def freeze(
+    amendment: Path,
+    lock: Path,
+    by: str,
+    now: datetime | None = None,
+    companions: tuple[Path, ...] = (),
+) -> dict[str, Any]:
     if lock.exists():
-        raise SystemExit(f"already frozen: {lock} exists. A change is a new amendment (A2).")
-    record = {
+        raise SystemExit(f"already frozen: {lock} exists. A change is a new amendment.")
+    record: dict[str, Any] = {
         "file": amendment.name,
         "sha256": normalised_sha256(amendment),
         "frozen_utc": (now or datetime.now(UTC)).isoformat(timespec="seconds"),
         "frozen_by": by,
     }
+    if companions:
+        record["companions"] = {p.name: normalised_sha256(p) for p in companions}
     lock.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8", newline="\n")
     return record
 
@@ -43,7 +58,12 @@ def freeze(amendment: Path, lock: Path, by: str, now: datetime | None = None) ->
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--by", required=True, help="who is freezing it")
-    record = freeze(AMENDMENT, LOCK, parser.parse_args().by)
+    parser.add_argument("--amendment", choices=("1", "2"), default="1")
+    args = parser.parse_args()
+    if args.amendment == "2":
+        record = freeze(AMENDMENT_2, LOCK_2, args.by, companions=COMPANIONS_2)
+    else:
+        record = freeze(AMENDMENT, LOCK, args.by)
     print("frozen:", json.dumps(record))
     return 0
 
