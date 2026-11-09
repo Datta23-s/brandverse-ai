@@ -127,6 +127,22 @@ infrastructure failure has no primary result and is reported as such, never drop
 
 **No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`.
 
+#### Registration 2 of the run order (2026-11-09): the evaluation is 8 brands x 3 campaigns; B09 and B10 are excluded
+
+*A new dated registration, not an edit. Registration 1 (5 November, 10 brands, 30 requests, 90 runs) is superseded in the open: its figures, brand order and order-line hash stay in `evaluation/run_order.yaml` beside the new ones.*
+
+**The change.** The evaluation runs **8 brands x 3 campaigns = 24 requests, 72 runs**. **B09 and B10 are excluded**, B09 losing its one recorded request (R25) with it. The seed, the method and the arm ordering are unchanged.
+
+**Why, factually, and all of it checkable.** The research snapshot holds **R01 to R25**. R26 and R27 (B09's campaigns 2 and 3) and R28 to R30 (all of B10) were never captured. **Four recording sessions failed on the same cause** (sessions 3 and 5 to 7); the last ran **8 hours on 7 November, made 13 attempts and committed nothing, with 0 clean searches of 13** (`dark_period_ceiling`; degraded causes yahoo 10, yep 10, yandex 2, duckduckgo web 1). A search counts as complete only when **3 of the 4 DECLARED engines return rows** (the three-of-four rule, 29 October), and **`yep` has been hard down since 28 October** — so the other three must answer *every* query of a request. Measured on 9 November after restarting the pinned SearXNG container, each of the three answered **2 of 3** probes, which puts a request's eight consecutive clean searches at about **6e-5**; even at a generous 90 percent per engine it is 8 percent. **Replay is keyed by query and a miss raises `SnapshotMiss`, which is not an infrastructure kind**, so those runs would have ended as the arms' own failures and been counted as results — the quiet outcome this registration exists to prevent.
+
+**Why brands and not campaigns.** The standing rule (owner, 1 November; `docs/rating/rubric-amendment-1.md` section 6, decision-log 2.17 ruling 4): if the experiment must shrink, **cut brands, never campaigns per brand**, because campaign 3 is where the memory progression shows.
+
+**What was NOT done instead, and why.** Changing the declared engine set would make the recording possible again, but the declared set is the **search cache key**: changing it invalidates the snapshot and re-records everything, and the owner reserved that decision (29 October). It is not taken here. The AX201 adapter's power-off setting, which the owner ruled should be disabled on 29 October and which is confirmed still enabled (`PnPCapabilities` absent), needs administrator rights and is not the only cause: it would address the simultaneous all-engine timeouts, not `yep`.
+
+**The consequences, stated rather than left to be noticed.** The regulated brand **B07 remains in** (it is not B09 or B10), so the regulated-sector claim is unaffected. The requested set keeps **at least 5 sectors**. The quality sample of 15 requests and 45 campaigns per rater (decision-log 2.18) is now drawn from 24 requests rather than 30, so **the subset is a larger share of a smaller set**; the sample size itself is unchanged and is still declared wherever a quality result is reported. The evaluation's call budget (960) was sized for 90 runs and now bounds 72, so it is not re-cut: a ceiling that bounds waste is not re-fitted downwards to look tight.
+
+**No evaluation data existed when this registration was made.** Read-only against the live project on 2026-11-09: **0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals, 0 memory items; 3 organisations, all `is_test`.** Checked, not recalled.
+
 #### Amendment 3 (2026-11-07): EVERY registered infrastructure kind invalidates, and a bound rate limit is a scheduling defect
 
 *Pre-registration amendment, dated 7 November 2026, by the project owner. Amendments 1 and 2 are unchanged and are still reported alongside this one.*

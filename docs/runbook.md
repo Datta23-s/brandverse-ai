@@ -53,16 +53,21 @@ MAX_LLM_CALLS_PER_RUN=20           # registered; not below 19 in production (sta
   infrastructure failure of one campaign stops the batch and comes to the owner.
 - Resume after any kill is the same command; the checkpoint file is the record. Never delete it.
 
-## The R26 to R30 recording, and its deadline (owner, 7 November 2026)
+## The scope: 8 brands x 3 campaigns (settled 9 November 2026)
 
-R26 to R30 (B09 and B10) are not in the snapshot. Replay is keyed by query and a miss raises
-`SnapshotMiss`, which is not an infrastructure failure, so those requests would end as the arms' own
-failures. **They are recorded before generation or not run at all.** Attempt the recording on AC power
-with the network healthy (`record_session.py`, resume command in the recording notes). **HARD
-DEADLINE: the end of 9 November 2026.** If R26 to R30 are not committed by then, B09 and B10 are
-EXCLUDED, the design is registered as **8 brands x 3 campaigns** before generation starts, and the
-reason is recorded (the standing rule: cut brands, never campaigns per brand). This is decided here
-so it is not discovered mid-generation. Generation does not start while the question is open.
+R26 to R30 were never recorded and the deadline passed: **B09 and B10 are EXCLUDED** and the run
+order is re-registered as **24 requests, 72 runs** (`evaluation/run_order.yaml` Registration 2;
+`schedule.EXCLUDED_BRANDS`; decision-log 2.56). Generation runs that order and nothing else.
+
+- **Do not run a request of B09 or B10.** Replay is keyed by query, a miss raises `SnapshotMiss`,
+  and that is not an infrastructure kind, so such a run would end as the arm's own failure and be
+  counted as a result.
+- Reversing it (if the search engines ever recover and R26 to R30 are captured) is the same
+  procedure in the other direction: a new dated registration, never an edit, and only before the
+  first evaluation call.
+- **If recording ever resumes, fix the backup first:** the session of 7 November ended with
+  `UnsuitableBackupDestination: cannot tell which physical disks the store and the destination are
+  on`, so a session that committed data would not have been backed up (decision-log 2.56).
 
 ## The 16 November rating sitting (rubric amendment A2, section 2; non-negotiable)
 

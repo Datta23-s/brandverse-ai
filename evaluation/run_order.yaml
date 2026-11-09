@@ -1,4 +1,27 @@
-# The registered evaluation run order. Registered 2026-11-05, BEFORE any evaluation call.
+# The registered evaluation run order.
+#
+# REGISTRATION 1, 2026-11-05, BEFORE any evaluation call: 10 brands, 30 requests, 90 runs, brand
+# order B05, B07, B04, B10, B03, B01, B02, B06, B09, B08, sha256 of the order lines
+# ef01900fa560d5fc8fe89a799fd06e244d53da47e20622a50e35cd34e66ae7cf. **SUPERSEDED on 2026-11-09 by
+# Registration 2 below, which removes two brands and changes nothing else.** Registration 1's
+# figures are kept here because a registration is superseded in the open, never edited away.
+#
+# REGISTRATION 2, 2026-11-09, STILL BEFORE any evaluation call (verified the same day: the live
+# project holds 0 runs, 0 llm_calls, 0 campaigns, 0 approvals, 0 memory items): the evaluation runs
+# **8 brands x 3 campaigns = 24 requests, 72 runs**. B09 and B10 are EXCLUDED because their research
+# was never captured and cannot be, which is the owner's pre-authorised fallback of 7 November with
+# its hard deadline of the end of 9 November. The reason, the measurement behind it and what was
+# deliberately NOT done instead are in backend/app/evaluation/schedule.py (EXCLUDED_BRANDS) and
+# docs/evaluation-plan.md; the short version: the snapshot holds R01 to R25, four recording sessions
+# failed on the same cause, and with the declared engine `yep` hard down the other three must answer
+# every query of a request, which measured at about 6e-5 per request on 9 November.
+#
+# NOTHING ELSE CHANGED, and that is checkable: the SEED, the method and the arm order are
+# Registration 1's, so the 72 lines below are Registration 1's 90 lines with B09's and B10's 18
+# removed, in the same sequence, and the eight surviving brands keep their original relative order
+# (B05, B07, B04, B03, B01, B02, B06, B08: B10 and B09 simply drop out). A hash ordering is stable
+# under removal, so no surviving request was re-shuffled by the exclusion.
+# `backend/tests/test_run_order.py` asserts all of it.
 #
 # Owner ruling (5 November 2026): the evaluation does not run arm by arm. For each request the three
 # arms run ADJACENTLY, and the order is randomised with a recorded seed, so a provider outage lands
@@ -8,10 +31,10 @@
 # test_run_order.py recomputes it from the code and the test set and fails on any difference. To
 # change it is a new dated registration, never an edit, and impossible after the first evaluation call.
 #
-# What is randomised (see the module docstring for why): the 10 brand blocks; the order of the three
+# What is randomised (see the module docstring for why): the brand blocks; the order of the three
 # arms inside each request. What is NOT: a brand's campaigns keep their registered position 1, 2, 3,
 # because campaign 2 and 3 read the memory that the earlier approved campaigns wrote (test_set.yaml
-# campaign_pattern). A shuffle of all 30 requests would change what the Proposed arm remembers.
+# campaign_pattern). A shuffle of all the requests would change what the Proposed arm remembers.
 #
 # DO NOT "FIX" THIS BY SHUFFLING THE CAMPAIGNS WITHIN A BRAND. Owner, 2026-11-05: "Campaigns 1, 2 and
 # 3 are the memory progression and a full shuffle would destroy what the experiment measures." The
@@ -20,12 +43,22 @@
 #
 # Method: each item is sorted by sha256("<seed>|<label>"), labels "brand:B05" and "arm:R13:proposed".
 # No pseudo-random generator, no library version: anyone can recompute it by hand.
-version: 1
+version: 2
+registered: 2026-11-09
+supersedes:
+  version: 1
+  registered: 2026-11-05
+  runs: 90
+  brand_order: [B05, B07, B04, B10, B03, B01, B02, B06, B09, B08]
+  sha256_of_order_lines: ef01900fa560d5fc8fe89a799fd06e244d53da47e20622a50e35cd34e66ae7cf
 seed: 20261105
 arms: [baseline_a, baseline_b, proposed]
-runs: 90
-brand_order: [B05, B07, B04, B10, B03, B01, B02, B06, B09, B08]
-sha256_of_order_lines: ef01900fa560d5fc8fe89a799fd06e244d53da47e20622a50e35cd34e66ae7cf
+excluded_brands: [B09, B10]
+excluded_reason: "research never captured and not capturable: see schedule.py EXCLUDED_BRANDS"
+requests: 24
+runs: 72
+brand_order: [B05, B07, B04, B03, B01, B02, B06, B08]
+sha256_of_order_lines: f0c758f2176a5496efe80ce168985ebb118485ad75182198baa74e17bd522795
 order:
   - "R13:proposed"
   - "R13:baseline_a"
@@ -54,15 +87,6 @@ order:
   - "R12:proposed"
   - "R12:baseline_b"
   - "R12:baseline_a"
-  - "R28:proposed"
-  - "R28:baseline_a"
-  - "R28:baseline_b"
-  - "R29:proposed"
-  - "R29:baseline_b"
-  - "R29:baseline_a"
-  - "R30:baseline_b"
-  - "R30:baseline_a"
-  - "R30:proposed"
   - "R07:proposed"
   - "R07:baseline_b"
   - "R07:baseline_a"
@@ -99,15 +123,6 @@ order:
   - "R18:baseline_a"
   - "R18:proposed"
   - "R18:baseline_b"
-  - "R25:proposed"
-  - "R25:baseline_b"
-  - "R25:baseline_a"
-  - "R26:proposed"
-  - "R26:baseline_b"
-  - "R26:baseline_a"
-  - "R27:proposed"
-  - "R27:baseline_a"
-  - "R27:baseline_b"
   - "R22:baseline_b"
   - "R22:proposed"
   - "R22:baseline_a"

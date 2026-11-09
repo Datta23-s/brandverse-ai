@@ -13,10 +13,22 @@ from uuid import uuid4
 import yaml
 
 from app.evaluation.outages import OutageWindow, active_spans, outage_windows, runs_touching
-from app.evaluation.schedule import ARMS, RUN_ORDER, SEED, interleaved_order, registered_order
+from app.evaluation.schedule import (
+    ARMS,
+    EXCLUDED_BRANDS,
+    EXCLUSION_REGISTERED,
+    RUN_ORDER,
+    SEED,
+    interleaved_order,
+    registered_order,
+)
+from app.evaluation.schedule import test_set_requests as request_rows  # pytest collects test_*
 
 REGISTERED = yaml.safe_load(RUN_ORDER.read_text(encoding="utf-8"))
 TEST_SET = Path(__file__).resolve().parents[2] / "evaluation" / "test_set.yaml"
+
+
+RUNS = 72  # Registration 2 (2026-11-09): 8 brands x 3 campaigns x 3 arms
 
 
 def test_the_committed_order_is_exactly_what_the_code_computes() -> None:
@@ -24,15 +36,51 @@ def test_the_committed_order_is_exactly_what_the_code_computes() -> None:
     assert sorted(REGISTERED["arms"]) == sorted(ARMS)
     computed = [f"{r}:{a}" for r, a in registered_order()]
     assert REGISTERED["order"] == computed
-    assert REGISTERED["runs"] == len(computed) == 90
+    assert REGISTERED["runs"] == len(computed) == RUNS
+    assert REGISTERED["requests"] == len(computed) // 3 == 24
     digest = hashlib.sha256("\n".join(computed).encode()).hexdigest()
     assert REGISTERED["sha256_of_order_lines"] == digest
 
 
+def test_the_file_and_the_code_name_the_same_excluded_brands() -> None:
+    """The exclusion is registered in code (with its reason) and echoed in the file, as the seed is;
+    the two cannot drift (Registration 2, 2026-11-09)."""
+    assert tuple(REGISTERED["excluded_brands"]) == EXCLUDED_BRANDS == ("B09", "B10")
+    # YAML parses an unquoted date as a date; compare the ISO form it round-trips to.
+    assert REGISTERED["registered"].isoformat() == EXCLUSION_REGISTERED == "2026-11-09"
+    assert not any(brand in REGISTERED["brand_order"] for brand in EXCLUDED_BRANDS)
+    # and no excluded brand's request survives anywhere in the order
+    requests = yaml.safe_load(TEST_SET.read_text(encoding="utf-8"))["requests"]
+    excluded_ids = {r["id"] for r in requests if r["brand"] in EXCLUDED_BRANDS}
+    assert excluded_ids == {"R25", "R26", "R27", "R28", "R29", "R30"}
+    assert not any(request in excluded_ids for request, _ in registered_order())
+
+
+def test_the_exclusion_removed_runs_and_reshuffled_nothing() -> None:
+    """The claim Registration 2 makes in writing: the surviving 72 lines are Registration 1's 90
+    with B09's and B10's removed, IN THE SAME SEQUENCE, because a hash ordering is stable under
+    removal. If the exclusion had re-shuffled the survivors, the comparison would have to be made
+    against a changed order, and that is the thing a reader cannot check by eye."""
+    requests = yaml.safe_load(TEST_SET.read_text(encoding="utf-8"))["requests"]
+    all_ten = [f"{r}:{a}" for r, a in interleaved_order(requests)]  # the full 10-brand order
+    assert len(all_ten) == 90
+    kept = [
+        line
+        for line in all_ten
+        if {r["id"]: r["brand"] for r in requests}[line.split(":")[0]] not in EXCLUDED_BRANDS
+    ]
+    assert kept == [f"{r}:{a}" for r, a in registered_order()]
+    assert REGISTERED["supersedes"]["runs"] == 90
+    assert (
+        REGISTERED["supersedes"]["sha256_of_order_lines"]
+        == hashlib.sha256("\n".join(all_ten).encode()).hexdigest()
+    )
+
+
 def test_every_request_runs_all_three_arms_adjacently() -> None:
     order = registered_order()
-    assert len(order) == 90 and len(set(order)) == 90
-    for i in range(0, 90, 3):
+    assert len(order) == RUNS and len(set(order)) == RUNS
+    for i in range(0, RUNS, 3):
         block = order[i : i + 3]
         assert len({request for request, _ in block}) == 1  # one request, three adjacent runs
         assert sorted(arm for _, arm in block) == sorted(ARMS)
@@ -51,19 +99,20 @@ def test_a_brands_campaigns_keep_their_registered_positions() -> None:
     # and a brand's three campaigns are contiguous: the brand blocks are what is shuffled
     blocks = [brand_of[r][0] for r, _ in registered_order()]
     collapsed = [b for i, b in enumerate(blocks) if i == 0 or blocks[i - 1] != b]
-    assert sorted(collapsed) == sorted(set(collapsed)) and len(collapsed) == 10
+    assert sorted(collapsed) == sorted(set(collapsed)) and len(collapsed) == 8
     assert collapsed == REGISTERED["brand_order"]
 
 
 def test_no_arm_is_systematically_first() -> None:
     first = {arm: 0 for arm in ARMS}
-    for i in range(0, 90, 3):
-        first[registered_order()[i][1]] += 1
-    assert all(count >= 5 for count in first.values()), first  # of 30 requests, none starved
+    order = registered_order()
+    for i in range(0, RUNS, 3):
+        first[order[i][1]] += 1
+    assert all(count >= 4 for count in first.values()), first  # of 24 requests, none starved
 
 
 def test_the_seed_changes_the_order_so_the_seed_is_what_is_registered() -> None:
-    requests = yaml.safe_load(TEST_SET.read_text(encoding="utf-8"))["requests"]
+    requests = request_rows()
     assert interleaved_order(requests, seed=SEED) != interleaved_order(requests, seed=SEED + 1)
     assert interleaved_order(requests, seed=SEED) == registered_order()  # and it is reproducible
 

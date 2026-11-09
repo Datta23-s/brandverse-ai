@@ -24,6 +24,9 @@ from tests.generation_fakes import FileRunner, round_one_items
 pytestmark = pytest.mark.anyio
 
 POSITIONS = {r["id"]: r["position"] for r in request_rows()}
+# One round is every arm of every brand at one campaign position: 8 brands x 3 arms under
+# Registration 2 (2026-11-09). Derived, so a later registration moves it in one place.
+PER_ROUND = len(request_rows()) // 3 * 3
 
 
 def started_keys(checkpoint: Checkpoint) -> list[str]:
@@ -33,7 +36,8 @@ def started_keys(checkpoint: Checkpoint) -> list[str]:
 def test_the_rounds_partition_the_registered_order_and_keep_the_arms_adjacent() -> None:
     order = registered_order()
     rounds = [wave_items(order, POSITIONS, w) for w in ("round:1", "round:2", "round:3")]  # type: ignore[arg-type]
-    assert [len(r) for r in rounds] == [30, 30, 30]
+    assert PER_ROUND == 24  # 8 brands x 3 arms (Registration 2); the rest is derived
+    assert [len(r) for r in rounds] == [PER_ROUND] * 3
     everything = [i.key for r in rounds for i in r]
     assert sorted(everything) == sorted(f"{r}:{a}" for r, a in order)
     registered = [f"{r}:{a}" for r, a in order]
@@ -43,7 +47,7 @@ def test_the_rounds_partition_the_registered_order_and_keep_the_arms_adjacent() 
         assert positions == sorted(positions)  # a subsequence: never reordered
         # THE POINT OF THE ROUND (owner, 7 November): the three arms of a request are adjacent, so
         # an outage lands across arms. Triples of consecutive items share one request id.
-        for k in range(0, 30, 3):
+        for k in range(0, PER_ROUND, 3):
             assert len({i.request_id for i in rnd[k : k + 3]}) == 1
             assert {i.arm for i in rnd[k : k + 3]} == {"baseline_a", "baseline_b", "proposed"}
 
@@ -54,11 +58,11 @@ async def test_a_finished_batch_is_not_repeated_on_resume(tmp_path: Path) -> Non
     first = await generate(items, runner, ckpt, "round:1", stop_after=7)
     assert len(first.started) == 7
     second = await generate(items, FileRunner(tmp_path / "db.json"), ckpt, "round:1")
-    assert len(second.skipped_done) == 7 and len(second.started) == 23
+    assert len(second.skipped_done) == 7 and len(second.started) == PER_ROUND - 7
     keys = started_keys(ckpt)
-    assert len(keys) == 30 and len(set(keys)) == 30
+    assert len(keys) == PER_ROUND and len(set(keys)) == PER_ROUND
     third = await generate(items, FileRunner(tmp_path / "db.json"), ckpt, "round:1")
-    assert third.started == [] and len(third.skipped_done) == 30
+    assert third.started == [] and len(third.skipped_done) == PER_ROUND
 
 
 def test_killing_the_process_mid_batch_continues_from_the_next_campaign(tmp_path: Path) -> None:
@@ -196,7 +200,7 @@ async def test_a_later_round_is_refused_whole_until_the_earlier_one_is_decided(
     report = await generate(
         items, FileRunner(tmp_path / "db.json", decided_positions=decided), ckpt, "round:2"
     )
-    assert len(report.started) == 30  # the Baselines of the round went with the Proposed arm
+    assert len(report.started) == PER_ROUND  # the Baselines went with the Proposed arm
 
 
 def test_a_line_cut_off_by_the_kill_is_ignored_and_one_in_the_middle_is_not(tmp_path: Path) -> None:

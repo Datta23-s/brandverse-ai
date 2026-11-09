@@ -119,4 +119,4 @@ async def test_an_approved_round_that_wrote_no_memory_still_refuses_the_next_rou
     # with the memory in place, the same round runs
     ok = FileRunner(tmp_path / "db.json", decided_positions=decided)
     report = await generate(items, ok, Checkpoint(tmp_path / "c2.jsonl"), "round:2")
-    assert len(report.started) == 30
+    assert len(report.started) == len(items) == len(request_rows()) // 3 * 3

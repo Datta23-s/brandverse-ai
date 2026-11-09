@@ -47,6 +47,29 @@ ARMS: tuple[str, ...] = ("baseline_a", "baseline_b", "proposed")
 # derived from anything, not tried against an outcome, not to be changed after the first call.
 SEED = 20261105
 
+# REGISTRATION 2, dated 2026-11-09, before any evaluation call (owner's pre-authorised fallback of
+# 7 November, with its hard deadline of the end of 9 November): the evaluation runs **8 brands x 3
+# campaigns = 24 requests, 72 runs**, and B09 and B10 are EXCLUDED.
+#
+# WHY, factually. The research snapshot holds R01 to R25. R26 and R27 (B09's campaigns 2 and 3) and
+# R28 to R30 (all of B10) were never captured: four recording sessions failed on the same cause
+# (sessions 3 and 5 to 7; the last ran 8 hours on 7 November, made 13 attempts and committed
+# nothing, with 0 clean searches of 13). A search is complete only when 3 of the 4 DECLARED engines
+# return rows, and `yep` has been hard down since 28 October, so the other three must answer every
+# query of a request; measured on 9 November they answered 2 of 3 probes each, which puts one
+# request's 8 consecutive clean searches at about 6e-5. Replay is keyed by query and a miss raises
+# `SnapshotMiss`, which is NOT an infrastructure kind, so those runs would have ended as the arms'
+# own failures and been counted as results.
+#
+# WHY BRANDS AND NOT CAMPAIGNS: the standing rule (owner, 1 November, rubric amendment A1 section 6
+# and decision-log 2.17 ruling 4) is to cut brands, never campaigns per brand, because campaign 3
+# is where the memory progression shows. B09 loses its recorded R25 with it.
+#
+# NOT DONE INSTEAD, and why: changing the declared engine set would re-record everything (it is the
+# search cache key) and the owner reserved that decision; it is not taken here.
+EXCLUDED_BRANDS: tuple[str, ...] = ("B09", "B10")
+EXCLUSION_REGISTERED = "2026-11-09"
+
 
 def _key(seed: int, label: str) -> str:
     return hashlib.sha256(f"{seed}|{label}".encode()).hexdigest()
@@ -79,9 +102,13 @@ def interleaved_order(
 
 
 def test_set_requests(path: Path = TEST_SET) -> list[dict[str, Any]]:
+    """The requests the evaluation RUNS: the test set minus `EXCLUDED_BRANDS` (Registration 2,
+    2026-11-09). The test set itself is untouched, so what was excluded stays visible."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return [
-        {"id": r["id"], "brand": r["brand"], "position": r["position"]} for r in data["requests"]
+        {"id": r["id"], "brand": r["brand"], "position": r["position"]}
+        for r in data["requests"]
+        if r["brand"] not in EXCLUDED_BRANDS
     ]
 
 
