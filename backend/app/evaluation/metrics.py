@@ -108,8 +108,16 @@ class RunRecord:
     @property
     def local_research_ms(self) -> float | None:
         """Replayed fetch, extraction and scoring together. NOT extraction alone: nothing records
-        extraction separately (a finding, decision-log 2.53), so it is reported under this name."""
-        return None if self.timings is None else float(self.timings.get("research_other_ms", 0.0))
+        extraction separately (a finding, decision-log 2.53), so it is reported under this name.
+
+        **Baseline A has no local research by construction** (no research step, no recall, no
+        write-back), so it records no `timings` at all and its local research time is ZERO, not
+        unknown — the distinction matters because `ArmTotals` counts unknowns and warns about them,
+        and warning on every Baseline A run would be noise that hides a real gap (found by the
+        generation canary, 9 November 2026)."""
+        if self.timings is None:
+            return 0.0 if self.arm == "baseline_a" else None
+        return float(self.timings.get("research_other_ms", 0.0))
 
 
 # ── the primary attempt ───────────────────────────────────────────────────────────────────────
@@ -254,7 +262,9 @@ def arm_totals(runs: Iterable[RunRecord]) -> ArmTotals:
         local_research_ms=sum(r.local_research_ms or 0.0 for r in rows),
         searches_unknown=sum(1 for r in rows if r.searches is None),
         pages_unknown=sum(1 for r in rows if r.pages_fetched is None),
-        timings_unknown=sum(1 for r in rows if r.timings is None),
+        # Baseline A's absent timings are a structural zero, not an unknown (see
+        # `RunRecord.local_research_ms`).
+        timings_unknown=sum(1 for r in rows if r.timings is None and r.arm != "baseline_a"),
     )
 
 

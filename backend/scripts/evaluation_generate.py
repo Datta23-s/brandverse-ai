@@ -176,8 +176,10 @@ select r.id, o.name, r.arm, r.status, r.depth, r.research_score,
        r.supersedes_run_id, r.llm_call_count, r.latency_ms,
        (select count(*) from campaigns c
         where c.run_id = r.id and c.strategy ? 'necessity') as necessity_records,
+       -- `-> 'injection'` is JSON null for a baseline (they inject nothing), and a JSON null is
+       -- NOT SQL NULL: the first version of this counted it as a record present.
        (select count(*) from campaigns c
-        where c.run_id = r.id and c.strategy -> 'injection' is not null) as injection_records,
+        where c.run_id = r.id and c.strategy -> 'injection' <> 'null'::jsonb) as injection_records,
        (select count(*) from run_waits w where w.run_id = r.id) as waits,
        (select count(*) from llm_calls l where l.run_id = r.id and l.outcome <> 'refused') as calls,
        (select count(*) from llm_calls l where l.run_id = r.id and l.tier = 'strong') as strong,
@@ -215,9 +217,12 @@ def print_figures(rows: list[dict[str, Any]]) -> list[str]:
         parked_or_done = row["status"] in ("awaiting_approval", "completed", "partial", "blocked")
         if not parked_or_done:
             continue
-        needed = ["depth", "brief_check_status", "timings_stored", "facts_stored"]
-        if row["arm"] != "baseline_a":  # Baseline A does no research at all
-            needed += ["search_count", "pages_fetched", "pages_served"]
+        needed = ["depth", "brief_check_status", "facts_stored"]
+        if row["arm"] != "baseline_a":
+            # Baseline A does no research, no recall and no write-back, so it fetches no pages and
+            # records no `timings` at all: its local time is a structural ZERO, not a missing figure
+            # (the canary's first report called this a complaint; it is not).
+            needed += ["search_count", "pages_fetched", "pages_served", "timings_stored"]
         if row["arm"] == "proposed":
             needed += ["research_score", "necessity_records"]
         for key in needed:
@@ -225,6 +230,14 @@ def print_figures(rows: list[dict[str, Any]]) -> list[str]:
                 complaints.append(f"{row['arm']} run {row['id']}: {key} is {row[key]!r}")
         if row["status"] == "awaiting_approval" and not row["waits"]:
             complaints.append(f"{row['arm']} run {row['id']}: parked but no run_waits row")
+        # A DECLARED GAP IS THE THING THAT MATTERS, and the first version of this check only looked
+        # for nulls, so it missed one on the very first real campaign (owner, 9 Nov 2026). A gap
+        # with no infrastructure kind is the arm's OWN result: it is not re-run, so it is permanent.
+        if row["gaps"]:
+            complaints.append(
+                f"{row['arm']} run {row['id']}: {row['gaps']} declared gap(s): an agent failed, "
+                "and if the kind is not infrastructure this is a PERMANENT result, not a re-run"
+            )
     return complaints
 
 
