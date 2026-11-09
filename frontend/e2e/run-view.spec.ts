@@ -68,8 +68,12 @@ test("the fake pipeline animates live, step by step, to completion", async ({ pa
   expect(seenActive.length).toBeGreaterThanOrEqual(10);
 
   await expect(page.getByRole("heading", { name: "Pipeline complete" })).toBeVisible();
+  // EVERY step completes, step 6 (research) included, even at D0: "D0 is one fresh query, not no
+  // research" (decision-log 2.36, 6 November 2026). This assertion read `n === 6 ? "skipped"` until
+  // 9 November, which is the behaviour the ruling replaced; the stale assertion is what had been
+  // failing this job since 6 November (decision-log 2.57).
   for (let n = 1; n <= 15; n++) {
-    await expect(row(page, n)).toHaveAttribute("data-phase", n === 6 ? "skipped" : "completed");
+    await expect(row(page, n)).toHaveAttribute("data-phase", "completed");
   }
   await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "15");
   await expect(page.getByText("All 15 steps finished in")).toBeVisible();
