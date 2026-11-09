@@ -1078,6 +1078,8 @@ Record: `evaluation/dry_run/dryrun_20261107T101025Z.json`. Same throwaway (`bran
 
 **The one real failure, and its cause.** `run-view.spec.ts` ("the fake pipeline animates live, step by step, to completion") starts a fake run at **D0** and asserted `data-phase` of step 6 was `skipped`. The ruling of 6 November — **"D0 is one fresh query, not no research"** (decision-log 2.36, commit `469cd0c`) — deliberately made the fake run COMPLETE step 6 at every depth, and `app/workers/fake_run.py`'s own docstring says so. **The behaviour change was registered; the test that encoded the old behaviour was not updated with it.** So the job was failing on a stale assertion, not a product defect: the fix is to the test, which now asserts all fifteen steps complete and names the ruling in a comment so the next reader does not have to rediscover it. **All 17 specs pass; frontend lint, typecheck and 75 unit tests pass.**
 
+**CI is now GREEN on all four jobs at `5243fcf`** (backend, frontend, database, end to end) — **the first fully green run since 6 November**, and the first time the end-to-end job has passed since `007b57f`.
+
 **The lesson, which is the same one as 2.54 and belongs with it:** a behaviour the owner rules on is changed in the code, the docs and the backend tests, and a test in ANOTHER language in another directory keeps asserting the old behaviour — and the only thing that would have caught it was the CI job nobody read. The process rule added in 2.54 (read CI after every push) is what found it.
 
 ### 2.19 Who approves the ten campaigns for 8 November
