@@ -59,13 +59,24 @@ async def test_the_gap_an_agent_records_invalidates_the_run() -> None:
     assert invalidating_gaps([gap]) == [gap]
 
 
-async def test_invalid_output_with_no_infrastructure_failure_is_still_a_result() -> None:
-    """The rule must not swallow the arm's own failures: no earlier infrastructure attempt, no
-    reclassification."""
+async def test_invalid_output_after_an_exhausted_repair_is_schema_exhausted_and_invalidates() -> (
+    None
+):
+    """AMENDMENT 4 (owner, 2026-11-11) reverses what this test used to assert. It previously held
+    that an invalid output with no earlier infrastructure attempt was the ARM's own result; the
+    owner's ruling is that schema compliance is a model-reliability property, not a behavioural
+    difference between arms, so a repair-exhausted failure invalidates and is re-run.
+    `StructuredOutputInvalid` is raised only after the repair has also failed, so the exception is
+    exactly that condition. A gap with NO infrastructure kind at all is still a result."""
     e = await failure_of(reply(BAD), reply(BAD))
     assert isinstance(e, StructuredOutputInvalid)
-    assert classify_infrastructure_failure(e) is None
+    assert classify_infrastructure_failure(e) == "schema_exhausted"
+    gap = {"agent": "A3", "infrastructure": "schema_exhausted"}
+    assert invalidating_gaps([gap]) == [gap]
     assert invalidating_gaps([{"agent": "A3", "infrastructure": None}]) == []
+    # Amendment 2 keeps precedence over Amendment 4: an invalid answer that FOLLOWED a 503 stays the
+    # outage's, so an outage can never be relabelled as a schema problem. That is asserted by
+    # `test_a_503_then_invalid_output_then_an_invalid_repair_is_infrastructure` above.
 
 
 async def test_a_sequence_that_ends_in_a_valid_output_is_a_result_not_a_failure() -> None:

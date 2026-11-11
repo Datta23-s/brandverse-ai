@@ -292,13 +292,17 @@ async def test_a_429_is_still_the_rate_limit_path_not_the_breaker() -> None:
 # ── Classification: the fifth kind ────────────────────────────────────────────────────────────
 
 
-def test_there_are_five_infrastructure_kinds_and_the_fifth_is_provider_unavailable() -> None:
+def test_the_invalidating_kinds_are_the_four_fixed_plus_the_two_amendments() -> None:
+    """The four fixed on 2026-10-17, then `provider_unavailable` (Amendment 1, 5 November) and
+    `schema_exhausted` (Amendment 4, 11 November). Each keeps its own name, so a report never loses
+    WHICH kind ended a run by their being grouped."""
     assert INFRASTRUCTURE_FAILURES == (
         "rate_limited",
         "quota_exhausted",
         "network_error",
         "process_crash",
         "provider_unavailable",
+        "schema_exhausted",
     )
 
 

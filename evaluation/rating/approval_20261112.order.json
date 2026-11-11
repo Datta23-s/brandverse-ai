@@ -1,0 +1,24 @@
+{
+ "seed": 20261112,
+ "attempt": 0,
+ "session_cap": 15,
+ "forbid_same_request_adjacent": false,
+ "batches": [
+  {
+   "number": 1,
+   "labels": [
+    "C01-01",
+    "C01-02"
+   ],
+   "order": [
+    "R13:baseline_a",
+    "R13:baseline_b"
+   ]
+  }
+ ],
+ "unblinding_key": {
+  "C01-01": "R13:baseline_a",
+  "C01-02": "R13:baseline_b"
+ },
+ "violations": []
+}
