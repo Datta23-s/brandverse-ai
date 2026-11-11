@@ -1,52 +1,126 @@
 # The 15 requests the human raters score on 16 November 2026 — 45 campaigns per rater.
 #
-# REGISTERED 2026-11-11, BEFORE the campaigns of these requests existed: at the moment of the draw
-# the evaluation database held three canary runs of R13 only (and one of those was invalidated under
-# Amendment 4), so no campaign of any request in this subset existed and no quality figure could
-# have been computed. A random subset fixed in advance is pre-registration; the same subset chosen
-# after the data exists is not, whatever the seed.
+# THE SELECTION IS STRATIFIED AND BRAND-BALANCED BY DESIGN. It is NOT a plain random draw: the
+# randomness chooses only between the requests that the three stated constraints leave free.
 #
-# THE RULE (owner, 1 November, re-confirmed 11 November): human quality rating uses a random subset
-# of 15 REQUESTS, all three arms of each, so 45 campaigns per rater; both raters score the same 45,
-# and kappa per dimension is computed on those 45. The subset STAYED at 15 when the scope was cut to
-# 24 requests (run_order Registration 2), so it is 15 of 24 rather than 15 of 30 — a larger share of
-# a smaller set, declared wherever a quality result is reported.
+# REGISTERED 2026-11-11, BEFORE ANY CAMPAIGN OUTCOME EXISTED for any request in any candidate draw.
+# At that moment the evaluation database held three canary runs of R13 alone (one of them invalidated
+# under Amendment 4), so no campaign of any request below existed and no quality figure could have
+# been computed. A subset fixed in advance is pre-registration; the same subset chosen after the data
+# exists is not, whatever the seed.
 #
-# METHOD: each request sorted by sha256("<seed>|rating:<request id>"), the first 15 taken. No
-# pseudo-random generator and no library version: recomputable by hand. The seed is the date of the
-# draw, fixed before it was computed; it was computed once.
-# backend/app/evaluation/rating_subset.py is the code; backend/tests/test_rating_subset.py
-# recomputes this file from it and fails on any difference. A change is a new dated registration,
-# never an edit, and impossible once a rater has scored anything.
+# THE RULE (owner, 1 November, re-confirmed 11 November): 15 REQUESTS, all three arms of each, so 45
+# campaigns per rater; both raters score the same 45 and kappa per dimension is computed on those 45.
+# The sample stayed at 15 when the scope was cut to 24 requests (run_order Registration 2), so it is
+# 15 of 24 rather than 15 of 30 — a larger share of a smaller set, declared wherever a quality
+# result is reported.
 #
-# WHAT THE DRAW GAVE, recorded as an outcome of the seed and NOT as a property of the design:
-#   brands:    every one of the eight has at least one request (B01 1, B02 2, B03 1, B04 3,
-#              B05 2, B06 2, B07 3, B08 1)
-#   regulated: B07's three campaigns are ALL in the subset
-#   positions: NOT balanced — 4 at position 1, 7 at position 2, 4 at position 3, so the raters see
-#              more second campaigns than first or third. Reported with the quality figures. It is
-#              NOT corrected by re-drawing: re-drawing until the shape looks better is what
-#              registering a seed in advance exists to prevent.
-version: 1
+# ── THE THREE CONSTRAINTS (the sampling design, not implementation detail) ────────────────────
+#  1. FIVE REQUESTS AT EACH CAMPAIGN POSITION (5/5/5). Position 3 is where the Proposed arm's
+#     behaviour diverges most; four requests there would underpower the quality comparison exactly
+#     where the hypothesis bites.
+#  2. THE REGULATED BRAND'S REQUEST AT EACH POSITION IS INCLUDED (B07: R19, R20, R21). The
+#     regulated-sector claim needs a quality side; leaving it to chance risks the one regulated
+#     brand being absent from the human comparison.
+#  3. EVERY BRAND IS REPRESENTED: a brand not yet covered is preferred over one already covered.
+#     Generalisation across brands is the reason there are eight; constraint 1 alone dropped two.
+#
+# ── THE PROCEDURE, reproducible from the seed alone ───────────────────────────────────────────
+#   H(r) = sha256("<seed>|rating:<request id>").hexdigest()      # hex strings compared ascending
+#   covered = {}                                                 # brands picked so far
+#   for position p in 1, 2, 3 (ascending):
+#       A = requests at position p, sorted ascending by H
+#       take = [ the request in A whose brand is the regulated brand ]   # constraint 2, before H
+#       covered += brand(that request)
+#       for r in A in order:  if len(take) < 5 and r not in take and brand(r) not in covered:
+#                                 take += r ; covered += brand(r)        # constraint 3
+#       for r in A in order:  if len(take) < 5 and r not in take:
+#                                 take += r ; covered += brand(r)        # then the rest
+#       subset += take
+#   subset is reported sorted by request id
+# No pseudo-random generator and no library version: sha256 and a string comparison are the whole
+# of it. backend/app/evaluation/rating_subset.py is the code; backend/tests/test_rating_subset.py
+# recomputes this file from it, reproduces the superseded draws, and pins the frozen draw's shape.
+#
+# ── RE-DRAWING, and why this is not licence ───────────────────────────────────────────────────
+# Re-drawing a frozen selection is permitted ONLY (a) before any outcome exists for any request in
+# it, AND (b) for a design defect stated in the registration. That is the narrowest rule that lets a
+# sampling mistake be corrected while no result could possibly be influencing the correction. Once a
+# rater has scored anything, or an outcome exists for a request in the subset, the selection is fixed
+# and a change is a new amendment carrying the number of the last scored campaign, never a re-draw.
+version: 2
 registered: 2026-11-11
-seed: 20261111
+seed: 2026111102
 size: 15
+per_position: 5
 eligible_requests: 24
 campaigns_per_rater: 45
-sha256_of_requests: 9bd3ebba4c6ac7bac3e624fe0c9c3ccf4641bf11c6921698bf7a391b5e14eb85
+stratified: true
+brand_balanced: true
+regulated_included_by_construction: [R19, R20, R21]
+sha256_of_requests: 87234d60dfd86d030cb4af79bd75fccc9a010f3d2338d1ecf9cf2ac59b7ed1db
 requests:
-  - R02
+  - R01
+  - R03
   - R04
   - R05
+  - R08
   - R09
   - R10
-  - R11
   - R12
   - R14
-  - R15
   - R16
-  - R17
+  - R18
   - R19
   - R20
   - R21
   - R23
+
+# What the frozen draw gives. Positions and brand coverage are DESIGN properties (constraints 1 and
+# 3). Which brands get two requests rather than one is the hash ordering's doing and is reported with
+# the quality figures rather than corrected.
+shape:
+  by_position: {1: 5, 2: 5, 3: 5}
+  by_brand: {B01: 2, B02: 2, B03: 2, B04: 2, B05: 1, B06: 2, B07: 3, B08: 1}
+  brands_with_none: []
+
+# ── EVERY SELECTION CONSIDERED, so a reader can see what was and was not chosen ───────────────
+# All three were computed before any campaign outcome existed. Each is reproducible: draws 2 and 3
+# share a seed and differ only by constraint 3, which is why the constraints are registered above
+# rather than left as code.
+candidate_draws:
+  - draw: 1
+    seed: 20261111
+    constraints: [plain random, 15 of 24, no stratification]
+    sha256: 9bd3ebba4c6ac7bac3e624fe0c9c3ccf4641bf11c6921698bf7a391b5e14eb85
+    requests: [R02, R04, R05, R09, R10, R11, R12, R14, R15, R16, R17, R19, R20, R21, R23]
+    by_position: {1: 4, 2: 7, 3: 4}
+    brands_with_none: []
+    status: SUPERSEDED
+    defect: >-
+      Unstratified: 4 requests at position 1, 7 at position 2, 4 at position 3. Position 3 is where
+      the Proposed arm's behaviour diverges most, so four requests there leaves the quality
+      comparison underpowered exactly where the hypothesis bites. All eight brands happened to be
+      represented, but by luck rather than by design.
+  - draw: 2
+    seed: 2026111102
+    constraints: [five per position, regulated brand included]
+    sha256: 2aaee21899de1199cf2f627284aae161e2fac8baa5d21ed5ca0d49b9cffaf739
+    requests: [R01, R02, R03, R04, R05, R08, R09, R10, R11, R12, R16, R18, R19, R20, R21]
+    by_position: {1: 5, 2: 5, 3: 5}
+    brands_with_none: [B05, B08]
+    status: NOT ADOPTED
+    defect: >-
+      Stratifying by position alone dropped B05 and B08 out of the sample entirely, so the human
+      quality comparison would have covered six of the eight brands. Generalisation across brands is
+      the reason there are eight.
+  - draw: 3
+    seed: 2026111102
+    constraints: [five per position, regulated brand included, uncovered brand preferred]
+    sha256: 87234d60dfd86d030cb4af79bd75fccc9a010f3d2338d1ecf9cf2ac59b7ed1db
+    status: FROZEN, in force
+    reason: >-
+      The only candidate holding both design properties at once: position balance (5/5/5, so
+      position 3 is as well represented as the others) and full brand coverage (all eight brands
+      present), with the regulated brand's three campaigns included by construction. Both properties
+      were decided before any campaign outcome existed.

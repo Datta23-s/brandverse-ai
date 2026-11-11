@@ -127,6 +127,18 @@ infrastructure failure has no primary result and is reported as such, never drop
 
 **No evaluation data existed when this amendment was made.** Read-only against the live project on 2026-11-06: 0 runs, 0 `llm_calls`, 0 campaigns, 0 approvals; 3 organisations, all `is_test`.
 
+#### Amendment 5 (2026-11-11): the rating queue additionally forbids the three arms of one request being adjacent
+
+*Pre-registration amendment, dated 11 November 2026, by the project owner, before any campaign of the rating subset existed and before any rater has seen anything. The approval queue's own rule (`docs/approval-rubric.md` section 2) is UNCHANGED.*
+
+**The amendment.** For the **16 November rating round**, the presentation queue obeys the registered constrained randomisation **and one further constraint: the three arms of one request are never adjacent.** The **approval queue stays exactly as registered** — there, only a brand's campaign N and N+1 may not be adjacent.
+
+**Reasoning.** A rater who recognises three variants of one brief **rates them comparatively rather than independently**, which is the opposite of what blinding is for: the rubric's anchors are absolute ("contains at least one detail specific to this product", "a marketing team would publish it as written"), and a rater who has just read two other versions of the same copy scores the third against them instead of against the anchor. The registered constraint was written for the approver, whose risk was inferring the ARM from a brand's campaigns appearing in sequence; it does not address three arms of one request, because in the approval queue they arrive from different sittings. In the rating round all 45 are presented together, so the risk is new and the constraint is new with it.
+
+**The seed and the rule, recorded before the 16th.** The rating queue is built with **seed 20261116** and `forbid_same_request_adjacent` on (`app/evaluation/blind.py`, `scripts/blind_presentation.py --rating`). The seed, the redraw attempt that satisfied the constraints, and the resulting order per sitting are written to `evaluation/rating/` with the unblinding key in a separate file; the order is reproducible from the seed and the attempt number alone. Both raters receive the **same** 45 campaigns in the **same** order (decision-log 2.18: both score the same 45, and kappa is computed on those 45), and the three calibration campaigns of the joint start (rubric amendment A2 section 2) are **not** among them.
+
+**Not changed, and why it is worth saying:** the constraint is an option in the code, OFF by default, so the approval queue cannot pick it up by accident; and it is registered here rather than living only as a flag, because a presentation rule that affects how a rater scores is part of the instrument, not a setting.
+
 #### Registration 2 of the run order (2026-11-09): the evaluation is 8 brands x 3 campaigns; B09 and B10 are excluded
 
 *A new dated registration, not an edit. Registration 1 (5 November, 10 brands, 30 requests, 90 runs) is superseded in the open: its figures, brand order and order-line hash stay in `evaluation/run_order.yaml` beside the new ones.*
