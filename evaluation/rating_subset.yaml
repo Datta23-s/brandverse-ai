@@ -1,0 +1,52 @@
+# The 15 requests the human raters score on 16 November 2026 — 45 campaigns per rater.
+#
+# REGISTERED 2026-11-11, BEFORE the campaigns of these requests existed: at the moment of the draw
+# the evaluation database held three canary runs of R13 only (and one of those was invalidated under
+# Amendment 4), so no campaign of any request in this subset existed and no quality figure could
+# have been computed. A random subset fixed in advance is pre-registration; the same subset chosen
+# after the data exists is not, whatever the seed.
+#
+# THE RULE (owner, 1 November, re-confirmed 11 November): human quality rating uses a random subset
+# of 15 REQUESTS, all three arms of each, so 45 campaigns per rater; both raters score the same 45,
+# and kappa per dimension is computed on those 45. The subset STAYED at 15 when the scope was cut to
+# 24 requests (run_order Registration 2), so it is 15 of 24 rather than 15 of 30 — a larger share of
+# a smaller set, declared wherever a quality result is reported.
+#
+# METHOD: each request sorted by sha256("<seed>|rating:<request id>"), the first 15 taken. No
+# pseudo-random generator and no library version: recomputable by hand. The seed is the date of the
+# draw, fixed before it was computed; it was computed once.
+# backend/app/evaluation/rating_subset.py is the code; backend/tests/test_rating_subset.py
+# recomputes this file from it and fails on any difference. A change is a new dated registration,
+# never an edit, and impossible once a rater has scored anything.
+#
+# WHAT THE DRAW GAVE, recorded as an outcome of the seed and NOT as a property of the design:
+#   brands:    every one of the eight has at least one request (B01 1, B02 2, B03 1, B04 3,
+#              B05 2, B06 2, B07 3, B08 1)
+#   regulated: B07's three campaigns are ALL in the subset
+#   positions: NOT balanced — 4 at position 1, 7 at position 2, 4 at position 3, so the raters see
+#              more second campaigns than first or third. Reported with the quality figures. It is
+#              NOT corrected by re-drawing: re-drawing until the shape looks better is what
+#              registering a seed in advance exists to prevent.
+version: 1
+registered: 2026-11-11
+seed: 20261111
+size: 15
+eligible_requests: 24
+campaigns_per_rater: 45
+sha256_of_requests: 9bd3ebba4c6ac7bac3e624fe0c9c3ccf4641bf11c6921698bf7a391b5e14eb85
+requests:
+  - R02
+  - R04
+  - R05
+  - R09
+  - R10
+  - R11
+  - R12
+  - R14
+  - R15
+  - R16
+  - R17
+  - R19
+  - R20
+  - R21
+  - R23

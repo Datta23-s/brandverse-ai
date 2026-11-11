@@ -585,6 +585,103 @@ def invalidation_lines(found: Sequence[Invalidation]) -> list[str]:
     return out
 
 
+# Every repair-exhausted structured-output failure, BY AGENT AND BY ARM (Amendment 4, owner,
+# 2026-11-11). Invalidation re-runs these, which is exactly why they must be reported: an
+# invalidated run leaves the dataset, so without this table a systematic difference between the arms
+# would be removed from the results by the very rule that protects them.
+#
+# WHAT THE TABLE IS FOR. A3 receives no arm-specific input (injection into it was dropped on
+# 6 November), so its prompt is identical across arms and a difference in its failures is noise.
+# **A6 is different: it receives the injected memory**, so a longer prompt could genuinely truncate
+# more often in the Proposed arm. A cluster in A6 and in one arm is a REAL EFFECT, not noise, and it
+# is reported as a finding rather than hidden behind the re-runs.
+SCHEMA_FAILURES_SQL = """
+select r.arm, l.agent_id, l.prompt_id, l.outcome, count(*)::int
+from public.llm_calls l
+join public.runs r on r.id = l.run_id and r.org_id = l.org_id
+join public.organisations o on o.id = l.org_id
+where l.org_id = any(%(org_ids)s)
+  and not o.is_practice
+  and not o.is_test
+  and l.outcome = 'invalid_output'
+group by r.arm, l.agent_id, l.prompt_id, l.outcome
+order by r.arm, l.agent_id, l.prompt_id
+"""
+
+# The runs an exhausted repair invalidated, by arm and by the agent that failed.
+SCHEMA_INVALIDATIONS_SQL = """
+select r.arm, g.gap ->> 'agent' as agent, count(*)::int
+from public.runs r
+join public.organisations o on o.id = r.org_id
+cross join lateral jsonb_array_elements(r.declared_gaps) as g(gap)
+where r.org_id = any(%(org_ids)s)
+  and not o.is_practice
+  and not o.is_test
+  and r.failure ->> 'infrastructure_failure' = 'schema_exhausted'
+group by r.arm, g.gap ->> 'agent'
+order by r.arm, agent
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaFailures:
+    """Invalid answers by (arm, agent, prompt), and the runs an exhausted repair invalidated."""
+
+    invalid_calls: Mapping[tuple[str, str, str], int]
+    invalidated_runs: Mapping[tuple[str, str], int]
+
+    def by_arm(self) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for (arm, _agent), n in self.invalidated_runs.items():
+            out[arm] = out.get(arm, 0) + n
+        return out
+
+    def by_agent(self) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for (_arm, agent), n in self.invalidated_runs.items():
+            out[agent] = out.get(agent, 0) + n
+        return out
+
+
+def schema_failure_lines(failures: SchemaFailures) -> list[str]:
+    """Always printed, zero included: a rule that removes runs must show its work."""
+    if not failures.invalid_calls and not failures.invalidated_runs:
+        return ["SCHEMA FAILURES (invalid output; Amendment 4): none"]
+    out = ["SCHEMA FAILURES (invalid output; Amendment 4)"]
+    out.append("  invalid answers by arm, agent and prompt (the repair rescues most of them):")
+    for (arm, agent, prompt), n in sorted(failures.invalid_calls.items()):
+        out.append(f"    {arm:11} {agent:10} {prompt:18} {n}")
+    out.append("  runs an EXHAUSTED repair invalidated (re-run, and so absent from every figure):")
+    for (arm, agent), n in sorted(failures.invalidated_runs.items()):
+        out.append(f"    {arm:11} {agent:10} {n}")
+    by_arm, by_agent = failures.by_arm(), failures.by_agent()
+    out.append(f"  by arm: {by_arm}")
+    out.append(f"  by agent: {by_agent}")
+    if by_agent.get("A6"):
+        out.append(
+            "  READ THIS BEFORE THE FIGURES: A6 receives the injected memory, so a cluster in A6 "
+            "and in the Proposed arm is a REAL EFFECT of a longer prompt, not model noise, and the "
+            "invalidations have removed those runs from the results (Amendment 4)."
+        )
+    if len(by_arm) > 1 and max(by_arm.values()) >= 3 * max(1, min(by_arm.values())):
+        out.append(
+            f"  UNEVEN ACROSS ARMS {by_arm}: report this as a finding rather than as noise, "
+            "whichever agent it is."
+        )
+    return out
+
+
+async def schema_failures(conn: AsyncConnection, org_ids: Collection[UUID]) -> SchemaFailures:
+    cur = await conn.execute(SCHEMA_FAILURES_SQL, {"org_ids": list(org_ids)})
+    calls = {
+        (str(arm), str(agent), str(prompt)): int(n)
+        for arm, agent, prompt, _outcome, n in await cur.fetchall()
+    }
+    cur = await conn.execute(SCHEMA_INVALIDATIONS_SQL, {"org_ids": list(org_ids)})
+    runs = {(str(arm), str(agent)): int(n) for arm, agent, n in await cur.fetchall()}
+    return SchemaFailures(calls, runs)
+
+
 def scheduling_defect_lines(defects: Sequence[SchedulingDefect]) -> list[str]:
     """Always printed, including when empty: "none" is the result the scheduler is aiming at."""
     if not defects:
@@ -655,6 +752,7 @@ class Report:
     depth: DepthResult
     defects: Sequence[SchedulingDefect] = ()
     invalidations: Sequence[Invalidation] = ()
+    schema: SchemaFailures = field(default_factory=lambda: SchemaFailures({}, {}))
     quality_sample: str = (
         "Human quality rating uses a random subset of 15 requests, 45 campaigns per rater "
         "(decision-log 2.18); it is declared wherever a quality result is reported."
@@ -684,6 +782,7 @@ class Report:
         # print half way). A figure a reader cannot print is not reported.
         out += ["-- the engine --", *self.depth.lines()]
         out += ["-- infrastructure --", *invalidation_lines(self.invalidations)]
+        out += ["-- schema --", *schema_failure_lines(self.schema)]
         out += ["-- scheduling --", *scheduling_defect_lines(self.defects)]
         out += ["-- sample --", f"  {self.quality_sample}"]
         return out
@@ -699,6 +798,7 @@ def build_report(
     baseline_arm: str = BASELINE,
     defects: Sequence[SchedulingDefect] = (),
     invalidations: Sequence[Invalidation] = (),
+    schema: SchemaFailures | None = None,
 ) -> Report:
     """Everything, from the run records: selection, pairing, the four figures twice, by position,
     and the depth pair with its attribution."""
@@ -720,6 +820,7 @@ def build_report(
         depth=depth_result(paired, bands, weights),
         defects=defects,
         invalidations=invalidations,
+        schema=schema if schema is not None else SchemaFailures({}, {}),
     )
 
 

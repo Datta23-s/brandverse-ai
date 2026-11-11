@@ -40,12 +40,40 @@ from typing import Any, Literal
 import httpx
 import psycopg
 
-from app.errors import LLMRateLimited, ProviderCircuitOpen, ProviderUnavailable, QuotaExhausted
+from app.errors import (
+    LLMRateLimited,
+    ProviderCircuitOpen,
+    ProviderUnavailable,
+    QuotaExhausted,
+    StructuredOutputInvalid,
+)
 from app.llm._litellm import APIConnectionError
 from app.llm.gateway import SEQUENCE_ATTRIBUTE, is_provider_unavailable
 
+# The four kinds fixed in advance on 2026-10-17, plus `provider_unavailable` (Amendment 1,
+# 5 November) and `schema_exhausted` (AMENDMENT 4, 11 November). Each keeps its own name in every
+# report, so "which kind" is never lost by being grouped here.
+#
+# AMENDMENT 4 (owner, 2026-11-11), registered before the remaining runs and independent of any
+# outcome: **a structured-output failure whose one repair is also exhausted invalidates the run**
+# and it is re-run under the existing cap. The owner's justification: schema compliance is a
+# MODEL-RELIABILITY property, not a behavioural difference between the arms. For A3 that is
+# provable — A3 receives no arm-specific input since injection into it was dropped on 6 November, so
+# its prompt is identical across arms and any difference in its outcomes is noise.
+# `StructuredOutputInvalid` is raised only after the one repair has failed too
+# (`LLMGateway.structured`), so the exception IS the repair-exhausted condition.
+# **A6 is the case this must not hide:** A6 does receive injected memory, so a longer prompt could
+# genuinely cause more truncation in the Proposed arm, which would be a real effect and not noise.
+# Every occurrence is therefore recorded BY AGENT AND BY ARM and reported
+# (`app/evaluation/metrics.py`, `schema_failure_lines`): if they cluster in one arm or one agent,
+# that is a finding.
 InfrastructureFailure = Literal[
-    "rate_limited", "quota_exhausted", "network_error", "process_crash", "provider_unavailable"
+    "rate_limited",
+    "quota_exhausted",
+    "network_error",
+    "process_crash",
+    "provider_unavailable",
+    "schema_exhausted",
 ]
 INFRASTRUCTURE_FAILURES: tuple[InfrastructureFailure, ...] = (
     "rate_limited",
@@ -53,6 +81,7 @@ INFRASTRUCTURE_FAILURES: tuple[InfrastructureFailure, ...] = (
     "network_error",
     "process_crash",
     "provider_unavailable",
+    "schema_exhausted",
 )
 
 _NETWORK: tuple[type[BaseException], ...] = (
@@ -119,4 +148,9 @@ def classify_infrastructure_failure(exc: BaseException) -> InfrastructureFailure
         for kind in INFRASTRUCTURE_FAILURES:
             if marked == kind:
                 return kind
+    # AMENDMENT 4, LAST: a repair-exhausted structured-output failure. Last so that a sequence which
+    # was ALSO an infrastructure failure keeps that earlier, more specific kind (Amendment 2's
+    # sequence rule above), and an outage is never relabelled as a schema problem.
+    if any(isinstance(e, StructuredOutputInvalid) for e in chain):
+        return "schema_exhausted"
     return None

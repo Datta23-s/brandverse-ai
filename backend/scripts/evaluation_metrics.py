@@ -30,6 +30,7 @@ from app.evaluation.metrics import (
     evaluation_invalidations,
     run_records,
     scheduling_defects,
+    schema_failures,
 )
 from app.evaluation.necessity_decomposition import Bands
 from app.memory.scoring import load_scoring
@@ -66,6 +67,7 @@ async def main_async(args: argparse.Namespace) -> int:
         records = await run_records(conn, org_ids)
         defects = await scheduling_defects(conn, org_ids)
         invalid = await evaluation_invalidations(conn, org_ids)
+        schema = await schema_failures(conn, org_ids)
     report = build_report(
         records,
         bands=Bands(cfg.d0_below, cfg.d2_from),
@@ -73,6 +75,7 @@ async def main_async(args: argparse.Namespace) -> int:
         unit_costs=units,
         defects=defects,
         invalidations=invalid,
+        schema=schema,
     )
     print(f"\nbands D0 below {cfg.d0_below}, D2 from {cfg.d2_from}; weights {cfg.weights}")
     print("(the frozen configuration: if it changes, every figure below is recomputed)\n")
